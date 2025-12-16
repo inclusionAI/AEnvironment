@@ -99,9 +99,6 @@ Python version: 3.12.0
 # Test CLI functionality
 aenv --help
 
-# Verify tool registration
-aenv list-tools --env demo
-
 # Check dependency completeness
 python -c "import aenv.core; print('Core module loaded successfully')"
 ```
@@ -119,6 +116,13 @@ mcp-inspector --version
 ```
 
 > **💡 Use Case**: MCP Inspector serves as a visual debugging client, recommended for installation in local development environments
+
+##### Usage
+
+- By default, when you run `aenv run`, the MCP Inspector will be automatically launched to help you test and monitor your MCP server.
+```shell
+aenv run
+```
 
 ## SDK Configuration
 
@@ -159,11 +163,34 @@ echo "Configuration file location: $(aenv config path)"
     "custom": {
       "prefix": "~/.aenv/envs"
     }
+  },
+  "hub_backend":{
+    "hub_backend": "http://xxxx"
   }
 }
 ```
 
 ### Configuration Management Operations
+
+#### Hub Service Configuration
+
+The Hub Service is a centralized metadata storage system for development environments. It works with `aenv list` and `aenv get` commands to manage and retrieve environment information.
+
+##### Local Mode
+No configuration required - uses default local storage.
+
+##### Non-Local Mode
+
+1. **Deploy Control Components**: First deploy the AEnv management components
+2. **Get EnvHub Service Address**: Obtain the EnvHub service endpoint
+
+```bash
+# Configure Hub service address (required for non-local mode)
+aenv config set hub_config.hub_backend http://localhost:8080
+
+# Verify configuration
+aenv config get hub_config
+```
 
 #### Build Configuration
 
@@ -242,20 +269,10 @@ Storage configuration manages AEnvironment environment code with multi-version s
 
 ```bash
 # Configure storage path
-aenv config set storage.custom.prefix ~/.aenv/environments
+aenv config set storage_config.custom.prefix ~/.aenv/environments
 
 # View storage configuration
-aenv config get storage
-```
-
-#### Hub Service Configuration
-
-```bash
-# Configure Hub service address (required for non-local mode)
-aenv config set hub_config.hub_backend http://localhost:8080
-
-# Verify configuration
-aenv config get hub_config
+aenv config get storage_config
 ```
 
 ## Management Components Installation
@@ -266,7 +283,7 @@ aenv config get hub_config
 
 ```bash
 # No additional components needed
-aenv run --quiet
+aenv run
 
 # Direct connection to local service
 export DUMMY_INSTANCE_IP=http://localhost
