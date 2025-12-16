@@ -1,0 +1,28 @@
+{
+    "name": "tau2-env",
+    "version": "1.0.2",
+    "tags": [
+        "tau2",
+        "benchmark",
+        "customer-service",
+        "python"
+    ],
+    "status": "Ready",
+    "artifacts": [
+        {
+            "type": "image",
+            "content": "docker.io/aenv/tau2-env:1.0.0"
+        }
+    ],
+    "buildConfig": {
+        "dockerfile": "./Dockerfile"
+    },
+    "testConfig": {
+        "script": "pytest xxx"
+    },
+    "deployConfig": {
+        "cpu": "1C",
+        "memory": "2G",
+        "os": "linux"
+    }
+}

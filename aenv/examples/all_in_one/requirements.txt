@@ -1,0 +1,3 @@
+aenvironment
+pytest
+pytest-asyncio

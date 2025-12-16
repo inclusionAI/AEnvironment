@@ -1,0 +1,25 @@
+{
+  "name": "mini-program",
+  "version": "1.0.0",
+  "tags": [
+    "ai",
+    "ide",
+    "agent",
+    "web"
+  ],
+  "status": "Ready",
+  "codeUrl": "oss://xxx",
+  "artifacts": [],
+  "buildConfig": {
+    "dockerfile": "./Dockerfile"
+  },
+  "testConfig": {
+    "script": "pytest test/"
+  },
+  "deployConfig": {
+    "cpu": "2C",
+    "memory": "4G",
+    "os": "linux"
+  }
+}
+

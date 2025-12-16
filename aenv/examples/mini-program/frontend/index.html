@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini Program IDE - AI-Powered Development</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>🚀 Mini Program IDE</h1>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Left Panel: Chat -->
+            <div class="left-panel">
+                <div class="chat-header">
+                    <h2>AI Assistant</h2>
+                    <div class="chat-status" id="chatStatus">Ready</div>
+                </div>
+                <div class="chat-messages" id="chatMessages">
+                    <div class="message assistant">
+                        <div class="message-content">
+                            <p>Hello! I'm your AI assistant for mini program development. I can help you:</p>
+                            <ul>
+                                <li>Create and modify mini program files</li>
+                                <li>Execute Python code for calculations</li>
+                                <li>Build complete mini program applications</li>
+                            </ul>
+                            <p>What would you like to build today?</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="chat-input-container">
+                    <textarea 
+                        id="chatInput" 
+                        class="chat-input" 
+                        placeholder="Type your message here... (e.g., 'Create a simple counter mini program')"
+                        rows="3"
+                    ></textarea>
+                    <button id="sendBtn" class="btn btn-primary">Send</button>
+                </div>
+            </div>
+
+            <!-- Right Panel: Preview -->
+            <div class="right-panel">
+                <!-- Preview Section -->
+                <div class="preview-section">
+                    <div class="preview-header">
+                        <h3>Live Preview</h3>
+                        <button id="refreshPreviewBtn" class="btn btn-small">🔄 Refresh</button>
+                    </div>
+                    <div class="preview-container">
+                        <iframe id="previewFrame" src="about:blank" sandbox="allow-scripts allow-same-origin"></iframe>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
+

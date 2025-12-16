@@ -1,0 +1,462 @@
+/* Mini Program IDE Styles */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+/* Header */
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 20px;
+    background: #252526;
+    border-bottom: 1px solid #3e3e42;
+    flex-shrink: 0;
+}
+
+.header h1 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+/* Buttons */
+.btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background 0.2s;
+}
+
+.btn-primary {
+    background: #007acc;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #005a9e;
+}
+
+.btn-secondary {
+    background: #3c3c3c;
+    color: #d4d4d4;
+}
+
+.btn-secondary:hover {
+    background: #505050;
+}
+
+.btn-small {
+    padding: 4px 8px;
+    font-size: 12px;
+}
+
+/* Main Content */
+.main-content {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+/* Left Panel: Chat */
+.left-panel {
+    width: 400px;
+    display: flex;
+    flex-direction: column;
+    background: #252526;
+    border-right: 1px solid #3e3e42;
+}
+
+.chat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid #3e3e42;
+}
+
+.chat-header h2 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.chat-status {
+    font-size: 12px;
+    color: #858585;
+    padding: 4px 8px;
+    background: #3c3c3c;
+    border-radius: 12px;
+}
+
+.chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    font-size: 13px;
+}
+
+.message {
+    display: flex;
+    flex-direction: column;
+    animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.message.user {
+    align-items: flex-end;
+}
+
+.message.assistant {
+    align-items: flex-start;
+}
+
+.message-content {
+    max-width: 85%;
+    padding: 8px 12px;
+    border-radius: 6px;
+    word-wrap: break-word;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.message.user .message-content {
+    background: #007acc;
+    color: white;
+}
+
+.message.assistant .message-content {
+    background: #3c3c3c;
+    color: #d4d4d4;
+}
+
+.message-content p {
+    margin-bottom: 6px;
+    line-height: 1.4;
+    font-size: 13px;
+}
+
+.message-content ul {
+    margin-left: 16px;
+    margin-bottom: 6px;
+    font-size: 13px;
+}
+
+.message-content li {
+    margin-bottom: 3px;
+    font-size: 13px;
+}
+
+.message-content code {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+}
+
+/* Redacted reasoning styling */
+.message-content :is(redacted_reasoning, think, reasoning) {
+    display: block;
+    background: #1a1a1a;
+    border-left: 3px solid #4a4a4a;
+    padding: 8px 10px;
+    margin: 6px 0;
+    border-radius: 4px;
+    color: #858585;
+    font-size: 11px;
+    font-style: italic;
+    font-family: 'Courier New', monospace;
+    line-height: 1.3;
+}
+
+.message-content :is(redacted_reasoning, think, reasoning)::before {
+    content: "💭 ";
+    color: #6a6a6a;
+}
+
+/* Handle XML-like tags in text content */
+.message-content {
+    white-space: pre-wrap;
+}
+
+/* Tool call styling - more elegant */
+.tool-call {
+    margin-top: 8px;
+    padding: 6px 10px;
+    background: linear-gradient(135deg, rgba(0, 122, 204, 0.12) 0%, rgba(0, 122, 204, 0.06) 100%);
+    border-left: 3px solid #007acc;
+    border-radius: 5px;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.tool-call:hover {
+    background: linear-gradient(135deg, rgba(0, 122, 204, 0.18) 0%, rgba(0, 122, 204, 0.1) 100%);
+    box-shadow: 0 2px 4px rgba(0, 122, 204, 0.2);
+}
+
+.tool-call .tool-name {
+    font-weight: 600;
+    color: #4ec9b0;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+}
+
+.tool-call .tool-name::before {
+    content: "⚙️";
+    font-size: 12px;
+}
+
+.tool-call .tool-args {
+    color: #a0a0a0;
+    font-size: 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    font-family: 'Courier New', monospace;
+    opacity: 0.8;
+}
+
+/* Tool result styling - more elegant */
+.tool-result {
+    margin-top: 8px;
+    padding: 8px 10px;
+    background: linear-gradient(135deg, rgba(78, 201, 176, 0.12) 0%, rgba(78, 201, 176, 0.06) 100%);
+    border-left: 3px solid #4ec9b0;
+    border-radius: 5px;
+    font-size: 11px;
+    max-height: 150px;
+    overflow-y: auto;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.tool-result:hover {
+    background: linear-gradient(135deg, rgba(78, 201, 176, 0.18) 0%, rgba(78, 201, 176, 0.1) 100%);
+    box-shadow: 0 2px 4px rgba(78, 201, 176, 0.2);
+}
+
+.tool-result .tool-name {
+    font-weight: 600;
+    color: #4ec9b0;
+    font-size: 11px;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.tool-result .tool-name::before {
+    content: "✓";
+    color: #4ec9b0;
+    font-weight: bold;
+    font-size: 12px;
+}
+
+.tool-result .tool-summary {
+    margin: 0;
+    font-size: 10px;
+    color: #b0b0b0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.4;
+    font-family: 'Courier New', monospace;
+    padding: 4px 0;
+}
+
+.tool-result pre {
+    margin: 0;
+    font-size: 10px;
+    color: #b0b0b0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 120px;
+    overflow: hidden;
+    font-family: 'Courier New', monospace;
+    line-height: 1.4;
+}
+
+/* Tool group styling */
+.tool-group {
+    margin-top: 10px;
+    padding: 8px;
+    background: rgba(30, 30, 30, 0.5);
+    border-radius: 6px;
+    border: 1px solid rgba(62, 62, 66, 0.5);
+}
+
+.tool-group-header {
+    font-size: 10px;
+    color: #858585;
+    margin-bottom: 6px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.chat-input-container {
+    padding: 16px;
+    border-top: 1px solid #3e3e42;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.chat-input {
+    width: 100%;
+    padding: 10px;
+    background: #3c3c3c;
+    border: 1px solid #3e3e42;
+    border-radius: 4px;
+    color: #d4d4d4;
+    font-family: inherit;
+    font-size: 13px;
+    resize: vertical;
+}
+
+.chat-input:focus {
+    outline: none;
+    border-color: #007acc;
+}
+
+/* Right Panel */
+.right-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #1e1e1e;
+}
+
+/* Preview Section */
+.preview-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    border-bottom: 1px solid #3e3e42;
+}
+
+.preview-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: #252526;
+    border-bottom: 1px solid #3e3e42;
+}
+
+.preview-header h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.preview-container {
+    flex: 1;
+    background: white;
+    position: relative;
+    overflow: hidden;
+    /* Disable scrolling */
+    overflow-y: hidden;
+    overflow-x: hidden;
+}
+
+#previewFrame {
+    width: 100%;
+    height: 100%;
+    border: none;
+    background: white;
+    /* Disable scrolling */
+    overflow: hidden;
+    /* Ensure content fits */
+    object-fit: contain;
+}
+
+/* Disable wheel scrolling on preview container */
+.preview-container {
+    pointer-events: auto;
+}
+
+.preview-container::-webkit-scrollbar {
+    display: none;
+}
+
+/* Terminal Section - Removed */
+
+/* Scrollbar */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: #1e1e1e;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #424242;
+    border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #4e4e4e;
+}
+
+/* Loading indicator */
+.loading {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid #3c3c3c;
+    border-top-color: #007acc;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+

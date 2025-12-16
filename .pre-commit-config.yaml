@@ -1,0 +1,97 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+  # General hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+        exclude: ^deploy/[^/]+/templates/
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  # Python - Black formatter
+  - repo: https://github.com/psf/black
+    rev: 24.10.0
+    hooks:
+      - id: black
+        files: ^aenv/
+        args: [--line-length=88]
+
+  # Python - isort import sorter
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        files: ^aenv/
+        args: [--profile=black]
+
+  # Python - Ruff linter
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.2
+    hooks:
+      - id: ruff
+        files: ^aenv/
+        args: [--fix]
+
+  # Go - gofmt and goimports
+  - repo: https://github.com/dnephin/pre-commit-golang
+    rev: v0.5.1
+    hooks:
+      - id: go-fmt
+        files: ^(api-service|controller|envhub)/.*\.go$
+      - id: go-imports
+        files: ^(api-service|controller|envhub)/.*\.go$
+
+  # Go - golangci-lint (run per module to support go.work)
+  - repo: https://github.com/golangci/golangci-lint
+    rev: v1.62.2
+    hooks:
+      - id: golangci-lint
+        name: golangci-lint (api-service)
+        files: ^api-service/
+        args: [--timeout=5m]
+        entry: bash -c 'cd api-service && golangci-lint run --timeout=5m'
+        pass_filenames: false
+      - id: golangci-lint
+        name: golangci-lint (controller)
+        files: ^controller/
+        args: [--timeout=5m]
+        entry: bash -c 'cd controller && golangci-lint run --timeout=5m'
+        pass_filenames: false
+      - id: golangci-lint
+        name: golangci-lint (envhub)
+        files: ^envhub/
+        args: [--timeout=5m]
+        entry: bash -c 'cd envhub && golangci-lint run --timeout=5m'
+        pass_filenames: false
+
+  # Markdown - markdownlint
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.43.0
+    hooks:
+      - id: markdownlint
+        args: [--fix, --disable, MD013, MD033, MD041, --]
+        exclude: ^aenv/examples/tau2/src/data/
+
+  # YAML - yamllint
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.35.1
+    hooks:
+      - id: yamllint
+        args: [-d, "{extends: relaxed, rules: {line-length: {max: 120}}}"]
+        exclude: ^deploy/[^/]+/templates/
+
+  # Dockerfile - hadolint
+  - repo: https://github.com/hadolint/hadolint
+    rev: v2.12.0
+    hooks:
+      - id: hadolint
+        files: (?i)(^|/)Dockerfile(\..*)?$|\.Dockerfile$
+        args: [--ignore, DL3008, --ignore, DL3013, --ignore, DL3018]

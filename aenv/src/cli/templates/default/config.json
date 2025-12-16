@@ -1,0 +1,24 @@
+{
+  "name": "aenv",
+  "version": "1.0.0",
+  "tags": [
+    "swe",
+    "python",
+    "linux"
+  ],
+  "status": "Ready",
+  "codeUrl": "oss://xxx",
+  "artifacts": [
+  ],
+  "buildConfig": {
+    "dockerfile": "./Dockerfile"
+  },
+  "testConfig": {
+    "script": "pytest xxx"
+  },
+  "deployConfig": {
+    "cpu": "1",
+    "memory": "2G",
+    "os": "linux"
+  }
+}

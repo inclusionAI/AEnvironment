@@ -1,0 +1,98 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aenvironment"
+version = "0.1.0"
+description = "AEnvironment Python SDK - Production-grade environment for AI agent tools"
+readme = "README.md"
+requires-python = ">=3.12"
+
+[project.license]
+text = "Apache-2.0"
+
+authors = [
+    { name = "AEnvironment Team" }
+]
+keywords = ["ai", "agent", "tools", "mcp", "environment"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "pydantic>=1.10.0",
+    "httpx>=0.20.0",
+    "anyio>=3.0.0",
+    "typing-extensions>=4.0.0",
+    "mcp>=1.0.0",
+    "uvicorn>=0.20.0",
+    "click>=8.0.0",
+    "requests>=2.25.0",
+    "fastmcp>=2.13.0",
+    "rich>=13.0.0",
+    "typer>=0.9.0",
+    "tabulate>=0.9.0",
+    "colorlog>=6.10.1",
+    "openai-agents>=0.6.3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=22.0.0",
+    "isort>=5.10.0",
+    "mypy>=1.0.0",
+    "ruff>=0.1.0",
+]
+
+docs = [
+    "jupyter-book<2",
+    "sphinxcontrib.mermaid==1.2.3",
+]
+
+local = []
+
+[project.scripts]
+aenv = "cli.cli:cli"
+
+[project.urls]
+Homepage = "https://github.com/inclusionAI/AEnvironment"
+Repository = "https://github.com/inclusionAI/AEnvironment"
+Documentation = "https://aenvironment.readthedocs.io"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.package-data]
+cli = ["data/*.json", "templates/**/*", "templates/**/**/*"]
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.ruff]
+line-length = 88
+target-version = "py38"
