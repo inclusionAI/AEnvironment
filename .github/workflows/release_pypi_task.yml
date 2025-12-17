@@ -1,4 +1,4 @@
-name: Release Aenv SDK
+name: Release AEnvironment SDK
 
 on:
   push:
