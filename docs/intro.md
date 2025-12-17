@@ -1,6 +1,6 @@
 # AEnvironment
 
-**Everything as Env** — A production-grade environment platform for Agentic Reinforcement Learning.
+**Everything as Environment** — A production-grade environment platform for Agentic Reinforcement Learning.
 
 ## What is AEnvironment?
 
@@ -9,12 +9,11 @@ AEnvironment (AEnv) is a unified environment platform designed for the Agentic R
 - 🎯 **Model Benchmarking**: Built-in support for popular benchmarks (TAU, SWE-bench, etc.)
 - 🚀 **RL Training at Scale**: Seamless integration with RL frameworks (AReaL, VERL, SLIME)
 - 🤖 **Agent Development**: Rich tooling for building and testing AI agents
-- 🌐 **Agent Deployment**: Production-ready infrastructure for agent services
 - 🔧 **Custom Environments**: Easy-to-use SDK for creating new environments
 
 ## Design Philosophy
 
-### Everything as Env
+### Everything as Environment
 
 AEnvironment treats everything as an environment — from simple tools to complex multi-agent systems. This unified abstraction enables:
 
@@ -31,7 +30,7 @@ graph LR
 - **Interoperability**: Standard MCP protocol for tool communication
 - **Scalability**: From local development to distributed clusters
 
-### Agent as Env
+### Agent as Environment
 
 A unique feature of AEnvironment is treating agents themselves as environments. This enables:
 
@@ -93,29 +92,30 @@ async with Environment("swe-env") as env:
 
 ## Architecture Overview
 
-```mermaid
-graph TB
-    subgraph Client
-        SDK[Python SDK]
-        CLI[CLI Tool]
-    end
+AEnvironment adopts a layered architecture design, dividing the system into two core domains: the **Development Side** and the **Traffic Side**, achieving decoupling between environment development and runtime execution.
 
-    subgraph Platform
-        API[API Service]
-        Hub[EnvHub Registry]
-        Ctrl[Controller]
-    end
+### Core Characteristics
 
-    subgraph Runtime
-        K8s[Kubernetes]
-    end
+- **Architecture Design**: Development side defines environments, traffic side executes runtime, providing unified interfaces based on MCP protocol
+- **Extensibility**: Supports extensible sandbox engines such as Kubernetes
+- **Metadata-Driven**: Environment configurations are stored in EnvHub, queried dynamically at runtime, supporting environment version management and rapid iteration
 
-    SDK --> API
-    CLI --> API
-    API --> Hub
-    API --> Ctrl
-    Ctrl --> K8s
-```
+![AEnvironment Architecture](./images/architecture.png)
+
+### Development Side
+
+Responsible for environment definition and metadata management:
+
+- **Flow**: AEnv CLI → EnvHub → Redis
+- Developers push environment configurations to EnvHub through CLI, with metadata stored in Redis
+
+### Traffic Side
+
+Responsible for creating and managing runtime environment instances:
+
+- **Flow**: AEnv SDK → API Service → Controller/Other Sandbox Engine → Environment Sandbox
+- Users create environment instances through SDK, API Service queries EnvHub for metadata, and creates instances through sandbox engines (e.g., Kubernetes)
+- Tool invocations are proxied by API Service to SDK within the sandbox, executing MCP tools and returning results
 
 ## Getting Started
 

@@ -39,10 +39,10 @@ AEnvironment abstracts everything as an environment—from simple tool functions
 
 ### Mini Program IDE
 
-Build AI-powered development environments with natural language interaction. The [Mini Program example](./aenv/examples/mini-program/) demonstrates:
+Build AI-powered mini-program generation systems where agents leverage AEnvironment as the standard environment infrastructure. The [Mini Program example](./aenv/examples/mini-program/) demonstrates:
 
+- **AEnvironment as Infrastructure**: Agents utilize AEnvironment as the standardized environment infrastructure, providing consistent tooling and runtime capabilities
 - **AI Agent Integration**: Multi-turn conversations powered by OpenAI API
-- **Virtual File System**: Persistent file system for managing code files
 - **MCP Tools**: File operations, code execution, and validation tools
 - **Live Preview**: Real-time preview of generated applications
 
@@ -125,10 +125,14 @@ AEnvironment comes with several built-in environments ready to use:
 
 📖 For detailed setup instructions, see the [Quick Start Guide](./docs/getting_started/quickstart.md).
 
-### Install SDK
+### Install SDK and init Environment
 
 ```bash
+# Install SDK
 pip install aenvironment
+
+# Initialize a new environment project
+aenv init my-env
 ```
 
 ### Define Tools, Functions, and Rewards
@@ -170,6 +174,13 @@ aenv run
 
 This will start an MCP server that exposes your tools for testing and development.
 
+### Build and push Environment
+
+```bash
+# Build and push
+aenv build && aenv push
+```
+
 ### Use Environment
 
 ```python
@@ -194,19 +205,6 @@ async def main():
         print(f"Reward: {reward}")
 
 asyncio.run(main())
-```
-
-### CLI Usage
-
-```bash
-# Initialize a new environment project
-aenv init my-env
-
-# Build and push
-aenv build && aenv push
-
-# List remote environments
-aenv list
 ```
 
 ## Performance

@@ -31,4 +31,3 @@ parts:
   - caption: Development
     chapters:
       - file: development/development
-      - file: development/contributing

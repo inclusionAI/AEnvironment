@@ -293,7 +293,7 @@ export DUMMY_INSTANCE_IP=http://localhost
 
 **Features**: High availability, elastic scaling, enterprise deployment
 
-For detailed Kubernetes deployment instructions, see [Deployment Guide](deployment.md#kubernetes-mode).
+For detailed Kubernetes deployment instructions, see the {doc}`deployment` guide, specifically the Kubernetes Mode section.
 
 To package the umbrella chart:
 
