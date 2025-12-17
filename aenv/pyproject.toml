@@ -8,9 +8,7 @@ version = "0.1.0"
 description = "AEnvironment Python SDK - Production-grade environment for AI agent tools"
 readme = "README.md"
 requires-python = ">=3.12"
-
-[project.license]
-text = "Apache-2.0"
+license = { text = "Apache-2.0" }
 
 authors = [
     { name = "AEnvironment Team" }
@@ -59,8 +57,6 @@ docs = [
     "jupyter-book<2",
     "sphinxcontrib.mermaid==1.2.3",
 ]
-
-local = []
 
 [project.scripts]
 aenv = "cli.cli:cli"
