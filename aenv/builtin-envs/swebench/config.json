@@ -1,0 +1,23 @@
+{
+  "name": "swebench",
+  "version": "1.0.0",
+  "tags": [
+    "swe",
+    "python",
+    "linux"
+  ],
+  "status": "Ready",
+  "codeUrl": "oss://xxx",
+  "artifacts": [],
+  "buildConfig": {
+    "dockerfile": "./Dockerfile"
+  },
+  "testConfig": {
+    "script": "pytest xxx"
+  },
+  "deployConfig": {
+    "cpu": "1C",
+    "memory": "2G",
+    "os": "linux"
+  }
+}
