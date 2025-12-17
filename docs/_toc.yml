@@ -20,9 +20,9 @@ parts:
 
   - caption: Examples
     chapters:
-      - file: examples/weather_tools
-      - file: examples/swe_benchmark
-      - file: examples/agent_as_env
+      - file: examples/all_in_one
+      - file: examples/mini_program
+      - file: examples/tau2_rl
 
   - caption: Roadmap
     chapters:
