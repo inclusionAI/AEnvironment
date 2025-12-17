@@ -56,10 +56,9 @@ async with Environment("mini-program@1.0.0") as env:
     })
 ```
 
-<video width="800" controls>
-  <source src="./docs/vedios/mini-program-demo.mov" type="video/quicktime">
-  Your browser does not support the video tag. <a href="./docs/vedios/mini-program-demo.mov">Download the video</a> instead.
-</video>
+https://github.com/user-attachments/assets/285c71dd-31fe-4586-a3d2-489280cc7aec
+
+
 
 📖 See [Mini Program Example](./aenv/examples/mini-program/README.md) for details.
 
