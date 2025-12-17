@@ -63,7 +63,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./api-service
-          file: ./Dockerfile
+          file: ./api-service/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta_api_service.outputs.tags }}
@@ -74,7 +74,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./envhub
-          file: ./Dockerfile
+          file: ./envhub/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta_envhub.outputs.tags }}
@@ -85,7 +85,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./controller
-          file: ./Dockerfile
+          file: ./controller/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta_controller.outputs.tags }}
