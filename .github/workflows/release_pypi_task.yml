@@ -32,7 +32,7 @@ jobs:
           python scripts/build_version.py
           python -m build    
 
-      - name: Move dist to workspace and Verify wheel metadata
+      - name: Move dist to workspace and Verify wheel metadata test
         run: |
           mv ./aenv/dist .
           unzip -p dist/*.whl METADATA | grep "Requires-Dist" || echo "WARNING: No dependencies found!"
