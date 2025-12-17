@@ -11,9 +11,6 @@ on:
 jobs:
   publish-to-pypi:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./aenv
 
     steps:
       - name: Checkout code
@@ -30,7 +27,14 @@ jobs:
           pip install build twine
 
       - name: Build package
-        run: python -m build
+        run: |
+          cd ./aenv
+          python scripts/build_version.py
+          python -m build
+
+      - name: Move dist to workspace
+        run: |
+          mv ./aenv/dist .
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
