@@ -1,4 +1,4 @@
-name: Envs BuiltIn Images Build and Push Trigger1
+name: Envs BuiltIn Images Build and Push Trigger2
 
 on:
   push:
