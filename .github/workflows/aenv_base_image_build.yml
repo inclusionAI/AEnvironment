@@ -62,7 +62,7 @@ jobs:
       - name: Build and push api-service image
         uses: docker/build-push-action@v5
         with:
-          context: ./api-service
+          context: .
           file: ./api-service/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
@@ -73,7 +73,7 @@ jobs:
       - name: Build and push env-hub image
         uses: docker/build-push-action@v6
         with:
-          context: ./envhub
+          context: .
           file: ./envhub/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
@@ -84,7 +84,7 @@ jobs:
       - name: Build and push controller image
         uses: docker/build-push-action@v6
         with:
-          context: ./controller
+          context: .
           file: ./controller/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
