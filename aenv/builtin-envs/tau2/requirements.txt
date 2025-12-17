@@ -5,4 +5,3 @@ psutil~=7.0.0
 aiofiles~=24.1.0
 graphviz~=0.21
 aenvironment
-git+https://github.com/sierra-research/tau2-bench.git@main#egg=tau2
