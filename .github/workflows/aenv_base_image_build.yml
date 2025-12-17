@@ -9,8 +9,7 @@ on:
   workflow_dispatch:
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  REGISTRY: aenvironment
 
 jobs:
   build-aenvironemnt-images:
@@ -58,6 +57,17 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/controller
           tags: *common-tags
+
+      - name: Build and push base image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./api-service/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta_api_service.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Build and push api-service image
         uses: docker/build-push-action@v5
