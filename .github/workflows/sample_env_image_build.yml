@@ -77,7 +77,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build and push terminalbench image
+      - name: Build and push terminal_bench image
         uses: docker/build-push-action@v6
         with:
           context: ./aenv/builtin-envs/terminalbench
