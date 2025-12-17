@@ -5,7 +5,7 @@ on:
     branches:
       - buildin_envs
     paths:
-      - '.github/workflows/sample_env_image_build.yml.yml'
+      - '.github/workflows/sample_env_image_build.yml'
   workflow_dispatch:
 
 env:
