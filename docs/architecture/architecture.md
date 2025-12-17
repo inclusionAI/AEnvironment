@@ -8,7 +8,7 @@ The AEnvironment platform is divided into two main domains: **Development Side**
 
 ### Development Side
 
-```{mermaid}
+```mermaid
 graph LR
     subgraph "Development Side"
         Developer[Environment Developer]
@@ -43,7 +43,7 @@ The Development Side handles environment definition and metadata management:
 
 ### Traffic Side
 
-```{mermaid}
+```mermaid
 graph TB
     subgraph "Traffic Side"
         RL[RL/Agent]
@@ -302,7 +302,7 @@ envhub/
 
 ### Development Side Flow
 
-```{mermaid}
+```mermaid
 sequenceDiagram
     participant Developer as Environment Developer
     participant CLI as AEnv CLI
@@ -320,7 +320,7 @@ sequenceDiagram
 
 ### Traffic Side Flow
 
-```{mermaid}
+```mermaid
 sequenceDiagram
     participant RL as RL/Agent
     participant SDK as AEnv SDK
@@ -353,7 +353,7 @@ sequenceDiagram
 
 ### Tool Execution Flow
 
-```{mermaid}
+```mermaid
 sequenceDiagram
     participant Agent
     participant Env as Environment Instance
@@ -506,7 +506,7 @@ helm install aenv-platform ./deploy \
 
 ### Horizontal Scaling
 
-```{mermaid}
+```mermaid
 graph LR
     LB[Load Balancer]
     
@@ -542,7 +542,7 @@ graph LR
 
 ### Network Isolation
 
-```{mermaid}
+```mermaid
 graph TB
     subgraph Public
         Client[Client]
@@ -613,7 +613,7 @@ OpenTelemetry support for end-to-end request tracing across all components and s
 
 ### Controller Leader Election
 
-```{mermaid}
+```mermaid
 graph TB
     subgraph Controller HA
         C1[Controller 1<br/>Leader<br/>HTTP Server Active]
