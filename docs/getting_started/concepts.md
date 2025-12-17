@@ -132,7 +132,7 @@ Auxiliary functions registered via `@register_function` to support complex logic
 
 ## Environment Lifecycle
 
-```{mermaid}
+```mermaid
 stateDiagram-v2
     [*] --> Pending: Create Instance
     Pending --> Running: Initialization Complete

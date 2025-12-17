@@ -120,7 +120,7 @@ Supports custom build parameters including image name, tags, etc. These paramete
 - **Shared Runtime Environment**: Business code and tool scripts share the same runtime environment
 - **Integrated Data Storage**: Local storage for business data and temporary files
 
-```{mermaid}
+```mermaid
 flowchart TB
     User["External User/System"]
     
@@ -179,7 +179,7 @@ flowchart TB
 - **Resource Sharing**: Necessary data exchange through mounted volumes or network communication
 - **Security Boundary**: Execution container runs under restricted permissions, reducing security risks
 
-```{mermaid}
+```mermaid
 flowchart TB
     subgraph "Dual Container Workflow"
         direction TB

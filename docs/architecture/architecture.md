@@ -8,7 +8,7 @@ The AEnvironment platform is divided into two main domains: **Development Side**
 
 ### Development Side
 
-```{mermaid}
+```mermaid
 graph LR
     subgraph "Development Side"
         Developer[Environment Developer]
@@ -43,7 +43,7 @@ The Development Side handles environment definition and metadata management:
 
 ### Traffic Side
 
-```{mermaid}
+```mermaid
 graph TB
     subgraph "Traffic Side"
         RL[RL/Agent]
@@ -155,19 +155,6 @@ Kubernetes Sandbox
 └── Watch API           # Real-time pod state updates
 ```
 
-### Future Sandbox Engines
-
-The architecture supports adding additional sandbox engines such as:
-
-- **Native Sandbox**: High-performance container runtime for fast startup and execution
-- **E2B**: Secure cloud development environments with isolated sandboxes
-- **Ray**: Distributed computing framework for scalable AI workloads
-- **Container Runtimes**: Docker, containerd, CRI-O
-- **VM-based Sandboxes**: Firecracker, Kata Containers
-- **Serverless Platforms**: AWS Lambda, Azure Functions
-- **Custom Sandboxes**: Specialized sandbox implementations
-
-Each sandbox engine implements the `SandboxEngine` interface and can be configured via the API Service. The API Service adapts to different engines, while the Controller only supports Kubernetes.
 
 ## Core Components
 
@@ -302,7 +289,7 @@ envhub/
 
 ### Development Side Flow
 
-```{mermaid}
+```mermaid
 sequenceDiagram
     participant Developer as Environment Developer
     participant CLI as AEnv CLI
@@ -320,7 +307,7 @@ sequenceDiagram
 
 ### Traffic Side Flow
 
-```{mermaid}
+```mermaid
 sequenceDiagram
     participant RL as RL/Agent
     participant SDK as AEnv SDK
@@ -353,7 +340,7 @@ sequenceDiagram
 
 ### Tool Execution Flow
 
-```{mermaid}
+```mermaid
 sequenceDiagram
     participant Agent
     participant Env as Environment Instance
@@ -469,44 +456,53 @@ controller \
 
 ## Deployment Modes
 
-### Standalone Mode
-
-Single-node deployment for development and testing:
-
-```yaml
-# docker-compose.yml
-services:
-  api-service:
-    image: aenv/api-service
-    ports:
-      - "8080:8080"  # Main API
-      - "8081:8081"  # MCP Gateway
-  
-  controller:
-    image: aenv/controller
-  
-  envhub:
-    image: aenv/envhub
-  
-  redis:
-    image: redis:7
-```
+AEnvironment supports multiple deployment modes for different use cases:
 
 ### Kubernetes Mode
 
-Production deployment on Kubernetes:
+Production deployment on Kubernetes clusters with high availability and scalability.
+
+**Key Features:**
+- High availability with leader election
+- Horizontal scaling support
+- Production-ready configuration
+- Helm chart-based deployment
+
+For detailed deployment instructions, see [Deployment Guide](../getting_started/deployment.md).
+
+**Quick Start:**
 
 ```bash
 helm install aenv-platform ./deploy \
   --namespace aenv \
-  --create-namespace
+  --create-namespace \
+  --wait \
+  --timeout 10m
 ```
+
+### Docker Compose Mode (TODO)
+
+Single-node deployment for development and testing using Docker Compose.
+
+**Planned Features:**
+- Quick local setup
+- All components in one stack
+- Suitable for development and testing
+- Easy to start/stop
+
+### Other Deployment Modes (TODO)
+
+Additional deployment options planned for future releases:
+
+- **Cloud Provider Managed Services**: AWS ECS, Azure Container Instances, GCP Cloud Run
+- **Serverless Mode**: Function-as-a-Service deployment
+- **Edge Deployment**: Lightweight deployment for edge computing scenarios
 
 ## Scalability
 
 ### Horizontal Scaling
 
-```{mermaid}
+```mermaid
 graph LR
     LB[Load Balancer]
     
@@ -542,7 +538,7 @@ graph LR
 
 ### Network Isolation
 
-```{mermaid}
+```mermaid
 graph TB
     subgraph Public
         Client[Client]
@@ -573,8 +569,6 @@ graph TB
 ### Authentication & Authorization
 
 - **API Keys**: Service-to-service authentication
-- **JWT Tokens**: User authentication
-- **RBAC**: Role-based access control
 - **Namespace Isolation**: Multi-tenant separation
 
 ## Observability
@@ -589,31 +583,11 @@ All components expose Prometheus metrics:
 | **Controller** | Pod operations, cache size, sandbox engine calls |
 | **EnvHub** | Push/pull duration, cache hits, registry errors |
 
-### Logging
-
-Structured logging with correlation IDs for request tracing:
-
-```json
-{
-  "timestamp": "2025-01-15T10:30:00Z",
-  "level": "info",
-  "message": "Environment created",
-  "env_name": "swe-env",
-  "sandbox_engine": "kubernetes",
-  "correlation_id": "abc-123",
-  "duration_ms": 150
-}
-```
-
-### Distributed Tracing
-
-OpenTelemetry support for end-to-end request tracing across all components and sandbox engines.
-
 ## High Availability
 
 ### Controller Leader Election
 
-```{mermaid}
+```mermaid
 graph TB
     subgraph Controller HA
         C1[Controller 1<br/>Leader<br/>HTTP Server Active]
@@ -645,13 +619,67 @@ graph TB
 
 ### Planned Sandbox Engines
 
-- **Fast Container Sandbox**: Sub-second startup times
-- **VM-based Sandbox**: Stronger isolation for sensitive workloads
-- **Serverless Sandbox**: Pay-per-use model for sporadic workloads
+The architecture supports adding additional sandbox engines such as:
+
+- **Native Sandbox**: High-performance container runtime for fast startup and execution
+- **E2B**: Secure cloud development environments with isolated sandboxes
+- **Ray**: Distributed computing framework for scalable AI workloads
+- **Container Runtimes**: Docker, containerd, CRI-O
+- **VM-based Sandboxes**: Firecracker, Kata Containers
+
+Each sandbox engine implements the `SandboxEngine` interface and can be configured via the API Service. The API Service adapts to different engines, while the Controller only supports Kubernetes.
 
 ### Sandbox Engine Features
 
 - **Auto-scaling**: Dynamic scaling based on demand
 - **Resource Optimization**: Intelligent resource allocation
 - **Multi-tenancy**: Enhanced isolation between tenants
+
+## Future Plans
+
+The following features are planned for future releases:
+
+### Observability Enhancements
+
+#### Logging
+
+Real-time log streaming from sandbox execution environments:
+
+**Features:**
+- **Stream Logs**: Real-time log streaming from running sandbox instances
+- **Structured Logging**: JSON-formatted logs with correlation IDs for request tracing
+- **Log Aggregation**: Centralized log collection from all sandbox instances
+- **Log Query**: Search and filter logs by instance ID, correlation ID, timestamp, and log level
+
+**Log Format:**
+
+```json
+{
+  "timestamp": "2025-01-15T10:30:00Z",
+  "level": "info",
+  "message": "Tool execution completed",
+  "instance_id": "env-instance-123",
+  "env_name": "swe-env",
+  "sandbox_engine": "kubernetes",
+  "correlation_id": "abc-123",
+  "tool_name": "search",
+  "duration_ms": 150,
+  "stdout": "Search results: ...",
+  "stderr": ""
+}
+```
+
+**API Endpoints:**
+- `GET /env-instance/:id/logs` - Stream logs from a specific sandbox instance
+- `GET /env-instance/:id/logs?follow=true` - Follow logs in real-time (streaming)
+- `GET /env-instance/:id/logs?tail=100` - Get last N lines of logs
+
+#### Distributed Tracing
+
+OpenTelemetry support for end-to-end request tracing across all components and sandbox engines.
+
+### Authentication & Authorization Enhancements
+
+- **JWT Tokens**: User authentication support
+- **RBAC**: Role-based access control for fine-grained permission management
 

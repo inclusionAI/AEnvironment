@@ -3,20 +3,15 @@
 This example will show you:
 1. How to create a simple custom environment that implements the standard MCP protocol
 2. How to locally test this environment
-3. How to publish this environment to `AEnvHub`
-4. How to pull and use this environment from `AEnvHub`
+3. How to publish this environment to `EnvHub`
+4. How to pull and use this environment from `EnvHub`
 
 ## Requirements
-* `Python >= 3.12`, Python-based runtime environment
-* `AEnvironment`, aenv SDK
-* `Docker`, used to package the `Weather` environment into an image
-* [Optional] `orbstack`, an additional requirement for macOS that provides a lightweight VM; alternatives include docker-desktop, colima, etc.  
+* `Python >= 3.12`: Python-based runtime environment
+* `AEnvironment`: aenv SDK
+* `Docker`: used to package the `Weather` environment into an image
 ```bash
 pip install aenvironment
-brew install docker
-
-brew install orbstack/tap/orbstack
-brew install orbstack
 ```
 
 ## Development Environment
@@ -40,6 +35,7 @@ Dockerfile
 ### Activate venv
 Prepare a virtual environment for our new project:
 ```bash
+cd weather-demo
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -87,13 +83,14 @@ def is_good_weather(city: str) -> bool:
 
 Congratulations! You have completed the development of a `weather` environment!
 
-## Start & Test Environment
+## Test Environment
 
-Run the following command. `aenv` will publish the environment locally as an `MCP Server` and install `MCP Inspector` for testing; it uses port `8081` by default:
+Run the following command. `aenv` will start up the environment locally as an `MCP Server` and install `MCP Inspector` for testing; it uses port `8081` by default:
 ```bash
+# Run this command in your project directory (e.g., weather-demo)
 aenv run
 ```
-![](./images/run_env_in_local.gif)
+![Run Environment Locally](../images/development/run_env_in_local.gif)
 
 It is recommended to use `pytest` and `pytest-asyncio` to run unit tests asynchronously.
 ```bash
@@ -103,7 +100,7 @@ pip install pytest-asyncio
 
 ### Add UnitTest
 Add a test file `test_custom_env.py`:
-* Use the environment variable `DUMMY_INSTANCE_IP` to direct requests to the local `MCP Server` started via `aenv test`
+* Use the environment variable `DUMMY_INSTANCE_IP` to direct requests to the local `MCP Server` started via `aenv run`
 * Use `list_tools`, `call_tool`, `call_function`, and `call_reward` to invoke the methods created in the environment
 ```python
 from aenv import Environment
@@ -123,33 +120,33 @@ Run:
 ```bash
 pytest -s src/test_custom_env.py
 ```
-![](./images/test_env_in_local.gif)
+![Test Environment Locally](../images/development/test_env_in_local.gif)
 
 ## Publish Environment
 Publishing the environment includes three steps: packaging the image, configuring the backend service, and pushing the image.
 
 ### Package Image
-Ensure your local VM service is running:
+Ensure your local docker  service is running:
 ```bash
-orbctl status
+docker info
 ```
 Run the following command to build and push the image to the target registry:
 ```bash
 aenv build --push
 ```
 After the image is built, you can verify the image output via `docker images` and the `artifacts` field in `config.json` under the project directory.
-![](./images/build_env_in_local.gif)
+![Build Environment Image Locally](../images/development/build_env_in_local.gif)
 
-### Configure Backend Service (AEnvHub)
-To use the environment in a production cluster, you need to publish it to a deployed `AEnvHub` backend service. For backend deployment, refer to [Deploying AEnvironment Backend Service on a k8s Cluster](../getting_started/installation.md).
+### Configure Backend Service (EnvHub)
+To use the environment in a production cluster, you need to publish it to a deployed `EnvHub` backend service. For backend deployment, refer to [Deployment Guide](../getting_started/deployment.md).
 
-Assume we have deployed a k8s environment locally using `minikube`, where the `AEnvHub` service address is `http://localhost:8083`:
+Assume we have deployed a k8s environment locally using `minikube`, where the `EnvHub` service address is `http://localhost:8083`:
 ```
 aenv config set hub_backend http://localhost:8083/
 ```
 
-### Push Image
-Run the following command to upload the image metadata to `AEnvHub`:
+### Push Environment
+Run the following command to upload the env metadata to `EnvHub`:
 ```bash
 # Push environment information
 aenv push
@@ -158,19 +155,19 @@ aenv get weather-demo
 # Filter list
 aenv list | grep weather-demo
 ```
-![](./images/push_env_in_local.gif)
+![Push Environment to EnvHub](../images/development/push_env_in_local.gif)
 
-## Use Production Environment
+## Use Environment
 
-### Configure API Service (AEnvAPIService)
-In production, to use environments from `AEnvHub`, you must call the `AEnvAPIService` to initiate remote requests. For deploying `AEnvAPIService`, refer to [Deploying AEnvAPIService on a k8s Cluster](../getting_started/installation.md).
+### Configure API Service
+In production, to use environments from `EnvHub`, you must call the `api service` to initiate remote requests. For deploying `api service`, refer to [Deploying api service on a k8s Cluster](../getting_started/installation.md).
 
-Assume we have deployed a simple environment locally using `minikube`, where the `AEnvAPIService` address is `http://localhost:8080` and the `MCP` request forwarding address is `http://localhost:8081`.
+Assume we have deployed a simple environment locally using `minikube`, where the `api service` address is `http://localhost:8080` and the `MCP` request forwarding address is `http://localhost:8081`.
 
 ### Use Environment
 
 Add business logic in `run_custom_env.py`:
-* Use the environment variable `AENV_SYSTEM_URL` to specify a custom `AEnvAPIService` address
+* Use the environment variable `AENV_SYSTEM_URL` to specify a custom `api service` address
 * Use `list_tools`, `call_tool`, `call_function`, and `call_reward` to invoke the methods created in the environment
 * Call the `release` method after use to ensure the remote instance is properly released
 ```python
@@ -180,8 +177,8 @@ import os
 import asyncio
 
 async def main():
-    # Specify AEnvAPIService address
-    os.environ["AENV_SYSTEM_URL"] = "http://localhost:8080/"
+    # Specify api service address
+    os.environ["AENV_SYSTEM_URL"] = "http://localhost"
     # Create environment instance
     env = Environment("weather-demo@1.0.0", timeout=60)
     try:
@@ -209,4 +206,4 @@ Observe environment creation and destruction in `minikube`:
 kubectl get pod -n aenvsandbox
 ```
 
-![](./images/use_env_in_cluster.gif)
+![Use Environment in Cluster](../images/development/use_env_in_cluster.gif)

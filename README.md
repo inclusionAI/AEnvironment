@@ -4,7 +4,7 @@
 </p>
 
 <p align="center">
-  <img src="./docs/images/cover.jpeg" alt="AEnvironment Architecture" width="800"/>
+  <img src="./docs/images/cover.png" alt="AEnvironment Architecture" width="800"/>
 </p>
 
 <p align="center">
@@ -56,7 +56,10 @@ async with Environment("mini-program@1.0.0") as env:
     })
 ```
 
-https://github.com/user-attachments/assets/285c71dd-31fe-4586-a3d2-489280cc7aec
+
+
+https://github.com/user-attachments/assets/23d68f94-3e10-478f-b7da-8f6ee18e47ed
+
 
 
 
@@ -98,7 +101,7 @@ With Agent as Environment, you can:
 async with Environment("agent-b@1.0.0") as agent_b:
     # List available tools from Agent B
     tools = await agent_b.list_tools()
-    
+
     # Call Agent B's chat tool
     response = await agent_b.call_tool("chat", {"message": "Hello!"})
     print(response.content)
@@ -209,25 +212,6 @@ aenv build && aenv push
 # List remote environments
 aenv list
 ```
-
-## Architecture
-
-```text
-┌─────────────────────────────────────────────────────────────┐
-│                        Clients                              │
-│              (Python SDK / CLI / AI Agents)                 │
-└─────────────────────────┬───────────────────────────────────┘
-                          │ MCP Protocol
-┌─────────────────────────▼───────────────────────────────────┐
-│                     API Service                             │
-├─────────────────────────────────────────────────────────────┤
-│  Controller  │  EnvHub Registry  │  Scheduler              │
-├─────────────────────────────────────────────────────────────┤
-│                    Kubernetes Engine                        │
-└─────────────────────────────────────────────────────────────┘
-```
-
-📖 For detailed architecture documentation, see [Architecture](./docs/architecture/architecture.md).
 
 ## Performance
 

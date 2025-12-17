@@ -54,6 +54,8 @@ sphinx:
     - sphinx_design
     - sphinxcontrib.mermaid
   config:
+    myst_fence_as_directive:
+      - mermaid
     html_theme_options:
       navigation_with_keys: false
     mermaid_version: "10.6.1"

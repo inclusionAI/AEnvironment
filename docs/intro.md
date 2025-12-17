@@ -18,7 +18,7 @@ AEnvironment (AEnv) is a unified environment platform designed for the Agentic R
 
 AEnvironment treats everything as an environment — from simple tools to complex multi-agent systems. This unified abstraction enables:
 
-```{mermaid}
+```mermaid
 graph LR
     A[Agent] --> B[Environment]
     B --> C[Tools]
@@ -93,7 +93,7 @@ async with Environment("swe-env") as env:
 
 ## Architecture Overview
 
-```{mermaid}
+```mermaid
 graph TB
     subgraph Client
         SDK[Python SDK]
