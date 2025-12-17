@@ -16,7 +16,7 @@ controller:
   sandboxNamespace: aenvsandbox
   namespace:
     create: true
-  image: docker.io/library/controller:latest
+  image: aenvironment/controller:0.1.0
   service:
     type: LoadBalancer
     port: 8080
@@ -64,7 +64,7 @@ envhub:
     namespace: aenv
   namespace:
     create: false
-  image: docker.io/library/envhub:latest
+  image: aenvironment/envhub:0.1.0
   service:
     type: LoadBalancer
     port: 8083
@@ -88,7 +88,7 @@ api-service:
     namespace: aenv
   namespace:
     create: false
-  image: docker.io/library/api-service:latest
+  image: aenvironment/api-service:0.1.0
   service:
     type: LoadBalancer
     port: 8080

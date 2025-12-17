@@ -13,6 +13,10 @@ spec:
       targetPort: http
       protocol: TCP
       name: http
+    - port: 8081
+      targetPort: readiness
+      protocol: TCP
+      name: readiness
 
   selector:
     {{ include "controller.selectorLabels" . | nindent 4 }}

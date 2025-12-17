@@ -108,6 +108,11 @@ podTemplates:
       - name: main
         image: weather:v0.1.0
         imagePullPolicy: IfNotPresent
+        command:
+        - /bin/sh
+        - -c
+        - --
+        - python3 -m aenv.main /app/src
         resources:
           limits:
             cpu: "2"
