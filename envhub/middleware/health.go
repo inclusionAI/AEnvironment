@@ -26,7 +26,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// HealthCheckMiddleware health check middleware
+// HealthCheckMiddleware health check middleware.
 func HealthCheckMiddleware(metrics *models.Metrics, healthChecker controller.HealthChecker) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if c.Request.URL.Path == "/health" {
