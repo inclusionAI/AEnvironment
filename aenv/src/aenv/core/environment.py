@@ -26,11 +26,11 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse, urlunparse
 
 import httpx
+from agents.tool import FunctionTool
+from agents.tool import Tool as OpenAITool
+from agents.tool_context import ToolContext
 from fastmcp import Client
 from fastmcp.client.transports import StreamableHttpTransport
-
-from agents.tool import FunctionTool, Tool as OpenAITool
-from agents.tool_context import ToolContext
 
 from aenv.client.scheduler_client import AEnvSchedulerClient
 from aenv.core.exceptions import EnvironmentError, ToolError
@@ -308,7 +308,9 @@ class Environment:
             if not isinstance(input_schema, dict):
                 input_schema = {"type": "object", "properties": {}}
 
-            async def _on_invoke_tool(ctx: ToolContext[Any], input: str, *, _name: str = name) -> Any:
+            async def _on_invoke_tool(
+                ctx: ToolContext[Any], input: str, *, _name: str = name
+            ) -> Any:
                 try:
                     args: Dict[str, Any] = json.loads(input) if input else {}
                 except Exception as e:
@@ -320,7 +322,11 @@ class Environment:
 
                 text_parts: List[str] = []
                 for item in result.content:
-                    if isinstance(item, dict) and item.get("type") == "text" and "text" in item:
+                    if (
+                        isinstance(item, dict)
+                        and item.get("type") == "text"
+                        and "text" in item
+                    ):
                         text_parts.append(str(item.get("text")))
                     else:
                         text_parts.append(json.dumps(item, ensure_ascii=False))

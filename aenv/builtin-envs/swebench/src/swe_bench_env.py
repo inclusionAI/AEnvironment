@@ -16,8 +16,9 @@ import json
 import os
 import shutil
 
-from aenv import register_reward
 from docker_cli import DockerClient
+
+from aenv import register_reward
 
 docker = DockerClient.load_container(
     namespace_list=["k8s.io", "default"],
@@ -29,7 +30,7 @@ share_path = os.getenv("WORK_SHARE", "/shared")
 if share_path is not None:
     shutil.move(SOURCE_BIN_PATH, share_path)
 
-with open("/app/data/swe-verify-details.json", 'r') as f:
+with open("/app/data/swe-verify-details.json", "r") as f:
     all_data = json.load(f)
 
 

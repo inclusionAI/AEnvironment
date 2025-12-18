@@ -18,10 +18,10 @@ Provides file system management and code execution capabilities.
 """
 
 import io
+import re
 import sys
 import traceback
-import re
-from typing import Dict, Any, List
+from typing import Any, Dict
 
 from aenv import register_tool
 
@@ -36,6 +36,7 @@ except ImportError:
         # Last resort: import from same directory using file path
         import importlib.util
         from pathlib import Path
+
         vfs_path = Path(__file__).parent / "vfs.py"
         if vfs_path.exists():
             spec = importlib.util.spec_from_file_location("vfs", vfs_path)
@@ -67,8 +68,8 @@ def read_file(file_path: str) -> Dict[str, Any]:
     """
     try:
         # Normalize file path - remove leading slashes and path components
-        normalized_path = file_path.lstrip('/').split('/')[-1]
-        
+        normalized_path = file_path.lstrip("/").split("/")[-1]
+
         vfs = get_vfs()
         content = vfs.read_file(normalized_path)
         return {
@@ -78,7 +79,7 @@ def read_file(file_path: str) -> Dict[str, Any]:
             "size": len(content),
         }
     except FileNotFoundError:
-        normalized_path = file_path.lstrip('/').split('/')[-1]
+        normalized_path = file_path.lstrip("/").split("/")[-1]
         return {
             "success": False,
             "error": f"File not found: {normalized_path}. Use list_files to see available files.",
@@ -114,21 +115,27 @@ def write_file(file_path: str, content: str) -> Dict[str, Any]:
     try:
         # Normalize file path - remove leading slashes and path components
         # Only allow simple filenames in root directory
-        normalized_path = file_path.lstrip('/').split('/')[-1]
-        
+        normalized_path = file_path.lstrip("/").split("/")[-1]
+
         # Warn if path was modified
         if normalized_path != file_path:
             import warnings
-            warnings.warn(f"File path normalized from '{file_path}' to '{normalized_path}'. Use simple filenames only.")
-        
+
+            warnings.warn(
+                f"File path normalized from '{file_path}' to '{normalized_path}'. Use simple filenames only."
+            )
+
         vfs = get_vfs()
         vfs.write_file(normalized_path, content)
-        
+
         # Debug: Log VFS state after write
         import logging
+
         logger = logging.getLogger(__name__)
-        logger.debug(f"VFS instance ID: {id(vfs)}, Files after write: {vfs.list_files()}")
-        
+        logger.debug(
+            f"VFS instance ID: {id(vfs)}, Files after write: {vfs.list_files()}"
+        )
+
         # Validate HTML if it's index.html
         if normalized_path == "index.html":
             # Basic HTML validation
@@ -140,7 +147,7 @@ def write_file(file_path: str, content: str) -> Dict[str, Any]:
                     "size": len(content),
                     "warning": "HTML structure may be incomplete",
                 }
-        
+
         return {
             "success": True,
             "file_path": normalized_path,
@@ -175,12 +182,15 @@ def list_files(directory: str = "/") -> Dict[str, Any]:
         vfs = get_vfs()
         # Debug: Log VFS state
         import logging
+
         logger = logging.getLogger(__name__)
-        logger.debug(f"VFS instance ID: {id(vfs)}, All files in VFS: {list(vfs.files.keys())}")
-        
+        logger.debug(
+            f"VFS instance ID: {id(vfs)}, All files in VFS: {list(vfs.files.keys())}"
+        )
+
         files = vfs.list_files(directory)
         logger.debug(f"list_files({directory}) returned: {files}")
-        
+
         return {
             "success": True,
             "files": sorted(files),  # Sort for consistent output
@@ -238,7 +248,7 @@ def execute_python_code(code: str) -> Dict[str, Any]:
             "error": error if error else None,
             "result": str(result) if result is not None else None,
         }
-    except Exception as e:
+    except Exception:
         error_msg = traceback.format_exc()
         return {
             "success": False,
@@ -272,44 +282,48 @@ def validate_html(html_content: str) -> Dict[str, Any]:
     errors = []
     warnings = []
     suggestions = []
-    
+
     # Check for HTML5 doctype
     if "<!DOCTYPE html>" not in html_content and "<!doctype html>" not in html_content:
         warnings.append("Missing HTML5 doctype declaration")
         suggestions.append("Add <!DOCTYPE html> at the beginning of the file")
-    
+
     # Check for html tag
     if "<html" not in html_content.lower():
         errors.append("Missing <html> tag")
-    
+
     # Check for head tag
     if "<head" not in html_content.lower():
         warnings.append("Missing <head> tag")
-    
+
     # Check for body tag
     if "<body" not in html_content.lower():
         errors.append("Missing <body> tag")
-    
+
     # Check for viewport meta tag (important for responsive design)
     if "viewport" not in html_content.lower():
         warnings.append("Missing viewport meta tag for responsive design")
-        suggestions.append('Add <meta name="viewport" content="width=device-width, initial-scale=1.0"> in <head>')
-    
+        suggestions.append(
+            'Add <meta name="viewport" content="width=device-width, initial-scale=1.0"> in <head>'
+        )
+
     # Basic tag balance check (simple approach)
     open_tags = html_content.count("<")
     close_tags = html_content.count("</")
     self_closing_tags = html_content.count("/>")
-    
+
     # Rough estimate - not perfect but catches obvious issues
     if open_tags - close_tags - self_closing_tags > 5:
         warnings.append("Possible unclosed tags detected")
-    
+
     # Check for common issues
     if "position:fixed" in html_content and "overflow:hidden" not in html_content:
-        suggestions.append("Consider adding overflow:hidden to body when using position:fixed")
-    
+        suggestions.append(
+            "Consider adding overflow:hidden to body when using position:fixed"
+        )
+
     valid = len(errors) == 0
-    
+
     return {
         "success": True,
         "valid": valid,
@@ -320,7 +334,9 @@ def validate_html(html_content: str) -> Dict[str, Any]:
 
 
 @register_tool
-def check_responsive_design(html_content: str, css_content: str = None) -> Dict[str, Any]:
+def check_responsive_design(
+    html_content: str, css_content: str = None
+) -> Dict[str, Any]:
     """
     Check if the design is responsive and follows best practices.
 
@@ -343,54 +359,79 @@ def check_responsive_design(html_content: str, css_content: str = None) -> Dict[
     fixed_pixels = []
     responsive_units_used = False
     suggestions = []
-    
+
     # Combine HTML and CSS for analysis
     content_to_check = html_content
     if css_content:
         content_to_check += "\n" + css_content
-    
+
     # Check for viewport meta tag
     if "viewport" not in content_to_check.lower():
         issues.append("Missing viewport meta tag")
-        suggestions.append('Add <meta name="viewport" content="width=device-width, initial-scale=1.0">')
-    
+        suggestions.append(
+            'Add <meta name="viewport" content="width=device-width, initial-scale=1.0">'
+        )
+
     # Check for fixed pixel values in style attributes
     # Find fixed pixel values (simple regex)
-    pixel_pattern = r'(\d+)px'
+    pixel_pattern = r"(\d+)px"
     matches = re.findall(pixel_pattern, content_to_check)
-    
+
     # Filter out common acceptable uses (borders, small details)
     # Focus on layout-related pixels
-    layout_keywords = ['width', 'height', 'margin', 'padding', 'top', 'left', 'right', 'bottom', 'font-size']
+    layout_keywords = [
+        "width",
+        "height",
+        "margin",
+        "padding",
+        "top",
+        "left",
+        "right",
+        "bottom",
+        "font-size",
+    ]
     for match in matches:
         # Check if it's near a layout keyword
         context_start = max(0, content_to_check.find(match) - 20)
         context_end = min(len(content_to_check), content_to_check.find(match) + 30)
         context = content_to_check[context_start:context_end].lower()
-        
+
         if any(keyword in context for keyword in layout_keywords):
             if match not in fixed_pixels:
                 fixed_pixels.append(match)
-    
+
     if fixed_pixels:
-        issues.append(f"Found {len(fixed_pixels)} fixed pixel value(s) that might affect responsiveness")
-        suggestions.append("Consider using viewport units (vw, vh), percentages (%), or clamp() instead of fixed pixels")
-    
+        issues.append(
+            f"Found {len(fixed_pixels)} fixed pixel value(s) that might affect responsiveness"
+        )
+        suggestions.append(
+            "Consider using viewport units (vw, vh), percentages (%), or clamp() instead of fixed pixels"
+        )
+
     # Check for responsive units
-    responsive_patterns = ['vw', 'vh', '%', 'rem', 'em', 'clamp']
+    responsive_patterns = ["vw", "vh", "%", "rem", "em", "clamp"]
     if any(pattern in content_to_check for pattern in responsive_patterns):
         responsive_units_used = True
-    
+
     # Check for overflow hidden on body
-    if 'overflow:hidden' not in content_to_check.replace(' ', '').lower():
-        suggestions.append("Consider adding overflow:hidden to body to prevent scrolling")
-    
+    if "overflow:hidden" not in content_to_check.replace(" ", "").lower():
+        suggestions.append(
+            "Consider adding overflow:hidden to body to prevent scrolling"
+        )
+
     # Check for flexbox or grid usage (good for responsive design)
-    if 'display:flex' not in content_to_check.lower() and 'display:grid' not in content_to_check.lower():
+    if (
+        "display:flex" not in content_to_check.lower()
+        and "display:grid" not in content_to_check.lower()
+    ):
         suggestions.append("Consider using flexbox or grid for responsive layouts")
-    
-    is_responsive = responsive_units_used and "viewport" in content_to_check.lower() and len(issues) == 0
-    
+
+    is_responsive = (
+        responsive_units_used
+        and "viewport" in content_to_check.lower()
+        and len(issues) == 0
+    )
+
     return {
         "success": True,
         "is_responsive": is_responsive,
@@ -424,6 +465,5 @@ def log_browser_console() -> Dict[str, Any]:
         "error_count": 0,
         "warning_count": 0,
         "message": "Browser console logging requires client-side implementation. Please check browser developer console manually.",
-        "note": "To implement: Use postMessage API between iframe and parent window to capture console logs"
+        "note": "To implement: Use postMessage API between iframe and parent window to capture console logs",
     }
-

@@ -42,7 +42,10 @@ def test_passed(case: str, sm: dict[str, str]) -> bool:
 
 
 def test_failed(case: str, sm: dict[str, str]) -> bool:
-    return case not in sm or sm[case] in [TestStatus.FAILED.value, TestStatus.ERROR.value]
+    return case not in sm or sm[case] in [
+        TestStatus.FAILED.value,
+        TestStatus.ERROR.value,
+    ]
 
 
 # MARK: Evaluation report functions
@@ -90,10 +93,10 @@ def get_logs_eval(test_spec: SweRun, log_fp: str) -> tuple[dict[str, str], bool]
 
 
 def get_eval_tests_report(
-        eval_status_map: dict[str, str],
-        gold_results: dict[str, str],
-        calculate_to_fail: bool = False,
-        eval_type: EvalType = EvalType.PASS_AND_FAIL,
+    eval_status_map: dict[str, str],
+    gold_results: dict[str, str],
+    calculate_to_fail: bool = False,
+    eval_type: EvalType = EvalType.PASS_AND_FAIL,
 ) -> dict[str, dict[str, list[str]]]:
     """
     Create a report based on failure/pass change from gold results to eval results.
@@ -127,8 +130,8 @@ def get_eval_tests_report(
 
     def check_fail_only(test_case, eval_status_map, success, failed):
         if (
-                test_case in eval_status_map
-                and eval_status_map[test_case] == TestStatus.FAILED.value
+            test_case in eval_status_map
+            and eval_status_map[test_case] == TestStatus.FAILED.value
         ):
             failed.append(test_case)
         else:
@@ -231,10 +234,10 @@ def get_resolution_status(report: dict[str, dict[str, Any]]) -> str:
 
 
 def get_eval_report(
-        test_spec: SweRun,
-        prediction: dict[str, str],
-        test_log_path: str,
-        include_tests_status: bool,
+    test_spec: SweRun,
+    prediction: dict[str, str],
+    test_log_path: str,
+    include_tests_status: bool,
 ) -> dict[str, Any]:
     """
     Generate a report of model evaluation results from a prediction, task instance,
@@ -277,12 +280,13 @@ def get_eval_report(
         PASS_TO_PASS: test_spec.PASS_TO_PASS,
     }
 
-    eval_type = EvalType.FAIL_ONLY if test_spec.repo in FAIL_ONLY_REPOS \
+    eval_type = (
+        EvalType.FAIL_ONLY
+        if test_spec.repo in FAIL_ONLY_REPOS
         else EvalType.PASS_AND_FAIL
-
-    report = get_eval_tests_report(
-        eval_status_map, eval_ref, eval_type=eval_type
     )
+
+    report = get_eval_tests_report(eval_status_map, eval_ref, eval_type=eval_type)
     if get_resolution_status(report) == ResolvedStatus.FULL.value:
         report_map[instance_id]["resolved"] = True
 

@@ -24,6 +24,7 @@ print(aenv.__version__)
 #### Runtime Mode Selection
 
 ##### Local Mode
+
 In local mode, you need to start the environment execution sandbox via `aenv run` and set environment variables:
 
 ```bash
@@ -31,6 +32,7 @@ export DUMMY_INSTANCE_IP=http://localhost
 ```
 
 ##### Remote Mode
+
 In remote mode, you need to deploy components first, obtain the service address and configure:
 
 ```bash
@@ -84,7 +86,8 @@ async def main():
 if __name__ == "__main__":
     asyncio.run(main())
 ```
-</details>    
+
+</details>
 
 #### Environment Execution Demo
 
@@ -97,6 +100,7 @@ if __name__ == "__main__":
 Use the `@register_tool` decorator to quickly register existing Python methods as environment tools. Registered tools will ultimately be provided as MCP Server services.
 
 #### How It Works
+
 1. Start corresponding containers when creating environment instances
 2. Launch FastMCP Server within containers
 3. Register all tools to MCP Server
@@ -105,6 +109,7 @@ Use the `@register_tool` decorator to quickly register existing Python methods a
 #### Development Example
 
 Example code:
+
 ```python
 from typing import Dict, Any
 from aenv import register_tool
@@ -113,12 +118,12 @@ from aenv import register_tool
 def my_custom_echo_env(content: str) -> Dict[str, Any]:
     """
     Custom environment tool description.
-    
+
     This tool receives any string content and returns it as-is output, used to verify environment integration effects.
-    
+
     Args:
         content: Any content to echo
-        
+
     Returns:
         Dictionary containing results in format {"result": "original content"}
     """
@@ -128,9 +133,11 @@ def my_custom_echo_env(content: str) -> Dict[str, Any]:
 #### Parameter Specification
 
 ##### Input Parameters
+
 Input parameter Schema must be consistent with MCP Tool input Schema, mainly supporting basic data types and avoiding complex nested structures.
 
 **Supported Types:**
+
 - Basic types: `str`, `int`, `float`, `bool`
 - Lists: `list[str]`, `list[int]`, etc.
 - Simple Pydantic models
@@ -138,6 +145,7 @@ Input parameter Schema must be consistent with MCP Tool input Schema, mainly sup
 - Default parameter values
 
 **Not Recommended or Limited Types:**
+
 - Deep nested structures
 - Complex generic types
 - Overly complex custom validation logic
@@ -199,7 +207,7 @@ for item in mcp_call_results.content:
         content.append({"type": item.type, "data": item.data})
     else:
         content.append({"type": "text", "text": str(item)})
-        
+
 return ToolResult(content=content, is_error=result.isError)
 ```
 
@@ -217,7 +225,7 @@ result = await mini_terminal.call_tool(
 # Return result
 Execution result:
 ToolResult(content=[{
-    'type': 'text', 
+    'type': 'text',
     'text': '{"output":["helloworld\n",true],"returncode":0}'
 }], is_error=False)
 ```
@@ -260,34 +268,34 @@ from aenv import register_reward
 def evaluate_code_quality(code: str, test_results: dict) -> dict:
     """
     Reward function for evaluating code quality.
-    
+
     Comprehensive scoring based on test results, code length, and code standards.
-    
+
     Args:
         code: Code string to evaluate
         test_results: Test result dictionary containing pass/fail statistics
-        
+
     Returns:
         Dictionary containing score, feedback, and detailed information
     """
     score = 0.0
     feedback = []
-    
+
     # Score based on test results
     if test_results.get("passed", 0) > 0:
         score += 0.5
         feedback.append("Tests passed")
-    
+
     # Score based on code length
     if len(code) < 1000:
         score += 0.3
         feedback.append("Code concise")
-    
+
     # Score based on code standards
     if "def " in code and "import " in code:
         score += 0.2
         feedback.append("Good structure")
-    
+
     return {
         "score": score,
         "feedback": "; ".join(feedback),
@@ -325,14 +333,14 @@ from aenv import register_health
 def system_health_check() -> dict:
     """
     System health check function.
-    
+
     Check CPU, memory, disk usage, and system running status.
-    
+
     Returns:
         Dictionary containing various health indicators
     """
     import psutil
-    
+
     return {
         "status": "healthy",
         "cpu_percent": psutil.cpu_percent(),
@@ -356,14 +364,14 @@ from aenv import Environment
 async def basic_example():
     # Create environment instance
     env = Environment("my-python-env")
-    
+
     # Initialize environment
     await env.initialize()
-    
+
     # Use environment
     tools = await env.list_tools()
     print(f"Available tools: {len(tools)}")
-    
+
     # Destroy environment
     await env.destroy()
 
@@ -418,12 +426,12 @@ async def recommended_usage():
     async with Environment("safe-env") as env:
         # Environment automatically initialized
         tools = await env.list_tools()
-        
+
         # Execute tools
         result = await env.call_tool("python", {
             "code": "print('Hello from AEnvironment!')"
         })
-        
+
         print(result.content)
         # Automatically destroys environment on exit
 
@@ -491,7 +499,7 @@ env = Environment(
 
 Environment instances have a default lifecycle of 30 minutes, after which the system automatically recycles them. Can be configured as follows:
 
-**1. Parameter Configuration (Highest Priority)**
+##### 1. Parameter Configuration (Highest Priority)
 
 ```python
 # 30 minutes (default)
@@ -504,7 +512,7 @@ env = Environment("my-env", ttl="2h")
 env = Environment("my-env", ttl="24h")
 ```
 
-**2. Global Configuration**
+##### 2. Global Configuration
 
 Configure uniformly in `config.json`, affecting all instances created by this environment:
 
@@ -525,6 +533,7 @@ Configure uniformly in `config.json`, affecting all instances created by this en
 **Recommendation**: Environment instances should be actively released after use to avoid resource waste.
 
 **Best Practices**:
+
 - Short-term tasks: Set reasonable TTL for automatic recycling
 - Long-term tasks: Use context managers to ensure resource cleanup
 - Interactive use: Explicitly call `await env.release()`

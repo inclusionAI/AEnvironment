@@ -1,8 +1,8 @@
+import os
 from typing import Any, Dict
 
 from agents import Agent as OpenAIAgent
 from agents import ModelSettings, RunConfig, Runner, set_default_openai_api
-import os
 
 from aenv.core.environment import Environment
 
@@ -28,10 +28,12 @@ async def run_agent_return_reward(data: Dict[str, Any]) -> float:
             environment_variables=dict(
                 TAU2_DOMAIN=data.get("domain", "telecom"),
                 TAU2_TASK_ID=data.get("task_id", ""),
-                TAU2_SOLO_MODE="true" if os.getenv("TAU2_USER_LLM") is None else "false",
+                TAU2_SOLO_MODE=(
+                    "true" if os.getenv("TAU2_USER_LLM") is None else "false"
+                ),
                 TAU2_USER_LLM_API_BASE=os.getenv("TAU2_USER_LLM_API_BASE", ""),
                 TAU2_USER_LLM_API_KEY=os.getenv("TAU2_USER_LLM_API_KEY", ""),
-                TAU2_USER_LLM=os.getenv("TAU2_USER_LLM")
+                TAU2_USER_LLM=os.getenv("TAU2_USER_LLM"),
             ),
         )
 
@@ -45,7 +47,9 @@ async def run_agent_return_reward(data: Dict[str, Any]) -> float:
         openai_tools = await env.list_openai_tools()
         agent = OpenAIAgent(
             name="Tau2 Agent",
-            instructions=system_prompt if isinstance(system_prompt, str) else str(system_prompt),
+            instructions=(
+                system_prompt if isinstance(system_prompt, str) else str(system_prompt)
+            ),
             tools=openai_tools,
         )
 
@@ -65,7 +69,9 @@ async def run_agent_return_reward(data: Dict[str, Any]) -> float:
 
             # Get last observation for agent input
             last_obs = status.get("last_observation", "")
-            current_input = last_obs if last_obs else "Please start working on the task."
+            current_input = (
+                last_obs if last_obs else "Please start working on the task."
+            )
             print(f"Current input: {current_input}")
 
             try:
@@ -85,7 +91,9 @@ async def run_agent_return_reward(data: Dict[str, Any]) -> float:
                 )
 
                 # Sent message to user
-                status = await env.call_function("tau2_send_message", {"message": result.final_output})
+                status = await env.call_function(
+                    "tau2_send_message", {"message": result.final_output}
+                )
                 if status.get("done", False):
                     break
 
@@ -101,12 +109,14 @@ async def run_agent_return_reward(data: Dict[str, Any]) -> float:
         print(f"Error running agent: {e}")
         return 0.0
 
+
 if __name__ == "__main__":
     """
     You can run this agent locally!
     """
-    import asyncio
     import argparse
+    import asyncio
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--domain", type=str, default="telecom")
     parser.add_argument("--task_id", type=str, default="")

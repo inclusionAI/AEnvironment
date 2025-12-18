@@ -48,12 +48,12 @@ from aenv import register_tool, register_reward
 def echo_tool(content: str) -> Dict[str, Any]:
     """
     Intelligent echo tool - demonstrates basic tool development
-    
+
     Function: Receives any input content and returns structured response
-    
+
     Parameters:
         content: Text content to echo
-        
+
     Returns:
         Dictionary containing original content and processing results
     """
@@ -67,12 +67,12 @@ def echo_tool(content: str) -> Dict[str, Any]:
 def simple_reward(task: str) -> Dict[str, Any]:
     """
     Basic reward function - demonstrates reward mechanism implementation
-    
+
     Function: Provides standardized feedback for task execution
-    
+
     Parameters:
         task: Task description
-        
+
     Returns:
         Reward information including score and feedback
     """
@@ -200,7 +200,7 @@ async def local_usage():
         # Discover available tools
         tools = await env.list_tools()
         print(f"🔧 Available tools: {[t.name for t in tools]}")
-        
+
         # Call custom tool
         result = await env.call_tool(
             "echo_tool",
@@ -215,7 +215,7 @@ if __name__ == "__main__":
 
 ### Cloud Production Mode
 
-#### Environment Configuration
+#### Cloud Environment Configuration
 
 | Environment Variable | Description | Example |
 |---------------------|-------------|---------|
@@ -223,7 +223,7 @@ if __name__ == "__main__":
 | `AENV_API_KEY` | API authentication key | `sk-xxx...xxx` |
 | `AENV_TIMEOUT` | Request timeout | `30` |
 
-#### Usage Example
+#### Cloud Usage Example
 
 ```python
 import asyncio
@@ -236,7 +236,7 @@ async def cloud_usage():
         # Cloud environment auto-initializes
         tools = await env.list_tools()
         print(f"☁️ Cloud tools: {[t.name for t in tools]}")
-        
+
         # Execute cloud task
         result = await env.call_tool(
             "echo_tool",
@@ -266,4 +266,3 @@ After completing the quick start, we recommend the following learning path:
 [Deep Dive into Core Concepts →](concepts.md)
 
 </div>
-

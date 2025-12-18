@@ -86,12 +86,14 @@ Options:
 ```
 
 #### Available Templates
+
 | Template Name | Description | Use Cases |
 |---|---|---|
 | `default` | Basic template | General environments |
 
 #### Project Structure
-```
+
+```text
 my-project/
 ├── config.json          # Environment configuration
 ├── Dockerfile          # Container definition
@@ -131,6 +133,7 @@ my-project/
   }
 }
 ```
+
 </details>
 
 - **Dockerfile**
@@ -145,7 +148,7 @@ Environment business logic code is placed in the src directory. Use `@register` 
 
 After code development, use the run command for local validation.
 
-#### Basic Usage
+#### Run Basic Usage
 
 <details>
 <summary>Usage Details</summary>
@@ -163,6 +166,7 @@ Options:
   --inspector-port INTEGER  MCP Inspector port
   --help                    Show this message and exit.
 ```
+
 </details>
 
 ```bash
@@ -194,9 +198,11 @@ MCP Inspector Is Installed...!
 2025-12-09 17:18:21,875 - mcp_manager - INFO - 🚀 Starting MCP server and Inspector...
 2025-12-09 17:18:21,875 - mcp_manager - INFO - Starting task: mcp_server - python -m aenv.
 ```
+
 </details>
 
 #### Validation Checks
+
 - ✅ Configuration file format validation
 - ✅ Code correctness verification
 - ✅ Dependency completeness check
@@ -206,7 +212,7 @@ MCP Inspector Is Installed...!
 
 Build Docker container images with real-time progress display.
 
-#### Basic Usage
+#### Build Basic Usage
 
 <details>
 <summary>Usage Details</summary>
@@ -235,6 +241,7 @@ Options:
   -p, --platform TEXT       Platform for the Docker image
   --help                    Show this message and exit.
 ```
+
 </details>
 
 ```bash
@@ -255,6 +262,7 @@ aenv build --platform linux/amd64,linux/arm64
 ```
 
 #### Advanced Options
+
 | Option | Short | Description | Example |
 |---|---|---|---|
 | `--work-dir` | `-w` | Working directory | `--work-dir ./project` |
@@ -274,7 +282,8 @@ aenv build --platform linux/amd64,linux/arm64
 
 Push the built environment to a remote repository.
 
-#### Basic Usage
+#### Push Basic Usage
+
 ```bash
 # Push current environment
 aenv push
@@ -290,6 +299,7 @@ aenv push --registry registry.company.com
 ```
 
 #### Push Options
+
 | Option | Description | Example |
 |---|---|---|
 | `--version` | Specify version number | `--version 1.0.0` |
@@ -303,7 +313,8 @@ aenv push --registry registry.company.com
 
 Display all available AEnvironment environments.
 
-#### Basic Usage
+#### List Basic Usage
+
 ```bash
 # List all environments
 aenv list
@@ -325,6 +336,7 @@ aenv list --tags python,search
 ```
 
 #### Output Format
+
 ```bash
 $ aenv list --format table
 +---------------------------+------------+---------------+-------------------------------------+
@@ -340,9 +352,10 @@ $ aenv list --format table
 
 ### `aenv get` - Get Environment Details
 
-Retrieve detailed information for a specific environment.
+Retrieve detailed information about a specific environment.
 
-#### Basic Usage
+#### Get Basic Usage
+
 ```bash
 # Get environment details
 aenv get search-env
@@ -354,7 +367,8 @@ aenv get search-env --version 1.0.0
 aenv get search-env --format json
 ```
 
-#### Output Example
+#### Get Output Example
+
 ```json
 {
   "id": "search-1.0.0",
@@ -400,6 +414,7 @@ Manage CLI configuration and settings.
 #### Subcommands
 
 ##### `config show` - Display Configuration
+
 ```bash
 # Show all configurations
 aenv config show
@@ -409,12 +424,14 @@ aenv config show --format json
 ```
 
 ##### `config get` - Get Configuration
+
 ```bash
 # Get specific value
 aenv config get global_mode
 ```
 
 ##### `config init` - Initialize Configuration
+
 ```bash
 # Create default configuration
 aenv config init
@@ -426,7 +443,8 @@ aenv config init
 
 Display CLI version and build information.
 
-#### Basic Usage
+#### Version Basic Usage
+
 ```bash
 # Show version only
 aenv version -s
@@ -435,7 +453,8 @@ aenv version -s
 aenv version --format json
 ```
 
-#### Output Example
+#### Version Output Example
+
 ```bash
 $ aenv version
 AEnv CLI Version: 0.1.0
@@ -487,6 +506,7 @@ aenv push
 ## 📚 Quick Reference
 
 ### Common Command Combinations
+
 ```bash
 # Complete workflow
 aenv init → aenv run → aenv build → aenv push
@@ -499,6 +519,7 @@ aenv config path → aenv config set → aenv config show
 ```
 
 ### Debug Commands
+
 ```bash
 # Verbose output
 aenv --verbose <command>

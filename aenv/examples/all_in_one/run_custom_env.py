@@ -1,7 +1,9 @@
-import time
-from aenv import Environment
-import os
 import asyncio
+import os
+import time
+
+from aenv import Environment
+
 
 async def main():
     os.environ["AENV_SYSTEM_URL"] = "http://localhost:8080/"
@@ -17,5 +19,5 @@ async def main():
         time.sleep(10)
         await env.release()
 
-asyncio.run(main())
 
+asyncio.run(main())

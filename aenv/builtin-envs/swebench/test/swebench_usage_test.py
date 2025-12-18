@@ -13,16 +13,21 @@
 # limitations under the License.
 
 import pytest
+
 from aenv import Environment
 
 
 @pytest.mark.asyncio
 async def async_run_swebench():
-    swebench = Environment("swebench@1.0.0", datasource="swebench/astropy__astropy-12907")
+    swebench = Environment(
+        "swebench@1.0.0", datasource="swebench/astropy__astropy-12907"
+    )
     try:
         await swebench.initialize()
         instance_id = "astropy__astropy-12907"
-        model_patch = "diff --git a/astropy/modeling/separable.py b/astropy/modeling/separable.py\n--- a/astropy/modeling/separable.py\n+++ b/astropy/modeling/separable.py\n@@ -242,7 +242,7 @@ def _cstack(left, right):\n         cright = _coord_matrix(right, 'right', noutp)\n     else:\n         cright = np.zeros((noutp, right.shape[1]))\n-        cright[-right.shape[0]:, -right.shape[1]:] = 1\n+        cright[-right.shape[0]:, -right.shape[1]:] = right\n \n     return np.hstack([cleft, cright])\n \n",
+        model_patch = (
+            "diff --git a/astropy/modeling/separable.py b/astropy/modeling/separable.py\n--- a/astropy/modeling/separable.py\n+++ b/astropy/modeling/separable.py\n@@ -242,7 +242,7 @@ def _cstack(left, right):\n         cright = _coord_matrix(right, 'right', noutp)\n     else:\n         cright = np.zeros((noutp, right.shape[1]))\n-        cright[-right.shape[0]:, -right.shape[1]:] = 1\n+        cright[-right.shape[0]:, -right.shape[1]:] = right\n \n     return np.hstack([cleft, cright])\n \n",
+        )
 
         args = {
             "instance": instance_id,

@@ -20,11 +20,11 @@ Integrates OpenAI API with MCP tools via AEnvironment.
 import asyncio
 import json
 import os
-import time
-from typing import Dict, List, Any, Optional
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from typing import Any, Dict, List, Optional
+
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
 
 try:
@@ -455,7 +455,7 @@ async def chat(request: ChatRequest):
         if isinstance(tools_result, list):
             # list_tools() returns List[Dict[str, Any]]
             tools_list = tools_result
-            logger.debug(f"Tools are in list format, using directly")
+            logger.debug("Tools are in list format, using directly")
         elif isinstance(tools_result, dict):
             # Convert dict to list format
             for tool_name, tool_info in tools_result.items():
@@ -466,7 +466,7 @@ async def chat(request: ChatRequest):
                         "inputSchema": tool_info.get("inputSchema", {}),
                     }
                 )
-            logger.debug(f"Tools are in dict format, converted to list")
+            logger.debug("Tools are in dict format, converted to list")
         else:
             logger.warning(
                 f"Unexpected tools_result type: {type(tools_result)}, value: {tools_result}"
@@ -766,7 +766,7 @@ async def websocket_endpoint(websocket: WebSocket):
 async def list_files_api():
     """List all files in VFS."""
     try:
-        env = await get_environment()
+        await get_environment()
         result = await call_tool("list_files", {})
         return result
     except Exception as e:
@@ -777,7 +777,7 @@ async def list_files_api():
 async def get_file(file_path: str):
     """Get file content."""
     try:
-        env = await get_environment()
+        await get_environment()
         result = await call_tool("read_file", {"file_path": file_path})
         return result
     except Exception as e:
@@ -788,7 +788,7 @@ async def get_file(file_path: str):
 async def save_file(file_path: str, content: Dict[str, str]):
     """Save file content."""
     try:
-        env = await get_environment()
+        await get_environment()
         result = await call_tool(
             "write_file",
             {"file_path": file_path, "content": content.get("content", "")},

@@ -86,7 +86,8 @@ aenv version
 ```
 
 **Expected Output Example**:
-```
+
+```text
 AEnv SDK Version: 0.1.0
 Environment: PyPI Package
 Build Version: 0.1.0
@@ -120,6 +121,7 @@ mcp-inspector --version
 ##### Usage
 
 - By default, when you run `aenv run`, the MCP Inspector will be automatically launched to help you test and monitor your MCP server.
+
 ```shell
 aenv run
 ```
@@ -177,6 +179,7 @@ echo "Configuration file location: $(aenv config path)"
 The Hub Service is a centralized metadata storage system for development environments. It works with `aenv list` and `aenv get` commands to manage and retrieve environment information.
 
 ##### Local Mode
+
 No configuration required - uses default local storage.
 
 ##### Non-Local Mode
@@ -319,7 +322,6 @@ deploy/
 └── api-service/
 ```
 
-
 ## Troubleshooting
 
 ### Getting Help
@@ -352,4 +354,4 @@ After installation, we recommend continuing with:
 
 ---
 
-*This guide is released under the Apache 2.0 License*
+This guide is released under the Apache 2.0 License.

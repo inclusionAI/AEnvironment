@@ -115,6 +115,7 @@ Supports custom build parameters including image name, tags, etc. These paramete
 **Architecture Features**: Integrated design combining business logic and tool execution environments in a single container.
 
 **Core Components:**
+
 - **Business Logic Engine**: Handles core business processes and user requests
 - **Built-in Toolset**: Pre-installed all required tool scripts and command-line tools
 - **Shared Runtime Environment**: Business code and tool scripts share the same runtime environment
@@ -123,17 +124,17 @@ Supports custom build parameters including image name, tags, etc. These paramete
 ```mermaid
 flowchart TB
     User["External User/System"]
-    
+
     subgraph "Single Container Workflow"
         direction TB
-        
+
         subgraph "Environment Instance"
             A["FastMCP Service Entry"]
             B["MCP Tool Calls"]
             C["Business Process Handling"]
             D["Local Runtime Environment"]
         end
-        
+
         User -->|HTTP/API Request| A
         A --> B
         B --> C
@@ -141,15 +142,16 @@ flowchart TB
         D -->|Return Result| C
         C -->|Response Data| B
         B -->|Business Response| User
-        
+
         classDef unifiedContainer fill:#9C27B0,stroke:#4A148C,color:white
         class UnifiedContainer unifiedContainer
     end
-    
+
     style User fill:#FF9800,stroke:#E65100,color:white
 ```
 
 **Use Cases:**
+
 - Lightweight environment requirements
 - Rapid prototyping development
 - Resource-constrained scenarios
@@ -161,12 +163,14 @@ flowchart TB
 
 #### Architecture Components
 
-**Main Container**
+##### Main Container
+
 - Responsible for core business logic execution
 - Handles user requests and business process orchestration
 - Serves as the unified entry point for the environment
 
-**Execution Container (Second Container)**
+##### Execution Container (Second Container)
+
 - Acts as independent data and runtime environment carrier
 - Pre-installed with various tool scripts and dependency environments
 - Provides isolated execution sandbox
@@ -183,7 +187,7 @@ flowchart TB
 flowchart TB
     subgraph "Dual Container Workflow"
         direction TB
-        
+
         subgraph "Environment Instance"
             subgraph "Main Container"
                 A["FastMCP Service Entry"]
@@ -191,7 +195,7 @@ flowchart TB
                 C["Business Process Handling"]
                 D["Execution Container Caller"]
             end
-            
+
             subgraph "Execution Container"
                 E["Tool Script Collection"]
                 F["Python Virtual Environment"]
@@ -199,7 +203,7 @@ flowchart TB
                 H["Execution Sandbox"]
             end
         end
-        
+
         Rollout["Training/Agent Framework"] -->|Function Call Request| A
         A --> B
         B --> C
@@ -214,13 +218,13 @@ flowchart TB
         C -->|Response Data| B
         B -->|Tool Call Result| Rollout
     end
-    
+
     style Rollout fill:#FF9800,stroke:#E65100,color:white
 ```
 
 #### Dual Container Configuration Guide
 
-**1. Modify Environment Configuration File**
+##### 1. Modify Environment Configuration File
 
 ```json
 {
@@ -234,7 +238,7 @@ flowchart TB
 - **podTemplate**: Select templates supporting dual containers (e.g., `DualContainer`)
 - **imagePrefix**: Constrains the common prefix for second container images associated with the current environment
 
-**2. Specify Data Source When Creating Environment Instance**
+##### 2. Specify Data Source When Creating Environment Instance
 
 ```python
 env = Environment(
@@ -247,7 +251,7 @@ env = Environment(
 
 #### Usage Scenarios
 
-**Scenario 1: Direct Full Image Path Specification**
+##### Scenario 1: Direct Full Image Path Specification
 
 When `datasource` contains the complete second container image path, `imagePrefix` configuration can be omitted:
 
@@ -259,7 +263,7 @@ env = Environment(
 # Full image name: swebench/sweb.eval.x86_64.{instance_id}_1776_p5.js-5771:latest
 ```
 
-**Scenario 2: Image Concatenation Logic**
+##### Scenario 2: Image Concatenation Logic
 
 Sync images to internal repository, distinguishing different instances by tags:
 
@@ -276,6 +280,7 @@ env = Environment(
 ```
 
 **Advantages:**
+
 - All instances use the same image name, distinguished by different tags
 - Simplifies environment creation process, only need to pass instance identifier
 - Facilitates image version management and batch deployment
@@ -310,6 +315,7 @@ await env.release()
 ```
 
 **Lifecycle Management:**
+
 - **Default TTL**: 30 minutes automatic recycling
 - **Active Release**: Explicit resource release via interface
 - **Resource Optimization**: Recommend timely release to avoid resource waste
@@ -325,10 +331,10 @@ async def managed_environment():
     async with Environment("my-env", ttl="2h") as env:
         # Environment automatically initialized
         tools = await env.list_tools()
-        
+
         # Execute environment tasks
         result = await env.call_tool("analyze", {"data": "sample"})
-        
+
         # Automatic destruction on exit
         return result
 

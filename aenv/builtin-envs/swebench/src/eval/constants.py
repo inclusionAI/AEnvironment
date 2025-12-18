@@ -129,7 +129,7 @@ DEFAULT_DOCKER_SPECS = {
     "pnpm_version": "9.5.0",
     "python_version": "3.9",
     "ubuntu_version": "22.04",
-    #"ubuntu_version": "20.04",
+    # "ubuntu_version": "20.04",
 }
 FAIL_ONLY_REPOS = {
     "chartjs/Chart.js",

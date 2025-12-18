@@ -136,6 +136,7 @@ controller:
 Single-node deployment for development and testing using Docker Compose.
 
 **Planned Features:**
+
 - Quick local setup
 - All components in one stack
 - Suitable for development and testing
@@ -152,4 +153,3 @@ Additional deployment options planned for future releases:
 - **Edge Deployment**: Lightweight deployment for edge computing scenarios
 
 **Status**: Coming soon
-

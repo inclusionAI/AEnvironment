@@ -19,7 +19,7 @@ import shlex
 import subprocess
 import threading
 import time
-from typing import Optional, Dict, List, Union, Callable
+from typing import Callable, Dict, List, Optional, Union
 
 
 class ExecResult(object):
@@ -33,8 +33,10 @@ class ExecResult(object):
         return self.code == 0
 
     def output(self):
-        return (f'++++++++START_STDOUT++++++++\n{self.stdout}\n++++++++END_STDOUT++++++++\n'
-                f'++++++++START_STDERR++++++++\n{self.stderr}\n++++++++END_STDERR++++++++')
+        return (
+            f"++++++++START_STDOUT++++++++\n{self.stdout}\n++++++++END_STDOUT++++++++\n"
+            f"++++++++START_STDERR++++++++\n{self.stderr}\n++++++++END_STDERR++++++++"
+        )
 
     def __str__(self):
         return f"ExecResult:{{code: {self.code}, duration: {self.duration}s}}"
@@ -43,9 +45,14 @@ class ExecResult(object):
 class ShellExecutor:
     """safe execute shell command"""
 
-    def __init__(self, timeout: int = 60, working_dir: str = None,
-                 env: Dict[str, str] = None, encoding: str = "utf-8",
-                 logger: logging.Logger = logging.getLogger("ShellExecutor")):
+    def __init__(
+        self,
+        timeout: int = 60,
+        working_dir: str = None,
+        env: Dict[str, str] = None,
+        encoding: str = "utf-8",
+        logger: logging.Logger = logging.getLogger("ShellExecutor"),
+    ):
         """
         initialize shell executor
         :param timeout: timeout (seconds)
@@ -99,16 +106,30 @@ class ShellExecutor:
         if not isinstance(command, str):
             return False
         """Check if command requires shell"""
-        shell_chars = ['&&', '||', ';', '|', '$', '>', '<', '`', 'cd', ]
-        return any(char in command for char in shell_chars) if isinstance(command, str) else False
+        shell_chars = [
+            "&&",
+            "||",
+            ";",
+            "|",
+            "$",
+            ">",
+            "<",
+            "`",
+            "cd",
+        ]
+        return (
+            any(char in command for char in shell_chars)
+            if isinstance(command, str)
+            else False
+        )
 
     def execute(
-            self,
-            command: Union[str, List[str]],
-            timeout: Optional[int] = None,
-            realtime_callback: Optional[Callable[[str], None]] = None,
-            input_data: Optional[str] = None,
-            out_record: Optional[str] = None
+        self,
+        command: Union[str, List[str]],
+        timeout: Optional[int] = None,
+        realtime_callback: Optional[Callable[[str], None]] = None,
+        input_data: Optional[str] = None,
+        out_record: Optional[str] = None,
     ) -> ExecResult:
         """
         Execute command and return result
@@ -128,8 +149,10 @@ class ShellExecutor:
         else:
             sanitized_cmd = self._sanitize_command(command)
 
-        self.logger.info(f"++++++++Begin executing command++++++++")
-        self.logger.info(f"Command:{command} Workdir: {self.working_dir}, Timeout: {timeout}s")
+        self.logger.info("++++++++Begin executing command++++++++")
+        self.logger.info(
+            f"Command:{command} Workdir: {self.working_dir}, Timeout: {timeout}s"
+        )
 
         # Execute command
         start_time = time.time()
@@ -148,15 +171,15 @@ class ShellExecutor:
             self.logger.error(f"Execution failed after {duration:.2f}s: {str(e)}")
             return ExecResult(-1, "", f"Execution error: {str(e)}", duration)
         finally:
-            self.logger.info(f"++++++++End executing command++++++++")
+            self.logger.info("++++++++End executing command++++++++")
 
     def _execute_with_capture(
-            self,
-            command: List[str],
-            timeout: int,
-            shell_need: bool,
-            out_record: str,
-            input_data: str = None
+        self,
+        command: List[str],
+        timeout: int,
+        shell_need: bool,
+        out_record: str,
+        input_data: str = None,
     ) -> ExecResult:
         """Execution method with complete output capture"""
         # Execute command
@@ -175,11 +198,11 @@ class ShellExecutor:
                 env=self.env,
                 encoding=self.encoding,
                 errors="replace",
-                check=False
+                check=False,
             )
 
         try:
-            input_bytes = input_data.encode(self.encoding) if input_data else None
+            _ = input_data.encode(self.encoding) if input_data else None
             if out_record:
                 with open(out_record, "wb") as out:
                     global result
@@ -187,16 +210,21 @@ class ShellExecutor:
             else:
                 pipe = subprocess.PIPE
                 result = process_run(pipe)
-            return ExecResult(result.returncode, result.stdout, result.stderr, time.time() - start_time)
+            return ExecResult(
+                result.returncode,
+                result.stdout,
+                result.stderr,
+                time.time() - start_time,
+            )
         except subprocess.TimeoutExpired:
             return ExecResult(-2, "", f"Timeout after {timeout} seconds", timeout)
 
     def _execute_with_realtime_output(
-            self,
-            command: List[str],
-            timeout: int,
-            callback: Callable[[str], None],
-            input_data: str = None
+        self,
+        command: List[str],
+        timeout: int,
+        callback: Callable[[str], None],
+        input_data: str = None,
     ) -> ExecResult:
         """Execution method with real-time output"""
         start_time = time.time()
@@ -205,16 +233,16 @@ class ShellExecutor:
 
         try:
             with subprocess.Popen(
-                    command,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    stdin=subprocess.PIPE if input_data else None,
-                    cwd=self.working_dir,
-                    env=self.env,
-                    bufsize=1,  # Line buffering
-                    text=True,
-                    encoding=self.encoding,
-                    errors="replace"
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                stdin=subprocess.PIPE if input_data else None,
+                cwd=self.working_dir,
+                env=self.env,
+                bufsize=1,  # Line buffering
+                text=True,
+                encoding=self.encoding,
+                errors="replace",
             ) as proc:
                 # Handle input
                 if input_data:
@@ -224,11 +252,11 @@ class ShellExecutor:
                 # Start reading threads
                 stdout_thread = threading.Thread(
                     target=self._read_stream,
-                    args=(proc.stdout, stdout_lines, callback, "stdout")
+                    args=(proc.stdout, stdout_lines, callback, "stdout"),
                 )
                 stderr_thread = threading.Thread(
                     target=self._read_stream,
-                    args=(proc.stderr, stderr_lines, callback, "stderr")
+                    args=(proc.stderr, stderr_lines, callback, "stderr"),
                 )
 
                 stdout_thread.start()
@@ -247,33 +275,41 @@ class ShellExecutor:
                 stdout_thread.join(timeout=1)
                 stderr_thread.join(timeout=1)
 
-                return ExecResult(proc.returncode, "".join(stdout_lines), "".join(stderr_lines),
-                                  time.time() - start_time)
+                return ExecResult(
+                    proc.returncode,
+                    "".join(stdout_lines),
+                    "".join(stderr_lines),
+                    time.time() - start_time,
+                )
 
         except subprocess.TimeoutExpired:
-            return ExecResult(-2, "".join(stdout_lines), "".join(stderr_lines) + f"\nTimeout after {timeout} seconds",
-                              time.time() - start_time)
+            return ExecResult(
+                -2,
+                "".join(stdout_lines),
+                "".join(stderr_lines) + f"\nTimeout after {timeout} seconds",
+                time.time() - start_time,
+            )
 
     def _read_stream(
-            self,
-            stream,
-            output_list: List[str],
-            callback: Callable[[str], None],
-            stream_name: str
+        self,
+        stream,
+        output_list: List[str],
+        callback: Callable[[str], None],
+        stream_name: str,
     ):
         """Thread function for reading output streams"""
-        for line in iter(stream.readline, ''):
+        for line in iter(stream.readline, ""):
             output_list.append(line)
             if callback:
                 callback(f"[{stream_name.upper()}] {line.rstrip()}")
         stream.close()
 
     def execute_script(
-            self,
-            script_path: str,
-            args: List[str] = None,
-            interpreter: str = None,
-            **kwargs
+        self,
+        script_path: str,
+        args: List[str] = None,
+        interpreter: str = None,
+        **kwargs,
     ) -> ExecResult:
         """
         Execute script file
@@ -290,12 +326,14 @@ class ShellExecutor:
         # Get file permissions
         st = os.stat(script_path)
         if not st.st_mode & 0o100:  # Check executable permission
-            self.logger.warning(f"Script {script_path} is not executable. Adding permission.")
+            self.logger.warning(
+                f"Script {script_path} is not executable. Adding permission."
+            )
             os.chmod(script_path, st.st_mode | 0o100)  # Add execute permission
 
         # Auto-detect interpreter
         if interpreter is None:
-            with open(script_path, 'r', encoding=self.encoding) as f:
+            with open(script_path, "r", encoding=self.encoding) as f:
                 first_line = f.readline().strip()
 
             if first_line.startswith("#!"):

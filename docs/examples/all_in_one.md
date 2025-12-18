@@ -5,13 +5,14 @@ A complete example demonstrating how to create, build, test, and deploy a custom
 ## Overview
 
 This example shows a weather demo environment that includes:
+
 - **Tools**: `get_weather` - Get weather information for a city
 - **Functions**: `get_weather_func` - Function version of weather retrieval
 - **Rewards**: `is_good_weather` - Reward function that checks if weather conditions are favorable
 
 ## Project Structure
 
-```
+```text
 all_in_one/
 ├── config.json              # Environment configuration
 ├── Dockerfile               # Container image definition
@@ -48,7 +49,7 @@ def get_weather(city: str) -> Dict[str, Any]:
         "description": city,
         "humidity": "conf"
     }
-    
+
 @register_function
 def get_weather_func(city: str) -> Dict[str, Any]:
     """Function version of weather retrieval."""
@@ -107,6 +108,7 @@ aenv build
 ```
 
 This will:
+
 - Build the Docker image based on `Dockerfile`
 - Tag it according to `config.json`
 - Make it ready for local testing or pushing
@@ -134,6 +136,7 @@ aenv push
 ```
 
 This uploads:
+
 - Environment metadata to EnvHub
 - Docker image to the configured registry
 
@@ -148,6 +151,7 @@ python run_custom_env.py
 ```
 
 The script demonstrates:
+
 - Creating an environment instance
 - Listing available tools
 - Calling tools and functions
@@ -165,13 +169,13 @@ async def main():
     try:
         # List available tools
         print(await env.list_tools())
-        
+
         # Call a tool
         print(await env.call_tool("get_weather", {"city": "Beijing"}))
-        
+
         # Call a function
         print(await env.call_function("get_weather_func", {"city": "Beijing"}))
-        
+
         # Call a reward function
         print(await env.call_reward({"city": "Beijing"}))
     finally:
@@ -209,6 +213,7 @@ async def main():
 ### Visual Guides
 
 See the `images/` directory for animated GIFs demonstrating:
+
 - `build_env_in_local.gif` - Building environment locally
 - `push_env_in_local.gif` - Pushing to registry
 - `run_env_in_local.gif` - Running locally

@@ -1,6 +1,9 @@
-from aenv import Environment
-import pytest
 import os
+
+import pytest
+
+from aenv import Environment
+
 
 @pytest.mark.asyncio
 async def test_weather():
