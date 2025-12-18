@@ -298,7 +298,7 @@ func (c *EnvInstanceClient) Cleanup() error {
 	return nil
 }
 
-// truncateBody 截断过长的响应体，防止日志爆炸
+// truncateBody truncate body for memory protection
 func truncateBody(body []byte) string {
 	const maxLen = 500
 	if len(body) > maxLen {

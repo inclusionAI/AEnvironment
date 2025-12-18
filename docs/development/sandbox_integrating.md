@@ -1,6 +1,7 @@
 # Custom Sandbox Engine Integration Guide
 
-This document explains how to integrate a custom sandbox engine into your system using two supported approaches. Follow the instructions and code examples below based on your requirements.
+This document explains how to integrate a custom sandbox engine into your system using two supported approaches. Follow
+the instructions and code examples below based on your requirements.
 
 ---
 
@@ -9,22 +10,25 @@ This document explains how to integrate a custom sandbox engine into your system
 The system provides two integration paths for custom sandbox engines:
 
 - **Option 1 (Standard)**: Adapt your existing sandbox API to the predefined `EnvInstanceClient` interface.
-- **Option 2 (Custom)**: Implement the `EnvInstanceService` interface directly in your own client, allowing full control over API interactions.
+- **Option 2 (Custom)**: Implement the `EnvInstanceService` interface directly in your own client, allowing full control
+  over API interactions.
 
-Both methods require implementing CRUD operations and lifecycle management for sandbox instances. The core interface is defined as:
+Both methods require implementing CRUD operations and lifecycle management for sandbox instances. The core interface is
+defined as:
 
 ```go
 type EnvInstanceService interface {
-    GetEnvInstance(id string) (*models.EnvInstance, error)
-    CreateEnvInstance(req *backend.Env) (*models.EnvInstance, error)
-    DeleteEnvInstance(id string) error
-    ListEnvInstances(envName string) ([]*models.EnvInstance, error)
-    Warmup(req *backend.Env) error
-    Cleanup() error
+GetEnvInstance(id string) (*models.EnvInstance, error)
+CreateEnvInstance(req *backend.Env) (*models.EnvInstance, error)
+DeleteEnvInstance(id string) error
+ListEnvInstances(envName string) ([]*models.EnvInstance, error)
+Warmup(req *backend.Env) error
+Cleanup() error
 }
 ```
 
 Configuration is controlled by the `schedule_type` flag in your `main` function:
+
 - `schedule_type: standard` → Uses `EnvInstanceClient`
 - `schedule_type: custom` → Uses your implementation of `EnvInstanceService`
 
@@ -32,11 +36,13 @@ Configuration is controlled by the `schedule_type` flag in your `main` function:
 
 ## Option 1: Adapt Existing API via `EnvInstanceClient`
 
-Use this approach if your sandbox API can be adapted to match the expected request/response format of `EnvInstanceClient`.
+Use this approach if your sandbox API can be adapted to match the expected request/response format of
+`EnvInstanceClient`.
 
 ### Step 1: Configure Base URL
 
-Initialize the client with your sandbox engine’s base URL, which can be specified by `schedule_addr` flag in `api-service` startup command:
+Initialize the client with your sandbox engine’s base URL, which can be specified by `schedule_addr` flag in
+`api-service` startup command:
 
 ```go
 client := service.NewEnvInstanceClient("https://your-sandbox-api.com")
@@ -46,14 +52,14 @@ client := service.NewEnvInstanceClient("https://your-sandbox-api.com")
 
 Your sandbox service must expose the following endpoints:
 
-| Method | URI Pattern | Description |
-|--------|-------------|-------------|
-| `POST` | `/aenvironment/instance` | Create a new environment instance |
-| `GET`  | `/aenvironment/instance/{id}` | Get instance by ID |
-| `DELETE` | `/aenvironment/instance/{id}` | Delete instance by ID |
-| `GET`  | `/aenvironment/instance?envName={envName}` | List instances by environment name |
-| `PUT`  | `/aenvironment/instance/action/warmup` | Warm up environment resources |
-| `PUT`  | `/aenvironment/instance/action/cleanup` | Cleanup unused resources |
+| Method   | URI Pattern                                | Description                        |
+|----------|--------------------------------------------|------------------------------------|
+| `POST`   | `/aenvironment/instance`                   | Create a new environment instance  |
+| `GET`    | `/aenvironment/instance/{id}`              | Get instance by ID                 |
+| `DELETE` | `/aenvironment/instance/{id}`              | Delete instance by ID              |
+| `GET`    | `/aenvironment/instance?envName={envName}` | List instances by environment name |
+| `PUT`    | `/aenvironment/instance/action/warmup`     | Warm up environment resources      |
+| `PUT`    | `/aenvironment/instance/action/cleanup`    | Cleanup unused resources           |
 
 ---
 
@@ -63,13 +69,17 @@ Your sandbox service must expose the following endpoints:
 
 **Endpoint**: `POST /aenvironment/instance`  
 **Request Body**:
+
 ```json
 {
   "id": "env-123",
   "name": "Python3.9-RL",
   "description": "Reinforcement Learning sandbox",
   "version": "v1.2",
-  "tags": ["ml", "rl"],
+  "tags": [
+    "ml",
+    "rl"
+  ],
   "code_url": "https://github.com/user/rl-env.git",
   "build_config": {
     "image": "python:3.9-rl",
@@ -89,6 +99,7 @@ Your sandbox service must expose the following endpoints:
 ```
 
 **Success Response (200/201)**:
+
 ```json
 {
   "success": true,
@@ -96,7 +107,9 @@ Your sandbox service must expose the following endpoints:
   "message": "Instance created",
   "data": {
     "id": "inst-789",
-    "env": { /* same as request env */ },
+    "env": {
+      /* same as request env */
+    },
     "status": "Running",
     "created_at": "2025-01-15T10:00:00Z",
     "updated_at": "2025-01-15T10:00:00Z",
@@ -113,13 +126,16 @@ Your sandbox service must expose the following endpoints:
 **Endpoint**: `GET /aenvironment/instance/{id}`
 
 **Response**:
+
 ```json
 {
   "success": true,
   "code": 200,
   "data": {
     "id": "inst-789",
-    "env": { /* env config */ },
+    "env": {
+      /* env config */
+    },
     "status": "Running",
     "created_at": "2025-01-15T10:00:00Z",
     "updated_at": "2025-01-15T10:30:00Z",
@@ -135,6 +151,7 @@ Your sandbox service must expose the following endpoints:
 
 **Endpoint**: `DELETE /aenvironment/instance/{id}`  
 **Response**:
+
 ```json
 {
   "success": true,
@@ -149,6 +166,7 @@ Your sandbox service must expose the following endpoints:
 
 **Endpoint**: `GET /aenvironment/instance?envName=Python3.9-RL`  
 **Response**:
+
 ```json
 {
   "success": true,
@@ -156,7 +174,9 @@ Your sandbox service must expose the following endpoints:
   "data": [
     {
       "id": "inst-789",
-      "env": { "name": "Python3.9-RL" },
+      "env": {
+        "name": "Python3.9-RL"
+      },
       "status": "Running",
       "ip": "10.244.1.10",
       "created_at": "2025-01-15T10:00:00Z"
@@ -188,20 +208,20 @@ In your `main.go`:
 
 ```go
 func main() {
-    // Load config where schedule_type is set
-    config := loadConfig()
+// Load config where schedule_type is set
+config := loadConfig()
 
-    var envSvc service.EnvInstanceService
+var envSvc service.EnvInstanceService
 
-    if config.ScheduleType == "standard" {
-        envSvc = service.NewEnvInstanceClient(config.SandboxBaseURL)
-    } else if config.ScheduleType == "custom" {
-        envSvc = NewCustomSandboxClient(config) // See Option 2
-    }
+if config.ScheduleType == "standard" {
+envSvc = service.NewEnvInstanceClient(config.SandboxBaseURL)
+} else if config.ScheduleType == "custom" {
+envSvc = NewCustomSandboxClient(config) // See Option 2
+}
 
-    // Pass envSvc to scheduler or manager
-    scheduler := NewScheduler(envSvc)
-    scheduler.Start()
+// Pass envSvc to scheduler or manager
+scheduler := NewScheduler(envSvc)
+scheduler.Start()
 }
 ```
 
@@ -220,19 +240,19 @@ Implement all methods of `EnvInstanceService`:
 
 ```go
 type CustomSandboxClient struct {
-    baseURL    string
-    httpClient *http.Client
-    apiKey     string // Example: custom auth
+baseURL    string
+httpClient *http.Client
+apiKey     string // Example: custom auth
 }
 
 func NewCustomSandboxClient(baseURL, apiKey string) *CustomSandboxClient {
-    return &CustomSandboxClient{
-        baseURL: baseURL,
-        apiKey:  apiKey,
-        httpClient: &http.Client{
-            Timeout: 45 * time.Second,
-        },
-    }
+return &CustomSandboxClient{
+baseURL: baseURL,
+apiKey:  apiKey,
+httpClient: &http.Client{
+Timeout: 45 * time.Second,
+},
+}
 }
 ```
 
@@ -242,47 +262,47 @@ func NewCustomSandboxClient(baseURL, apiKey string) *CustomSandboxClient {
 
 ```go
 func (c *CustomSandboxClient) CreateEnvInstance(req *backend.Env) (*models.EnvInstance, error) {
-    // Custom endpoint and payload
-    url := fmt.Sprintf("%s/v2/envs/launch", c.baseURL)
-    
-    payload := map[string]interface{}{
-        "template": req.Name,
-        "git":      req.CodeURL,
-        "resources": req.DeployConfig,
-    }
+// Custom endpoint and payload
+url := fmt.Sprintf("%s/v2/envs/launch", c.baseURL)
 
-    jsonData, _ := json.Marshal(payload)
-    httpReq, _ := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
-    httpReq.Header.Set("X-API-Key", c.apiKey)
-    httpReq.Header.Set("Content-Type", "application/json")
+payload := map[string]interface{}{
+"template": req.Name,
+"git":      req.CodeURL,
+"resources": req.DeployConfig,
+}
 
-    resp, err := c.httpClient.Do(httpReq)
-    if err != nil {
-        return nil, err
-    }
-    defer resp.Body.Close()
+jsonData, _ := json.Marshal(payload)
+httpReq, _ := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+httpReq.Header.Set("X-API-Key", c.apiKey)
+httpReq.Header.Set("Content-Type", "application/json")
 
-    body, _ := io.ReadAll(resp.Body)
-    if resp.StatusCode != 201 {
-        return nil, fmt.Errorf("custom create failed: %s", body)
-    }
+resp, err := c.httpClient.Do(httpReq)
+if err != nil {
+return nil, err
+}
+defer resp.Body.Close()
 
-    // Parse custom response format
-    var result struct {
-        SandboxID string `json:"sandbox_id"`
-        IP        string `json:"endpoint_ip"`
-        Status    string `json:"state"`
-    }
-    if err := json.Unmarshal(body, &result); err != nil {
-        return nil, err
-    }
+body, _ := io.ReadAll(resp.Body)
+if resp.StatusCode != 201 {
+return nil, fmt.Errorf("custom create failed: %s", body)
+}
 
-    return &models.EnvInstance{
-        ID:     result.SandboxID,
-        Env:    req,
-        Status: result.Status,
-        IP:     result.IP,
-    }, nil
+// Parse custom response format
+var result struct {
+SandboxID string `json:"sandbox_id"`
+IP        string `json:"endpoint_ip"`
+Status    string `json:"state"`
+}
+if err := json.Unmarshal(body, &result); err != nil {
+return nil, err
+}
+
+return &models.EnvInstance{
+ID:     result.SandboxID,
+Env:    req,
+Status: result.Status,
+IP:     result.IP,
+}, nil
 }
 ```
 
@@ -294,16 +314,16 @@ func (c *CustomSandboxClient) CreateEnvInstance(req *backend.Env) (*models.EnvIn
 
 ```go
 func main() {
-   var scheduleClient service.EnvInstanceService
-   if scheduleType == "k8s" {
-	   scheduleClient = service.NewScheduleClient(scheduleAddr)
-   } else if scheduleType == "standard" {
-	   scheduleClient = service.NewEnvInstanceClient(scheduleAddr)
-   } else if scheduleType == "custom" {
-	   scheduleClient = service.NewCustomSandboxClient(scheduleAddr, "your-api-key")
-   } else {
-	   log.Fatalf("unsupported schedule type: %v", scheduleType)
-   }
+var scheduleClient service.EnvInstanceService
+if scheduleType == "k8s" {
+scheduleClient = service.NewScheduleClient(scheduleAddr)
+} else if scheduleType == "standard" {
+scheduleClient = service.NewEnvInstanceClient(scheduleAddr)
+} else if scheduleType == "custom" {
+scheduleClient = service.NewCustomSandboxClient(scheduleAddr, "your-api-key")
+} else {
+log.Fatalf("unsupported schedule type: %v", scheduleType)
+}
 
 }
 ```
@@ -316,25 +336,39 @@ func main() {
 ## Required Data Structures
 
 ### `backend.Env` (Input for Creation/Warmup)
+
 ```json
 {
   "id": "env-123",
   "name": "Python3.9",
   "description": "Standard Python env",
   "version": "v1.0",
-  "tags": ["ai", "stable"],
+  "tags": [
+    "ai",
+    "stable"
+  ],
   "code_url": "https://github.com/org/repo.git",
-  "build_config": { "image": "python:3.9" },
-  "test_config": { "command": "make test" },
-  "deploy_config": { "cpu": "2", "memory": "4Gi" }
+  "build_config": {
+    "image": "python:3.9"
+  },
+  "test_config": {
+    "command": "make test"
+  },
+  "deploy_config": {
+    "cpu": "2",
+    "memory": "4Gi"
+  }
 }
 ```
 
 ### `models.EnvInstance` (Return Type)
+
 ```json
 {
   "id": "inst-abc123",
-  "env": { /* Env object */ },
+  "env": {
+    /* Env object */
+  },
   "status": "Running",
   "created_at": "2025-01-15T10:00:00Z",
   "updated_at": "2025-01-15T10:05:00Z",
@@ -344,13 +378,17 @@ func main() {
 ```
 
 ### `models.ClientResponse[T]`
+
 All responses **must** follow this envelope format:
+
 ```json
 {
   "success": true,
   "code": 200,
   "message": "OK",
-  "data": { /* T payload */ }
+  "data": {
+    /* T payload */
+  }
 }
 ```
 
@@ -382,12 +420,12 @@ All responses **must** follow this envelope format:
 
 ## Troubleshooting
 
-| Symptom | Likely Cause | Solution |
-|--------|--------------|---------|
-| `404 Not Found` | Incorrect base URL or endpoint path | Verify full URL construction in client |
-| `400 Bad Request` | Mismatched request payload | Ensure `backend.Env.ToJSON()` matches expected schema |
-| `unmarshal error` | Response format differs | In custom client, map your response to `ClientResponse[T]` |
-| `Cleanup does nothing` | `FilterPods` not implemented or returns empty | Implement filtering logic or return mock data |
+| Symptom                | Likely Cause                                  | Solution                                                   |
+|------------------------|-----------------------------------------------|------------------------------------------------------------|
+| `404 Not Found`        | Incorrect base URL or endpoint path           | Verify full URL construction in client                     |
+| `400 Bad Request`      | Mismatched request payload                    | Ensure `backend.Env.ToJSON()` matches expected schema      |
+| `unmarshal error`      | Response format differs                       | In custom client, map your response to `ClientResponse[T]` |
+| `Cleanup does nothing` | `FilterPods` not implemented or returns empty | Implement filtering logic or return mock data              |
 
 ---
 
@@ -399,6 +437,7 @@ All responses **must** follow this envelope format:
 - All responses **must** conform to `ClientResponse[T]` structure or be adapted.
 
 For further details, refer to:
+
 - `env_instance.go` – Standard HTTP client implementation
 - `schedule_client.go` – Adapter example (`ScheduleClient` wraps pod ops into `EnvInstanceService`)
 - `models/` – Shared data structures

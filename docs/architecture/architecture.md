@@ -148,6 +148,7 @@ Kubernetes Sandbox
 ├── State Cache         # In-memory pod state cache
 └── Watch API           # Real-time pod state updates
 ```
+
 see [customize sandbox engine integrating](../development/sandbox_integrating.md) for further usage
 
 ## Core Components
