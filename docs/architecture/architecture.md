@@ -118,21 +118,14 @@ AEnvironment is designed to support multiple sandbox engines through a pluggable
 The API Service implements adapters for different sandbox engines:
 
 ```go
-// Sandbox engine abstraction (implemented by API Service)
-type SandboxEngine interface {
-    Create(ctx context.Context, spec *SandboxSpec) (*SandboxInstance, error)
-    Delete(ctx context.Context, instanceID string) error
-    Get(ctx context.Context, instanceID string) (*SandboxInstance, error)
-    List(ctx context.Context) ([]*SandboxInstance, error)
-    Watch(ctx context.Context) (<-chan SandboxEvent, error)
-}
-
-// API Service adapts to different engines
-type APIService struct {
-    k8sEngine    *K8SEngineAdapter      // Uses Controller for K8S
-    nativeSandboxEngine *NativeSandboxEngineAdapter
-    e2bEngine    *E2BEngineAdapter
-    rayEngine    *RayEngineAdapter
+// EnvInstanceService defines sandbox crud interfaces
+type EnvInstanceService interface {
+   GetEnvInstance(id string) (*models.EnvInstance, error)
+   CreateEnvInstance(req *backend.Env) (*models.EnvInstance, error)
+   DeleteEnvInstance(id string) error
+   ListEnvInstances(envName string) ([]*models.EnvInstance, error)
+   Warmup(req *backend.Env) error
+   Cleanup() error
 }
 ```
 
@@ -155,6 +148,7 @@ Kubernetes Sandbox
 ├── State Cache         # In-memory pod state cache
 └── Watch API           # Real-time pod state updates
 ```
+see [customize sandbox engine integrating](../development/sandbox_integrating.md) for further usage
 
 ## Core Components
 
