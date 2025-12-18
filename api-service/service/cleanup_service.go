@@ -75,11 +75,11 @@ func (cm *AEnvCleanManager) Stop() {
 
 // KubeCleaner cleanup service responsible for periodically cleaning expired EnvInstances
 type KubeCleaner struct {
-	scheduleClient *ScheduleClient
+	scheduleClient EnvInstanceService
 }
 
 // NewCleanupService
-func NewKubeCleaner(scheduleClient *ScheduleClient) *KubeCleaner {
+func NewKubeCleaner(scheduleClient EnvInstanceService) *KubeCleaner {
 	return &KubeCleaner{
 		scheduleClient: scheduleClient,
 	}
@@ -87,36 +87,5 @@ func NewKubeCleaner(scheduleClient *ScheduleClient) *KubeCleaner {
 
 // cleanup executes cleanup task
 func (cs *KubeCleaner) cleanup() {
-	log.Println("Starting cleanup task...")
-	// Get all EnvInstances
-	envInstances, err := cs.scheduleClient.FilterPods()
-	if err != nil {
-		log.Printf("Failed to get env instances: %v", err)
-		return
-	}
-	if envInstances == nil || len(*envInstances) == 0 {
-		log.Println("No env instances found")
-		return
-	}
-
-	var deletedCount int
-
-	for _, instance := range *envInstances {
-		// Skip terminated instances
-		if instance.Status == "Terminated" {
-			continue
-		}
-		deleted, err := cs.scheduleClient.DeletePod(instance.ID)
-		if err != nil {
-			log.Printf("Failed to delete instance %s: %v", instance.ID, err)
-			continue
-		}
-		if deleted {
-			deletedCount++
-			log.Printf("Successfully deleted instance %s", instance.ID)
-		} else {
-			log.Printf("Instance %s was not deleted (may already be deleted)", instance.ID)
-		}
-	}
-	log.Printf("Cleanup task completed. Deleted %d expired instances", deletedCount)
+	_ = cs.scheduleClient.Cleanup()
 }

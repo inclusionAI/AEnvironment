@@ -17,9 +17,9 @@ limitations under the License.
 package controller
 
 import (
+	"api-service/models"
 	backendmodels "envhub/models"
 
-	"api-service/models"
 	"api-service/service"
 	"api-service/util"
 
@@ -29,17 +29,21 @@ import (
 
 // EnvInstanceController handles EnvInstance operations
 type EnvInstanceController struct {
-	scheduleClient *service.ScheduleClient
-	backendClient  *service.BackendClient
-	redisClient    *service.RedisClient
+	envInstanceService service.EnvInstanceService // use interface
+	backendClient      *service.BackendClient
+	redisClient        *service.RedisClient
 }
 
 // NewEnvInstanceController creates a new EnvInstance controller instance
-func NewEnvInstanceController(scheduleClient *service.ScheduleClient, backendClient *service.BackendClient, redisClient *service.RedisClient) *EnvInstanceController {
+func NewEnvInstanceController(
+	envInstanceService service.EnvInstanceService,
+	backendClient *service.BackendClient,
+	redisClient *service.RedisClient,
+) *EnvInstanceController {
 	return &EnvInstanceController{
-		scheduleClient: scheduleClient,
-		backendClient:  backendClient,
-		redisClient:    redisClient,
+		envInstanceService: envInstanceService,
+		backendClient:      backendClient,
+		redisClient:        redisClient,
 	}
 }
 
@@ -50,14 +54,6 @@ type CreateEnvInstanceRequest struct {
 	EnvironmentVariables map[string]string `json:"environment_variables"`
 	Arguments            []string          `json:"arguments"`
 	TTL                  string            `json:"ttl"`
-}
-
-// EnvInstanceResponse represents the response body for EnvInstance operations
-type EnvInstanceResponse struct {
-	ID        string `json:"id"`
-	Env       string `json:"env"`
-	CreatedAt string `json:"createdAt"`
-	Status    string `json:"status"`
 }
 
 // CreateEnvInstance creates a new EnvInstance
@@ -107,7 +103,7 @@ func (ctrl *EnvInstanceController) CreateEnvInstance(c *gin.Context) {
 	// Set TTL for environment
 	backendEnv.DeployConfig["ttl"] = req.TTL
 	// Call ScheduleClient to create Pod
-	envInstance, err := ctrl.scheduleClient.CreatePod(backendEnv)
+	envInstance, err := ctrl.envInstanceService.CreateEnvInstance(backendEnv)
 	if err != nil {
 		backendmodels.JSONErrorWithMessage(c, 500, "Failed to create: "+err.Error())
 		return
@@ -124,30 +120,6 @@ func (ctrl *EnvInstanceController) CreateEnvInstance(c *gin.Context) {
 	backendmodels.JSONSuccess(c, envInstance)
 }
 
-func (ctrl *EnvInstanceController) ListEnvInstances(c *gin.Context) {
-	token := util.GetCurrentToken(c)
-	if token == nil {
-		backendmodels.JSONErrorWithMessage(c, 403, "token required")
-	}
-	var query = models.EnvInstance{Env: &backendmodels.Env{}}
-	id := c.Param("id")
-	if id != "" {
-		// Split name and version using SplitEnvNameVersionStrict function
-		name, version := util.SplitEnvNameVersion(id)
-		query.Env.Name = name
-		query.Env.Version = version
-	}
-	if ctrl.redisClient == nil {
-		backendmodels.JSONErrorWithMessage(c, 500, "no redis is declared for supporting listEnvInstance api, please specify `redis-addr` flag")
-		return
-	}
-	instances, err := ctrl.redisClient.ListEnvInstancesFromRedis(token.Token, &query)
-	if err != nil {
-		backendmodels.JSONErrorWithMessage(c, 500, err.Error())
-	}
-	backendmodels.JSONSuccess(c, instances)
-}
-
 // GetEnvInstance retrieves a single EnvInstance
 // GET /env-instance/:id
 func (ctrl *EnvInstanceController) GetEnvInstance(c *gin.Context) {
@@ -157,7 +129,7 @@ func (ctrl *EnvInstanceController) GetEnvInstance(c *gin.Context) {
 		return
 	}
 	// Call ScheduleClient to query Pod
-	envInstance, err := ctrl.scheduleClient.GetPod(id)
+	envInstance, err := ctrl.envInstanceService.GetEnvInstance(id)
 	if err != nil {
 		backendmodels.JSONErrorWithMessage(c, 500, "Failed to query: "+err.Error())
 		return
@@ -175,14 +147,9 @@ func (ctrl *EnvInstanceController) DeleteEnvInstance(c *gin.Context) {
 	}
 
 	// Call ScheduleClient to delete Pod
-	success, err := ctrl.scheduleClient.DeletePod(id)
+	err := ctrl.envInstanceService.DeleteEnvInstance(id)
 	if err != nil {
 		backendmodels.JSONErrorWithMessage(c, 500, "Failed to delete: "+err.Error())
-		return
-	}
-
-	if !success {
-		backendmodels.JSONErrorWithMessage(c, 500, "Failed to delete")
 		return
 	}
 	backendmodels.JSONSuccess(c, "Deleted successfully")
@@ -192,4 +159,63 @@ func (ctrl *EnvInstanceController) DeleteEnvInstance(c *gin.Context) {
 			log.Warnf("failed to remove EnvInstance in Redis: %v", err)
 		}
 	}
+}
+
+func (ctrl *EnvInstanceController) ListEnvInstances(c *gin.Context) {
+	token := util.GetCurrentToken(c)
+	if token == nil {
+		backendmodels.JSONErrorWithMessage(c, 403, "token required")
+		return
+	}
+	if ctrl.redisClient != nil {
+		var query = models.EnvInstance{Env: &backendmodels.Env{}}
+		id := c.Param("id")
+		if id != "" {
+			name, version := util.SplitEnvNameVersion(id)
+			query.Env.Name = name
+			query.Env.Version = version
+		}
+		instances, err := ctrl.redisClient.ListEnvInstancesFromRedis(token.Token, &query)
+		if err == nil {
+			backendmodels.JSONSuccess(c, instances)
+			return
+		}
+		log.Warnf("failed to list from redis: %v", err)
+	}
+	envName := c.Query("envName")
+	instances, err := ctrl.envInstanceService.ListEnvInstances(envName)
+	if err != nil {
+		backendmodels.JSONErrorWithMessage(c, 500, err.Error())
+		return
+	}
+	backendmodels.JSONSuccess(c, instances)
+}
+
+func (ctrl *EnvInstanceController) Warmup(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		backendmodels.JSONErrorWithMessage(c, 400, "env id required")
+		return
+	}
+	name, version, err := util.SplitEnvNameVersionStrict(id)
+	if err != nil {
+		backendmodels.JSONErrorWithMessage(c, 400, "invalid env format, should be name@version")
+		return
+	}
+	backendEnv, err := ctrl.backendClient.GetEnvByVersion(name, version)
+	if err != nil {
+		backendmodels.JSONErrorWithMessage(c, 500, "failed to warm up env instance: "+err.Error())
+		return
+	}
+	if backendEnv == nil {
+		backendmodels.JSONErrorWithMessage(c, 404, "can not find env by id: "+id)
+		return
+	}
+
+	err = ctrl.envInstanceService.Warmup(backendEnv)
+	if err != nil {
+		backendmodels.JSONErrorWithMessage(c, 500, err.Error())
+		return
+	}
+	backendmodels.JSONSuccess(c, backendEnv)
 }

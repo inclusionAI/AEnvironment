@@ -34,6 +34,7 @@ import (
 
 var (
 	scheduleAddr  string
+	scheduleType  string
 	backendAddr   string
 	redisAddr     string
 	redisPassword string
@@ -47,6 +48,7 @@ var (
 
 func init() {
 	pflag.StringVar(&scheduleAddr, "schedule-addr", "", "Meta service address (host:port)")
+	pflag.StringVar(&scheduleType, "schedule-type", "k8s", "sandbox service schedule type, currently only 'k8s' support")
 	pflag.StringVar(&backendAddr, "backend-addr", "", "backend service address (host:port)")
 
 	pflag.Int64Var(&qps, "qps", int64(100), "total qps limit")
@@ -93,7 +95,13 @@ func main() {
 		log.Fatalf("Failed to create backend client: %v", err)
 	}
 
-	scheduleClient := service.NewScheduleClient(scheduleAddr)
+	var scheduleClient service.EnvInstanceService
+	if scheduleType == "k8s" {
+		scheduleClient = service.NewScheduleClient(scheduleAddr)
+	} else {
+		log.Fatalf("unsupported schedule type: %v", scheduleType)
+	}
+
 	envInstanceController := controller.NewEnvInstanceController(scheduleClient, backendClient, redisClient)
 	// Main route configuration
 	mainRouter.POST("/env-instance",

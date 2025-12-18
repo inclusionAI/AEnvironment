@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	backend "envhub/models"
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"io"
 	"net/http"
 	"time"
@@ -190,4 +191,76 @@ func (c *ScheduleClient) FilterPods() (*[]models.EnvInstance, error) {
 	}
 
 	return &getResp.Data, nil
+}
+
+/*
+====================================
+==== EnvInstanceService adapter ====
+====================================
+*/
+
+// CreateEnvInstance implements EnvInstanceService interface - delegate to CreatePod
+func (c *ScheduleClient) CreateEnvInstance(req *backend.Env) (*models.EnvInstance, error) {
+	return c.CreatePod(req)
+}
+
+// GetEnvInstance implements EnvInstanceService interface - delegate to GetPod
+func (c *ScheduleClient) GetEnvInstance(id string) (*models.EnvInstance, error) {
+	return c.GetPod(id)
+}
+
+// DeleteEnvInstance implements EnvInstanceService interface - delegate to DeletePod
+func (c *ScheduleClient) DeleteEnvInstance(id string) error {
+	success, err := c.DeletePod(id)
+	if err != nil {
+		return err
+	}
+	if !success {
+		return fmt.Errorf("failed to delete env instance with id: %s", id)
+	}
+	return nil
+}
+
+// ListEnvInstances implements EnvInstanceService interface - not implemented yet
+func (c *ScheduleClient) ListEnvInstances(envName string) ([]*models.EnvInstance, error) {
+	return nil, fmt.Errorf("ListEnvInstances is not implemented")
+}
+
+func (c *ScheduleClient) Warmup(req *backend.Env) error {
+	return fmt.Errorf("warmup is not implemented")
+}
+
+func (c *ScheduleClient) Cleanup() error {
+	log.Infof("Starting cleanup task...")
+	// get all EnvInstance
+	envInstances, err := c.FilterPods()
+	if err != nil {
+		return fmt.Errorf("failed to get env instances: %v", err)
+	}
+	if envInstances == nil || len(*envInstances) == 0 {
+		log.Infof("No env instances found")
+		return nil
+	}
+
+	var deletedCount int
+
+	for _, instance := range *envInstances {
+		// skip terminated env instance
+		if instance.Status == "Terminated" {
+			continue
+		}
+		deleted, err := c.DeletePod(instance.ID)
+		if err != nil {
+			log.Warnf("Failed to delete instance %s: %v", instance.ID, err)
+			continue
+		}
+		if deleted {
+			deletedCount++
+			log.Infof("Successfully deleted instance %s", instance.ID)
+		} else {
+			log.Infof("Instance %s was not deleted (may already be deleted)", instance.ID)
+		}
+	}
+	log.Infof("Cleanup task completed. Deleted %d expired instances", deletedCount)
+	return nil
 }
