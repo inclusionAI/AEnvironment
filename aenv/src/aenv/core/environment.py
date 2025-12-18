@@ -89,7 +89,8 @@ class Environment:
         environment_variables: Optional[Dict[str, str]] = None,
         arguments: Optional[List[str]] = None,
         aenv_url: Optional[str] = None,
-        timeout: float = 30.0,
+        timeout: float = 60.0,
+        startup_timeout: float = 500.0,
         max_retries: int = 10,
         api_key: Optional[str] = None,
     ):
@@ -103,6 +104,7 @@ class Environment:
             arguments: Optional command line arguments for envInstance entrypoint
             aenv_url: AEnv Scheduler URL (defaults to env var AENV_SYSTEM_URL)
             timeout: Request timeout in seconds
+            startup_timeout: Startup timeout in seconds
             ttl: Time to live in seconds defaults to 10 minutes
             max_retries: Maximum retry attempts for failed requests
             api_key: Optional API key for authentication
@@ -124,6 +126,7 @@ class Environment:
         self.aenv_functions_base_url = make_mcp_url(aenv_url, 8081, "/functions")
         self.proxy_headers = {}
         self.timeout = timeout
+        self._startup_timeout = startup_timeout
         self.ttl = ttl
         self.max_retries = max_retries
         self.api_key = api_key
@@ -308,7 +311,9 @@ class Environment:
             if not isinstance(input_schema, dict):
                 input_schema = {"type": "object", "properties": {}}
 
-            async def _on_invoke_tool(ctx: ToolContext[Any], input: str, *, _name: str = name) -> Any:
+            async def _on_invoke_tool(
+                ctx: ToolContext[Any], input: str, *, _name: str = name
+            ) -> Any:
                 try:
                     args: Dict[str, Any] = json.loads(input) if input else {}
                 except Exception as e:
@@ -320,7 +325,11 @@ class Environment:
 
                 text_parts: List[str] = []
                 for item in result.content:
-                    if isinstance(item, dict) and item.get("type") == "text" and "text" in item:
+                    if (
+                        isinstance(item, dict)
+                        and item.get("type") == "text"
+                        and "text" in item
+                    ):
                         text_parts.append(str(item.get("text")))
                     else:
                         text_parts.append(json.dumps(item, ensure_ascii=False))
@@ -739,7 +748,7 @@ class Environment:
             await self.initialize()
 
         logger.info(
-            f"{self._log_prefix()} Waiting for environment {self.env_name} to be ready..."
+            f"{self._log_prefix()} Waiting for environment {self.env_name} to be ready with timeout {timeout}s..."
         )
         try:
             instance = await self._client.wait_for_status(
@@ -781,7 +790,7 @@ class Environment:
                 f"{self._log_prefix()} Environment instance created with ID: {self._instance.id}"
             )
 
-            await self.wait_for_ready()
+            await self.wait_for_ready(timeout=self._startup_timeout)
             logger.info(f"{self._log_prefix()} Environment ready: {self.env_name}")
 
         except Exception as e:
