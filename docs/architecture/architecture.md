@@ -17,7 +17,7 @@ graph LR
         CI[CI Optional]
         Redis[(redis)]
     end
-    
+
     Developer -->|1. edit env| CLI
     CLI -->|2. push env| EnvHub
     EnvHub -.->|3. trigger CI| CI
@@ -50,21 +50,21 @@ graph TB
         SDK[AEnv SDK]
         APIService[api service]
     end
-    
+
     subgraph "K8S Engine"
         Controller[Controller]
         K8S[K8S]
     end
-    
+
     subgraph "Other Engine"
         FutureEngine[Future Engines]
     end
-    
+
     subgraph "Sandbox"
         SDKInSandbox[AEnv SDK]
         MCP[MCP Tools/Functions]
     end
-    
+
     RL -->|1. create env instance| SDK
     SDK -->|2. request| APIService
     APIService -->|3. create sandbox| Controller
@@ -147,14 +147,14 @@ type APIService struct {
 - **Networking**: CNI-based networking and service mesh support
 
 **Architecture:**
-```
+
+```bash
 Kubernetes Sandbox
 ├── Pod Management      # Create, get, list, delete pods
 ├── Template System     # Pod templates for consistent configs
 ├── State Cache         # In-memory pod state cache
 └── Watch API           # Real-time pod state updates
 ```
-
 
 ## Core Components
 
@@ -163,16 +163,18 @@ Kubernetes Sandbox
 The API Service is the entry point for all client requests, providing a unified interface to the platform.
 
 **Key Features:**
+
 - **REST API**: Standard HTTP endpoints for environment management
 - **MCP Gateway**: Model Context Protocol support for tool communication
-- **Sandbox Engine Adaptation**: Adapts to different sandbox engines (K8S via Controller, Native Sandbox, E2B, Ray, etc.)
+- **Sandbox Engine Adaptation**: Adapts to different sandbox engines (K8S via Controller, ASandbox, E2B, Ray, etc.)
 - **Proxy Communication**: Acts as proxy between client AEnv SDK and AEnv SDK in sandbox
 - **Authentication**: API key and token-based authentication
 - **Rate Limiting**: Request throttling and quotas
 - **Instance Management**: Environment lifecycle operations
 
 **Architecture:**
-```
+
+```bash
 api-service/
 ├── controller/     # Request handlers (env instances, MCP proxy)
 ├── middleware/     # Auth, logging, rate limiting, metrics
@@ -181,6 +183,7 @@ api-service/
 ```
 
 **Endpoints:**
+
 - `POST /env-instance` - Create a new environment instance
 - `GET /env-instance/:id/list` - List instances for a user
 - `GET /env-instance/:id` - Get instance details
@@ -189,10 +192,12 @@ api-service/
 - `GET /metrics` - Prometheus metrics
 
 **Ports:**
+
 - `:8080` - Main API server
 - `:8081` - MCP Gateway
 
 **Middleware Stack:**
+
 - Authentication middleware (token validation with caching)
 - Rate limiting middleware (QPS throttling)
 - Instance limit middleware (per-user limits)
@@ -201,9 +206,10 @@ api-service/
 
 ### Controller
 
-The Controller manages environment lifecycle and interacts with the Kubernetes sandbox engine. **Note: The Controller only supports Kubernetes engine.** For other sandbox engines (Native Sandbox, E2B, Ray, etc.), the API Service directly adapts to them.
+The Controller manages environment lifecycle and interacts with the Kubernetes sandbox engine. **Note: The Controller only supports Kubernetes engine.** For other sandbox engines (ASandbox, E2B, Ray, etc.), the API Service directly adapts to them.
 
 **Key Features:**
+
 - **Kubernetes Integration**: Direct integration with Kubernetes for pod management
 - **Pod Management**: Create, get, list, and delete pods (Kubernetes only)
 - **Pod Template Management**: Load and apply pod templates
@@ -211,7 +217,8 @@ The Controller manages environment lifecycle and interacts with the Kubernetes s
 - **Leader Election**: High availability with Kubernetes leader election
 
 **Architecture:**
-```
+
+```bash
 controller/
 ├── cmd/               # Entry points
 ├── controllers/       # Kubernetes controllers
@@ -224,6 +231,7 @@ controller/
 ```
 
 **Endpoints:**
+
 - `POST /pods` - Create a new pod
 - `GET /pods` - List pods
 - `GET /pods/{podName}` - Get pod details
@@ -249,28 +257,30 @@ func (c *Controller) CreatePod(spec *PodSpec) (*Pod, error) {
     if err != nil {
         return nil, err
     }
-    
+
     // Track in cache
     c.podCache.Add(pod)
-    
+
     return pod, nil
 }
 ```
 
-**Note:** The Controller is Kubernetes-specific. For other sandbox engines (Native Sandbox, E2B, Ray, etc.), the API Service directly integrates with them and adapts to their specific APIs.
+**Note:** The Controller is Kubernetes-specific. For other sandbox engines (ASandbox, E2B, Ray, etc.), the API Service directly integrates with them and adapts to their specific APIs.
 
 ### EnvHub
 
 EnvHub is the central registry for environment definitions and container images.
 
 **Key Features:**
+
 - **Environment Registry**: Store and retrieve environment definitions
 - **Image Management**: Container image storage and distribution
 - **Version Control**: Semantic versioning and version history
 - **Discovery**: Search and browse available environments
 
 **Architecture:**
-```
+
+```bash
 envhub/
 ├── controller/    # API handlers
 ├── service/       # Registry operations
@@ -279,6 +289,7 @@ envhub/
 ```
 
 **API Endpoints:**
+
 - `GET /api/v1/environments` - List environments
 - `GET /api/v1/environments/{name}` - Get environment details
 - `POST /api/v1/environments` - Push new environment
@@ -296,7 +307,7 @@ sequenceDiagram
     participant EnvHub as envhub
     participant CI as CI Optional
     participant Redis as redis
-    
+
     Developer->>CLI: edit env
     CLI->>EnvHub: push env
     EnvHub-.->>CI: trigger CI (optional)
@@ -316,7 +327,7 @@ sequenceDiagram
     participant Controller as Controller
     participant K8S as K8S
     participant Sandbox as Sandbox
-    
+
     RL->>SDK: create env instance
     SDK->>API: Create Environment Instance Request
     API->>EnvHub: pull env meta
@@ -346,7 +357,7 @@ sequenceDiagram
     participant Env as Environment Instance
     participant MCP as MCP Server
     participant Tool
-    
+
     Agent->>Env: call_tool("search", {...})
     Env->>MCP: tools/call
     MCP->>Tool: Execute function
@@ -463,6 +474,7 @@ AEnvironment supports multiple deployment modes for different use cases:
 Production deployment on Kubernetes clusters with high availability and scalability.
 
 **Key Features:**
+
 - High availability with leader election
 - Horizontal scaling support
 - Production-ready configuration
@@ -485,6 +497,7 @@ helm install aenv-platform ./deploy \
 Single-node deployment for development and testing using Docker Compose.
 
 **Planned Features:**
+
 - Quick local setup
 - All components in one stack
 - Suitable for development and testing
@@ -505,24 +518,24 @@ Additional deployment options planned for future releases:
 ```mermaid
 graph LR
     LB[Load Balancer]
-    
+
     subgraph API Tier
         API1[API 1]
         API2[API 2]
         API3[API N]
     end
-    
+
     subgraph Controller Tier
         C1[Controller 1<br/>Leader]
         C2[Controller 2<br/>Standby]
     end
-    
+
     subgraph Sandbox Tier
         R1[Node 1]
         R2[Node 2]
         R3[Node N]
     end
-    
+
     LB --> API1
     LB --> API2
     LB --> API3
@@ -543,21 +556,21 @@ graph TB
     subgraph Public
         Client[Client]
     end
-    
+
     subgraph DMZ
         GW[API Gateway]
     end
-    
+
     subgraph Private
         API[API Service]
         Ctrl[Controller]
     end
-    
+
     subgraph Sandbox
         Env1[Env 1]
         Env2[Env 2]
     end
-    
+
     Client --> GW
     GW --> API
     API --> Ctrl
@@ -594,15 +607,15 @@ graph TB
         C2[Controller 2<br/>Standby]
         C3[Controller 3<br/>Standby]
     end
-    
+
     subgraph Leader Election
         K8sAPI[Kubernetes API<br/>Lease Resource]
     end
-    
+
     subgraph API Service
         API[API Service]
     end
-    
+
     C1 --> K8sAPI
     C2 --> K8sAPI
     C3 --> K8sAPI
@@ -610,6 +623,7 @@ graph TB
 ```
 
 **Features:**
+
 - Leader election via Kubernetes Lease resource
 - Automatic failover when leader becomes unavailable
 - Multiple replicas for redundancy
@@ -621,7 +635,7 @@ graph TB
 
 The architecture supports adding additional sandbox engines such as:
 
-- **Native Sandbox**: High-performance container runtime for fast startup and execution
+- **ASandbox**: High-performance container runtime for fast startup and execution
 - **E2B**: Secure cloud development environments with isolated sandboxes
 - **Ray**: Distributed computing framework for scalable AI workloads
 - **Container Runtimes**: Docker, containerd, CRI-O
@@ -646,6 +660,7 @@ The following features are planned for future releases:
 Real-time log streaming from sandbox execution environments:
 
 **Features:**
+
 - **Stream Logs**: Real-time log streaming from running sandbox instances
 - **Structured Logging**: JSON-formatted logs with correlation IDs for request tracing
 - **Log Aggregation**: Centralized log collection from all sandbox instances
@@ -670,6 +685,7 @@ Real-time log streaming from sandbox execution environments:
 ```
 
 **API Endpoints:**
+
 - `GET /env-instance/:id/logs` - Stream logs from a specific sandbox instance
 - `GET /env-instance/:id/logs?follow=true` - Follow logs in real-time (streaming)
 - `GET /env-instance/:id/logs?tail=100` - Get last N lines of logs
@@ -682,4 +698,3 @@ OpenTelemetry support for end-to-end request tracing across all components and s
 
 - **JWT Tokens**: User authentication support
 - **RBAC**: Role-based access control for fine-grained permission management
-

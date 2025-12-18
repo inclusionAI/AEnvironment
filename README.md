@@ -56,12 +56,7 @@ async with Environment("mini-program@1.0.0") as env:
     })
 ```
 
-
-
-https://github.com/user-attachments/assets/23d68f94-3e10-478f-b7da-8f6ee18e47ed
-
-
-
+<https://github.com/user-attachments/assets/23d68f94-3e10-478f-b7da-8f6ee18e47ed>
 
 📖 See [Mini Program Example](./aenv/examples/mini-program/README.md) for details.
 
@@ -92,6 +87,7 @@ reward = await run_agent_return_reward({
 AEnvironment uniquely supports treating agents themselves as environments. This feature makes multi-agent orchestration, hierarchical agent systems, and agent adversarial testing possible.
 
 With Agent as Environment, you can:
+
 - **Compose Agents**: Treat agents as reusable components that can be called like tools
 - **Multi-Agent Orchestration**: Build complex workflows where agents interact with each other
 - **Hierarchical Systems**: Create nested agent structures for complex problem-solving
@@ -195,11 +191,11 @@ async def main():
         # Call a tool
         result = await env.call_tool("search_code", {"query": "def main"})
         print(result.content)
-        
+
         # Call a function (for internal use within environment)
         func_result = await env.call_function("calculate_sum", {"a": 10, "b": 20})
         print(f"Function result: {func_result}")
-        
+
         # Call a reward function (for RL training)
         reward = await env.call_reward({"status": {"completed": True}})
         print(f"Reward: {reward}")
@@ -209,17 +205,17 @@ asyncio.run(main())
 
 ## Performance
 
-| Engine | Startup Time |
-|--------|--------------|
-| Kubernetes <sup>1</sup> | 6.6s |
-| **Native Sandbox** <sup>2</sup> | **207ms** |
-| Rock | 9.5s |
-| E2B | sub-second |
-| Modal | sub-second |
+We compared performance with other popular sandbox engines for the same simple demo:
+
+<p align="center">
+  <img src="docs/images/performance.png"
+       alt="Performance"
+       style="background: white; padding: 20px; border-radius: 8px;">
+</p>
 
 <sup>1</sup> Kubernetes is the currently supported engine in AEnvironment.
 
-<sup>2</sup> Native Sandbox is a high-performance engine planned for open-source release in the future.
+<sup>2</sup> ASandbox is a high-performance engine planned for open-source release in the future.
 
 ## 📖 Resources
 
@@ -261,7 +257,6 @@ Please check our **[Contributing Guide](./CONTRIBUTING.md)** for detailed inform
 
 - **GitHub Discussions** - Ask questions, share ideas, and connect with the community
 - **WeChat Group** - Join our WeChat community ([微信群](./docs/images/wechat_qrcode.png))
-
 
 ## License
 
