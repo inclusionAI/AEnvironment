@@ -48,7 +48,7 @@ var (
 
 func init() {
 	pflag.StringVar(&scheduleAddr, "schedule-addr", "", "Meta service address (host:port)")
-	pflag.StringVar(&scheduleType, "schedule-type", "k8s", "sandbox service schedule type, currently only 'k8s' support")
+	pflag.StringVar(&scheduleType, "schedule-type", "k8s", "sandbox service schedule type, currently only 'k8s', 'standard' support")
 	pflag.StringVar(&backendAddr, "backend-addr", "", "backend service address (host:port)")
 
 	pflag.Int64Var(&qps, "qps", int64(100), "total qps limit")
@@ -98,6 +98,8 @@ func main() {
 	var scheduleClient service.EnvInstanceService
 	if scheduleType == "k8s" {
 		scheduleClient = service.NewScheduleClient(scheduleAddr)
+	} else if scheduleType == "standard" {
+		scheduleClient = service.NewEnvInstanceClient(scheduleAddr)
 	} else {
 		log.Fatalf("unsupported schedule type: %v", scheduleType)
 	}
