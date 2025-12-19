@@ -76,8 +76,9 @@ def validate_dependencies() -> None:
     "--work-dir", help="Specify aenv development root directory", default=os.getcwd()
 )
 @click.option("--inspector-port", type=int, default=6274, help="MCP Inspector port")
+@click.option("--quiet", is_flag=True, help="Only start local environment no need inspector")
 @pass_config
-def run(cfg: Config, work_dir, inspector_port):
+def run(cfg: Config, work_dir, inspector_port, quiet):
     """Start local environment for testing the current aenv project
 
     This command validates the working directory, checks dependencies,
@@ -97,26 +98,26 @@ def run(cfg: Config, work_dir, inspector_port):
     console.info("📁 Validating working environment...")
     run_environment(work_dir)
     console.success("✅ Working environment validation passed")
+    if not quiet:
+        # Validate dependencies
+        console.info("🔧 Checking dependencies...")
+        validate_dependencies()
+        console.success("✅ Dependency check passed")
 
-    # Validate dependencies
-    console.info("🔧 Checking dependencies...")
-    validate_dependencies()
-    console.success("✅ Dependency check passed")
+        # Install inspector
+        console.info("📦 Installing MCP Inspector...")
+        mcp_inspector.install_inspector()
+        console.success("✅ MCP Inspector installation completed")
 
-    # Install inspector
-    console.info("📦 Installing MCP Inspector...")
-    mcp_inspector.install_inspector()
-    console.success("✅ MCP Inspector installation completed")
-
-    # Start MCP server and Inspector
-    console.info("🚀 Starting MCP server and Inspector...")
-    console.console().print(
-        f"   MCP Inspector will be available at: [cyan]http://localhost:{inspector_port}[/cyan]"
-    )
-    console.console().print("   Press Ctrl+C to stop services\n")
+        # Start MCP server and Inspector
+        console.info("🚀 Starting MCP server and Inspector...")
+        console.console().print(
+            f"   MCP Inspector will be available at: [cyan]http://localhost:{inspector_port}[/cyan]"
+        )
+    console.console().print("Press Ctrl+C to stop services\n")
 
     aenv_logger = get_logger("mcp_manager")
     if cfg.verbose:
         aenv_logger.setLevel("DEBUG")
     manager = MCPManager(logger=aenv_logger)
-    manager.start(work_dir, inspector_port)
+    manager.start(work_dir, inspector_port, quiet)

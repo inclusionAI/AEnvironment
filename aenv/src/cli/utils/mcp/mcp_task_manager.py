@@ -322,7 +322,7 @@ class MCPManager:
         self.logger = logger or logging.getLogger(__name__)
         self.task_manager = TaskManager(logger)
 
-    def start(self, work_dir: str, inspector_port: int = 6274) -> None:
+    def start(self, work_dir: str, inspector_port: int = 6274, quiet: bool = False) -> None:
         """Start MCP server and Inspector"""
         self.logger.debug("Starting MCP server and Inspector tasks...")
 
@@ -336,9 +336,10 @@ class MCPManager:
 
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
-
-        # Start tasks
-        self.task_manager.start_both(work_dir=work_dir, inspector_port=inspector_port)
+        if quiet:
+           self.task_manager.start_mcp_server(work_dir)
+        else:
+            self.task_manager.start_both(work_dir=work_dir, inspector_port=inspector_port)
 
         # Run until complete
         self.task_manager.run_until_complete()
