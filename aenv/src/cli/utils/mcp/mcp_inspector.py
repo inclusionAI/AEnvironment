@@ -17,6 +17,8 @@ MCP Inspector Management Tool
 Used to launch MCP Inspector for debugging during testing
 """
 
+import platform
+import shutil
 import subprocess
 
 import click
@@ -24,6 +26,11 @@ import click
 
 def _is_npm_available() -> bool:
     """Check if npm is available"""
+    if platform.system() == "Windows":
+        # On Windows, we need shell=True for npm (batch file) or check for npm.cmd
+        # shutil.which is cleaner than catching subprocess errors
+        return shutil.which("npm") is not None
+
     try:
         subprocess.run(["npm", "--version"], capture_output=True, check=True)
         return True
@@ -38,12 +45,16 @@ def install_inspector():
         click.secho(f"❌ {msg}", fg="red", err=True)
         click.abort()
 
+    is_windows = platform.system() == "Windows"
+
     try:
         # Check if inspector is installed
+        # On Windows, npx also needs shell=True
         result = subprocess.run(
             ["npx", "@modelcontextprotocol/inspector", "-h"],
             capture_output=True,
             timeout=60,
+            shell=is_windows,
         )
 
         if result.returncode != 0:
@@ -53,6 +64,7 @@ def install_inspector():
                 ["npm", "install", "-g", "@modelcontextprotocol/inspector"],
                 check=True,
                 capture_output=True,
+                shell=is_windows,
             )
             click.echo("MCP Inspector installed successfully")
     except subprocess.TimeoutExpired:
@@ -68,10 +80,17 @@ def install_inspector():
 
 def check_inspector_requirements() -> tuple[bool, str]:
     """Check inspector runtime requirements"""
+    is_windows = platform.system() == "Windows"
+
     # Check Node.js
     try:
+        # node usually works without shell=True even on Windows (it's an exe), but consistentcy is good
         result = subprocess.run(
-            ["node", "--version"], capture_output=True, text=True, timeout=5
+            ["node", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            shell=is_windows,
         )
         node_version = result.stdout.strip()
     except (subprocess.CalledProcessError, FileNotFoundError):
@@ -79,7 +98,13 @@ def check_inspector_requirements() -> tuple[bool, str]:
 
     # Check npm
     try:
-        subprocess.run(["npm", "--version"], capture_output=True, check=True, timeout=5)
+        subprocess.run(
+            ["npm", "--version"],
+            capture_output=True,
+            check=True,
+            timeout=5,
+            shell=is_windows,
+        )
     except (subprocess.CalledProcessError, FileNotFoundError):
         return False, "npm not found, please ensure Node.js is installed correctly"
 
