@@ -76,7 +76,9 @@ def validate_dependencies() -> None:
     "--work-dir", help="Specify aenv development root directory", default=os.getcwd()
 )
 @click.option("--inspector-port", type=int, default=6274, help="MCP Inspector port")
-@click.option("--quiet", is_flag=True, help="Only start local environment no need inspector")
+@click.option(
+    "--quiet", is_flag=True, help="Only start local environment no need inspector"
+)
 @pass_config
 def run(cfg: Config, work_dir, inspector_port, quiet):
     """Start local environment for testing the current aenv project

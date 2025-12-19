@@ -91,7 +91,7 @@ def global_error_handler(func):
             ErrorHandler.handle_error(e)
             sys.exit(1)
         except click.exceptions.Exit as e:
-           sys.exit(e.exit_code)
+            sys.exit(e.exit_code)
         except Exception as e:
             if verbose:
                 logger.exception("Unexpected error")
