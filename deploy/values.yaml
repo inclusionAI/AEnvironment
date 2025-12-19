@@ -33,7 +33,7 @@ controller:
 # Redis component
 redis:
   enabled: true
-  replicaCount: 3
+  replicaCount: 1
   name: redis
   metadata:
     namespace: aenv
@@ -71,13 +71,13 @@ envhub:
     metricsPort: 9091
   resources:
     limits:
-      cpu: "2"
-      memory: "4G"
-      ephemeral-storage: 10Gi
+      cpu: "1"
+      memory: "512Mi"
+      ephemeral-storage: 1Gi
     requests:
-      cpu: "0"
-      memory: "0"
-      ephemeral-storage: 10Gi
+      cpu: "1"
+      memory: "512Mi"
+      ephemeral-storage: 1Gi
 
 # API Service component
 api-service:
