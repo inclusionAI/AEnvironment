@@ -1,5 +1,9 @@
 <p align="center">
   <h1 align="center">AEnvironment</h1>
+    <p align="center">
+    | <a href="https://inclusionai.github.io/AEnvironment/"><b>Documentation</b></a> |
+    <a href="./docs/images/wechat_qrcode.png" target="_blank"><img src="./docs/images/wechat_icon.png" alt="WeChat Group QR Code" width="20" style="vertical-align: middle;"> <b>WeChat (微信) Group</b></a> |
+    </p>
   <p align="center"><b>Everything as Environment</b> — A Production-Grade Environment Platform for Agentic RL and Agent</p>
 </p>
 
@@ -207,11 +211,7 @@ asyncio.run(main())
 
 We compared performance with other popular sandbox engines for the same simple demo:
 
-<p align="center">
-  <img src="docs/images/performance.png"
-       alt="Performance"
-       style="background: white; padding: 20px; border-radius: 8px;">
-</p>
+![image](docs/images/performance.png)
 
 <sup>1</sup> Kubernetes is the currently supported engine in AEnvironment.
 

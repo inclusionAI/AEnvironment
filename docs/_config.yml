@@ -27,8 +27,7 @@ repository:
 html:
   use_issues_button: true
   use_repository_button: true
-  use_edit_page_button: true
-  home_page_in_navbar: false
+
 
 # Launch button settings
 launch_buttons:
