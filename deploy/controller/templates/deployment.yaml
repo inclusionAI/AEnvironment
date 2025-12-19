@@ -33,7 +33,7 @@ spec:
           securityContext:
             {{ toYaml .Values.securityContext | nindent 12 }}
           image: {{ .Values.image }}
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
           {{- if .Values.command }}
           command:
             {{- toYaml .Values.command | nindent 12 }}
@@ -82,7 +82,10 @@ spec:
       affinity:
         {{ toYaml . | nindent 8 }}
       {{ end }}
-      {{ with .Values.tolerations }}
+      {{ with .Values.global.tolerations }}
       tolerations:
         {{ toYaml . | nindent 8 }}
+      {{ end }}
+      {{ with .Values.global.dns }}
+      {{ toYaml . | nindent 6 }}
       {{ end }}

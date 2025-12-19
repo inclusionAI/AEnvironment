@@ -21,6 +21,9 @@ helm.sh/chart: {{ include "api-service.chart" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
+{{- with .Values.global.labels }}
+{{ toYaml . }}
+{{- end }}
 {{- end }}
 
 {{/*
