@@ -1,4 +1,5 @@
 # Mini Program Development
+>
 > AI-Powered Development Environment
 
 An AI-assisted mini program development IDE that demonstrates AEnvironment's capabilities for tool integration, deployment, and scaling. This IDE enables developers to create web applications through natural language conversations with an AI agent.
@@ -16,7 +17,7 @@ An AI-assisted mini program development IDE that demonstrates AEnvironment's cap
 
 The project is organized into three main directories:
 
-```
+```text
 mini-program/
 ├── agent/              # Agent server (FastAPI + OpenAI integration)
 │   └── agent_server.py
@@ -59,7 +60,7 @@ mini-program/
 pip install -r environment/requirements.txt
 ```
 
-2. **Set environment variables**:
+1. **Set environment variables**:
 
 ```bash
 export OPENAI_API_KEY='your-api-key-here'
@@ -80,6 +81,7 @@ aenv run
 ```
 
 This will:
+
 - Start the AEnvironment MCP server
 - Load tools from `environment/src/`
 - Start the MCP Inspector (available at `http://localhost:6274`)
@@ -96,6 +98,7 @@ python agent_server.py
 ```
 
 This will:
+
 - Start the FastAPI server on port 8080
 - Connect to the MCP server for tool access
 - Enable the web interface
@@ -106,7 +109,7 @@ This will:
 
 Open your browser and navigate to:
 
-```
+```text
 http://localhost:8080
 ```
 
@@ -128,6 +131,7 @@ http://localhost:8080
 **User**: "Create a simple counter mini program"
 
 **Agent Actions**:
+
 1. Uses `list_files` to check existing files
 2. Creates `index.html` with HTML structure, CSS styling, and JavaScript logic
 3. Uses `validate_html` to check for errors
@@ -141,6 +145,7 @@ http://localhost:8080
 **User**: "Add a reset button to the counter"
 
 **Agent Actions**:
+
 1. Uses `read_file` to read the existing `index.html`
 2. Modifies the file to add a reset button
 3. Increments the version number displayed on the page
@@ -153,6 +158,7 @@ http://localhost:8080
 **User**: "Create a Snake game"
 
 **Agent Actions**:
+
 1. Plans the game structure (HTML canvas, game logic, controls)
 2. Creates `index.html` with complete game implementation
 3. Ensures responsive design (scales to fit preview window)
@@ -179,6 +185,7 @@ http://localhost:8080
 ### Rate Limit Handling
 
 The agent server includes automatic retry logic with exponential backoff for OpenAI API rate limit errors (429):
+
 - **Max Retries**: 3 attempts
 - **Initial Delay**: 1 second
 - **Backoff Factor**: 2x (delays: 1s, 2s, 4s)
@@ -194,6 +201,7 @@ The agent server includes automatic retry logic with exponential backoff for Ope
 ### Responsive Design Enforcement
 
 The agent is instructed to:
+
 - Use viewport-relative units (vw, vh, %, clamp)
 - Ensure content fits without scrolling
 - Scale canvas elements dynamically
@@ -263,7 +271,7 @@ The project includes basic functionality tests. Run tests using pytest or your p
 
 ## Architecture Diagram
 
-```
+```text
 ┌─────────────────────────────────────────────────────────┐
 │                    Browser (User)                        │
 │              http://localhost:8080                      │
@@ -339,6 +347,7 @@ Copyright 2025. Licensed under the Apache License, Version 2.0.
 ## Support
 
 For issues or questions:
+
 1. Check the troubleshooting section above
 2. Review server logs for error messages
 3. Verify all prerequisites are installed

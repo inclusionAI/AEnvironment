@@ -10,7 +10,7 @@
             padding: 0;
             box-sizing: border-box;
         }
-        
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -20,7 +20,7 @@
             align-items: center;
             padding: 20px;
         }
-        
+
         .container {
             background: white;
             border-radius: 20px;
@@ -30,27 +30,27 @@
             max-width: 500px;
             width: 100%;
         }
-        
+
         h1 {
             color: #333;
             margin-bottom: 20px;
             font-size: 32px;
         }
-        
+
         .counter {
             font-size: 64px;
             font-weight: bold;
             color: #667eea;
             margin: 30px 0;
         }
-        
+
         .buttons {
             display: flex;
             gap: 15px;
             justify-content: center;
             margin-top: 30px;
         }
-        
+
         button {
             padding: 12px 30px;
             font-size: 16px;
@@ -60,37 +60,37 @@
             transition: all 0.3s;
             font-weight: 600;
         }
-        
+
         .btn-increment {
             background: #667eea;
             color: white;
         }
-        
+
         .btn-increment:hover {
             background: #5568d3;
             transform: translateY(-2px);
         }
-        
+
         .btn-decrement {
             background: #f093fb;
             color: white;
         }
-        
+
         .btn-decrement:hover {
             background: #e083eb;
             transform: translateY(-2px);
         }
-        
+
         .btn-reset {
             background: #4facfe;
             color: white;
         }
-        
+
         .btn-reset:hover {
             background: #3d9fe8;
             transform: translateY(-2px);
         }
-        
+
         .description {
             color: #666;
             margin-top: 20px;
@@ -111,33 +111,32 @@
             Created with AI Assistant
         </div>
     </div>
-    
+
     <script>
         let count = 0;
         const counterElement = document.getElementById('counter');
-        
+
         function updateCounter() {
             counterElement.textContent = count;
         }
-        
+
         function increment() {
             count++;
             updateCounter();
         }
-        
+
         function decrement() {
             count--;
             updateCounter();
         }
-        
+
         function reset() {
             count = 0;
             updateCounter();
         }
-        
+
         // Initialize
         updateCounter();
     </script>
 </body>
 </html>
-

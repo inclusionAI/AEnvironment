@@ -50,7 +50,12 @@ class DockerEnvironmentConfig:
 
 
 class DockerClient:
-    def __init__(self, config_class: type = DockerEnvironmentConfig, logger: logging.Logger | None = None, **kwargs):
+    def __init__(
+        self,
+        config_class: type = DockerEnvironmentConfig,
+        logger: logging.Logger | None = None,
+        **kwargs,
+    ):
         """This class executes bash commands in a Docker container using direct docker commands.
         See `DockerEnvironmentConfig` for keyword arguments.
         """
@@ -85,10 +90,14 @@ class DockerClient:
             timeout=self.config.pull_timeout,  # docker pull might take a while
             check=True,
         )
-        self.logger.info(f"Started container {container_name} with ID {result.stdout.strip()}")
+        self.logger.info(
+            f"Started container {container_name} with ID {result.stdout.strip()}"
+        )
         self.config.container_id = result.stdout.strip()
 
-    def execute(self, command: str, cwd: str = "", *, timeout: int | None = None) -> dict[str, Any]:
+    def execute(
+        self, command: str, cwd: str = "", *, timeout: int | None = None
+    ) -> dict[str, Any]:
         """Execute a command in the Docker container and return the result as a dict."""
         cwd = cwd or self.config.cwd
         assert self.config.container_id, "Container not started"
@@ -115,11 +124,17 @@ class DockerClient:
         except Exception as e:
             return {"stdout": "", "returncode": 1, "stderr": f"run err:{e}"}
 
-        return {"stdout": result.stdout, "returncode": result.returncode, "stderr": result.stderr}
+        return {
+            "stdout": result.stdout,
+            "returncode": result.returncode,
+            "stderr": result.stderr,
+        }
 
     def cleanup(self):
         """Stop and remove the Docker container."""
-        if getattr(self, "container_id", None) is not None:  # if init fails early, container_id might not be set
+        if (
+            getattr(self, "container_id", None) is not None
+        ):  # if init fails early, container_id might not be set
             cmd = f"(timeout 60 {self.config.executable} stop {self.config.container_id} || {self.config.executable} rm -f {self.config.container_id}) >/dev/null 2>&1 &"
             subprocess.Popen(cmd, shell=True)
 
@@ -129,9 +144,9 @@ class DockerClient:
 
     @classmethod
     def load_container(
-            cls,
-            namespace_list: list[str],
-            container_name: str,
+        cls,
+        namespace_list: list[str],
+        container_name: str,
     ):
         """通过 namespace 列表 + 容器名片段自动找到容器 ID"""
         pod_name = os.getenv("POD_NAME", "")
@@ -157,7 +172,9 @@ class DockerClient:
         found_namespace = ""
         while retries < 5:
             try:
-                cid, found_namespace = cls._find_container_id(namespace_list, container_name)
+                cid, found_namespace = cls._find_container_id(
+                    namespace_list, container_name
+                )
                 status = True
                 break
             except RuntimeError as e:
@@ -172,7 +189,9 @@ class DockerClient:
         raise RuntimeError("Failed to find target container")
 
     @staticmethod
-    def _find_container_id(namespace_list: list[str], container_name: str) -> tuple[str, str]:
+    def _find_container_id(
+        namespace_list: list[str], container_name: str
+    ) -> tuple[str, str]:
         for ns in namespace_list:
             cmd = ["nerdctl", "-n", ns, "ps", "--format", "json"]
             proc = subprocess.run(cmd, capture_output=True, text=True, check=False)

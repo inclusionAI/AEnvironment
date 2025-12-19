@@ -21,21 +21,31 @@ from argparse import ArgumentParser
 from pathlib import Path
 from typing import Any
 
-from constants import KEY_INSTANCE_ID, FAIL_TO_PASS, PASS_TO_PASS, EvalType, FAIL_ONLY_REPOS, \
-    ResolvedStatus, \
-    APPLY_PATCH_FAIL, APPLY_PATCH_PASS
-from grading import get_eval_tests_report, get_resolution_status, get_logs_eval
+from constants import (
+    APPLY_PATCH_FAIL,
+    APPLY_PATCH_PASS,
+    FAIL_ONLY_REPOS,
+    FAIL_TO_PASS,
+    KEY_INSTANCE_ID,
+    PASS_TO_PASS,
+    EvalType,
+    ResolvedStatus,
+)
+from grading import get_eval_tests_report, get_logs_eval, get_resolution_status
 from shell_runner import ShellExecutor
 from swe_model import SweRun
 
-root_tmp_dir = "/dev/shm" if 'linux' == platform.system().lower() else "/tmp"
+root_tmp_dir = "/dev/shm" if "linux" == platform.system().lower() else "/tmp"
+
 
 class EvaluationError(Exception):
     def __init__(self, message: str):
         self.message = message
 
 
-def setup_logger(log_file: Path, mode="w", add_stdout: bool = False):
+def setup_logger(
+    log_file: Path, mode="w", add_stdout: bool = False, instance_id: str = ""
+):
     """
     This logger is used for logging the build process of images and containers.
     It writes logs to the log file.
@@ -62,7 +72,7 @@ def setup_logger(log_file: Path, mode="w", add_stdout: bool = False):
     return logger
 
 
-working_dir = Path(root_tmp_dir) / f"swe-sandbox"
+working_dir = Path(root_tmp_dir) / "swe-sandbox"
 working_dir.mkdir(parents=True, exist_ok=True)
 str_working_dir = f"{root_tmp_dir}/swe-sandbox"
 
@@ -71,10 +81,7 @@ run_log_file = working_dir / LOG_INSTANCE
 
 logger = None
 
-executor = ShellExecutor(
-    timeout=3600,
-    env={"CUSTOM_VAR": "value"}
-)
+executor = ShellExecutor(timeout=3600, env={"CUSTOM_VAR": "value"})
 
 
 def run_instance_aenv(test_spec: SweRun):
@@ -91,8 +98,8 @@ def run_instance_aenv(test_spec: SweRun):
     patch_diff = test_spec.model_patch
     patch_file = f"{str_working_dir}/patch.diff"
     with open(patch_file, "w") as pf:
-        if patch_diff and not patch_diff.endswith('\n'):
-            patch_diff += '\n'
+        if patch_diff and not patch_diff.endswith("\n"):
+            patch_diff += "\n"
         pf.write(patch_diff)
 
     git_apply = f"cd /{test_spec.local_code_space} && git apply -v {patch_file}"
@@ -104,7 +111,7 @@ def run_instance_aenv(test_spec: SweRun):
 
         if not special_resp.ok():
             logger.info(f"{APPLY_PATCH_FAIL}:\n{special_resp.stderr}")
-            raise EvaluationError(f"Failed to apply patch to container, try again.")
+            raise EvaluationError("Failed to apply patch to container, try again.")
         else:
             logger.info(f"{APPLY_PATCH_PASS}:\n{special_resp.stdout}")
     else:
@@ -115,7 +122,8 @@ def run_instance_aenv(test_spec: SweRun):
     before_diff_resp = executor.execute(before_diff)
     logger.info(
         f"Git diff before command status:{before_diff_resp.ok()},"
-        f"output:{before_diff_resp.stdout},error:{before_diff_resp.stderr}")
+        f"output:{before_diff_resp.stdout},error:{before_diff_resp.stderr}"
+    )
 
     # eval_script support repository embed code file
     eval_file = test_spec.eval_file
@@ -158,9 +166,9 @@ def run_instance_aenv(test_spec: SweRun):
 
 
 def get_eval_report(
-        test_spec: SweRun,
-        test_log_path: str,
-        include_tests_status: bool,
+    test_spec: SweRun,
+    test_log_path: str,
+    include_tests_status: bool,
 ) -> dict[str, Any]:
     """
     Generate a report of model evaluation results from a prediction, task instance,
@@ -204,12 +212,13 @@ def get_eval_report(
         PASS_TO_PASS: test_spec.PASS_TO_PASS,
     }
 
-    eval_type = EvalType.FAIL_ONLY if test_spec.repo in FAIL_ONLY_REPOS \
+    eval_type = (
+        EvalType.FAIL_ONLY
+        if test_spec.repo in FAIL_ONLY_REPOS
         else EvalType.PASS_AND_FAIL
-
-    report = get_eval_tests_report(
-        eval_status_map, eval_ref, eval_type=eval_type
     )
+
+    report = get_eval_tests_report(eval_status_map, eval_ref, eval_type=eval_type)
     if get_resolution_status(report) == ResolvedStatus.FULL.value:
         report_map[instance_id]["resolved"] = True
 
@@ -223,9 +232,14 @@ def main(details):
     with open(details, "r") as swe:
         details = json.loads(swe.read())
     instance = details["instance_id"]
-    run = SweRun(instance, details.get("repo"),
-                 details.get("version"), details.get("model_patch"),
-                 details.get("script"), details.get("test_cmd"))
+    run = SweRun(
+        instance,
+        details.get("repo"),
+        details.get("version"),
+        details.get("model_patch"),
+        details.get("script"),
+        details.get("test_cmd"),
+    )
     run.PASS_TO_PASS = json.loads(details.get("PASS_TO_PASS"))
     run.FAIL_TO_PASS = json.loads(details.get("FAIL_TO_PASS"))
     report = run_instance_aenv(run)

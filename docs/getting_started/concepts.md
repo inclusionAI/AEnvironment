@@ -32,6 +32,7 @@ With AEnvironment, you can:
    - **Custom Functions**: Auxiliary functions registered via `@register_function`.
 
 **Usage:**
+
 ```python
 from aenv import Environment
 
@@ -66,6 +67,7 @@ This design achieves effective separation between **declarative definition** and
 An environment is a **static definition** that contains all metadata, configuration items, and component declarations required for agent operation. It describes what capabilities the environment "possesses" and what resources it "needs", but contains no runtime state.
 
 **Core Features:**
+
 - **Metadata Container**: Stores basic information such as environment name, version, and description.
 - **Capability Declaration**: Functional components registered via decorators (e.g., `@register_tool`, `@register_reward`).
 - **Configuration Specification**: Runtime constraints including protocol version, timeout policies, and resource quotas (CPU/memory).
@@ -77,6 +79,7 @@ An environment is a **static definition** that contains all metadata, configurat
 An environment instance is the **concrete runtime entity** of an environment template. When an environment is actually used, the system dynamically creates corresponding instances based on its definition.
 
 **Core Characteristics:**
+
 - **State Carrier**: Maintains dynamic runtime states such as session context, execution history, and temporary data.
 - **Resource Allocation**: Allocates specific computing resources, network ports, storage volumes, etc.
 - **Parameterized Configuration**: Supports passing runtime parameters during instantiation to override default configurations in the environment template.
@@ -96,11 +99,11 @@ from aenv import register_tool
 @register_tool
 def my_tool(param1: str, param2: int = 42) -> dict:
     """Tool description for LLMs.
-    
+
     Args:
         param1: Description of param1
         param2: Description of param2
-    
+
     Returns:
         Execution result dictionary
     """
@@ -117,7 +120,7 @@ from aenv import register_reward
 @register_reward
 def code_quality_reward(code: str, test_results: dict) -> float:
     """Calculate reward value based on code quality.
-    
+
     Returns:
         Reward value between -1 and 1.
     """
@@ -168,13 +171,16 @@ In local mode, all components run within the local development environment.
 **Execution Flow:**
 
 1. **Start Local Environment Sandbox**: In the command line, from the environment project root directory (containing `config.json`), execute:
+
    ```bash
    aenv run --quiet
    ```
+
    This command starts the environment sandbox locally and injects tools, functions, etc. The service listens on `http://127.0.0.1:(8080 & 8081)` by default.
 2. **Create Environment Instance**: Use the environment variable `DUMMY_INSTANCE_IP` to specify the actual underlying runtime address associated with this environment instance.
 
 3. **Create Environment Instance**:
+
    ```python
    from aenv import Environment
 
@@ -182,6 +188,7 @@ In local mode, all components run within the local development environment.
       # Now you can use this environment instance
       tools = await env.list_tools()
    ```
+
 4. **Release Environment**: After completing operations, terminate the local process to release environment resources.
 
 ### Remote Mode
@@ -191,6 +198,7 @@ In remote mode, all components are deployed and run in a **Kubernetes** cluster.
 **Operation Process:**
 
 1. **Create Instance**:
+
    ```python
    from aenv import Environment
    import os
@@ -199,6 +207,7 @@ In remote mode, all components are deployed and run in a **Kubernetes** cluster.
    os.environ["AENV_SYSTEM_URL"] = "http://aenv-service/"
    mini_terminal = Environment("mini-terminal@1.0.1", timeout=180)
    ```
+
 2. **Release Instance**: After execution is complete, call `mini_terminal.release()` to release the instance and all associated resources with one click.
 
 ## Next Steps

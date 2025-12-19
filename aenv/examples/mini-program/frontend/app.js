@@ -54,7 +54,7 @@ async function sendMessage() {
         }
 
         const data = await response.json();
-        
+
         // Add assistant response
         addMessage('assistant', data.content, data.tool_calls, data.tool_results);
 
@@ -66,7 +66,7 @@ async function sendMessage() {
         // If tools were called, update preview
         if (data.tool_results && data.tool_results.length > 0) {
             addTerminalLog(`Executed ${data.tool_results.length} tool call(s)`, 'info');
-            
+
             let hasFileWrite = false;
             for (const toolResult of data.tool_results) {
                 if (toolResult.tool_name === 'write_file') {
@@ -89,7 +89,7 @@ async function sendMessage() {
                     }
                 }
             }
-            
+
             // Refresh preview after file writes (with delay to ensure files are saved)
             if (hasFileWrite) {
                 setTimeout(() => refreshPreview(), 1000);
@@ -121,28 +121,28 @@ function addMessage(role, content, toolCalls = null, toolResults = null) {
     // Add content - process redacted_reasoning tags
     if (content) {
         // Check if content contains XML-like tags
-        if (content.includes('<think>') || 
-            content.includes('<think>') || 
+        if (content.includes('<think>') ||
+            content.includes('<think>') ||
             content.includes('<reasoning>') ||
             content.includes('</think>') ||
             content.includes('</think>') ||
             content.includes('</reasoning>')) {
-            
+
             // Process HTML-like tags - normalize to <think> tags
             let processedContent = content
                 .replace(/<think>/gi, '<think>')
                 .replace(/<\/redacted_reasoning>/gi, '</think>')
                 .replace(/<reasoning>/gi, '<think>')
                 .replace(/<\/reasoning>/gi, '</think>');
-            
+
             // Split by lines and process
             const lines = processedContent.split('\n');
             let inThinkTag = false;
             let htmlContent = '';
-            
+
             lines.forEach(line => {
                 const trimmed = line.trim();
-                
+
                 if (trimmed.includes('<think>')) {
                     inThinkTag = true;
                     htmlContent += line + '\n';
@@ -159,7 +159,7 @@ function addMessage(role, content, toolCalls = null, toolResults = null) {
                     }
                 }
             });
-            
+
             contentDiv.innerHTML = htmlContent;
         } else {
             // Regular text content
@@ -179,7 +179,7 @@ function addMessage(role, content, toolCalls = null, toolResults = null) {
             header.className = 'tool-group-header';
             header.textContent = `${toolCalls.length} Tool Calls`;
             toolGroup.appendChild(header);
-            
+
             toolCalls.forEach(toolCall => {
                 const toolDiv = createToolCallElement(toolCall);
                 toolGroup.appendChild(toolDiv);
@@ -201,7 +201,7 @@ function addMessage(role, content, toolCalls = null, toolResults = null) {
             header.className = 'tool-group-header';
             header.textContent = `${toolResults.length} Results`;
             resultGroup.appendChild(header);
-            
+
             toolResults.forEach(toolResult => {
                 const resultDiv = createToolResultElement(toolResult);
                 resultGroup.appendChild(resultDiv);
@@ -229,11 +229,11 @@ function escapeHtml(text) {
 function createToolCallElement(toolCall) {
     const toolDiv = document.createElement('div');
     toolDiv.className = 'tool-call';
-    
+
     // Extract key arguments for display
     const args = toolCall.arguments || {};
     let argSummary = '';
-    
+
     if (Object.keys(args).length > 0) {
         const entries = Object.entries(args).slice(0, 2);
         argSummary = entries
@@ -250,7 +250,7 @@ function createToolCallElement(toolCall) {
             })
             .join(' • ');
     }
-    
+
     toolDiv.innerHTML = `
         <span class="tool-name">${escapeHtml(toolCall.name)}</span>
         ${argSummary ? `<span class="tool-args">${argSummary}</span>` : ''}
@@ -262,15 +262,15 @@ function createToolCallElement(toolCall) {
 function createToolResultElement(toolResult) {
     const resultDiv = document.createElement('div');
     resultDiv.className = 'tool-result';
-    
+
     // Simplify result display with better formatting
     const result = toolResult.result || {};
     let resultSummary = '';
     let resultType = 'info';
-    
+
     if (result.success !== undefined) {
-        resultSummary = result.success 
-            ? 'Operation completed successfully' 
+        resultSummary = result.success
+            ? 'Operation completed successfully'
             : `Failed: ${result.error || 'Unknown error'}`;
         resultType = result.success ? 'success' : 'error';
     } else if (result.content) {
@@ -287,7 +287,7 @@ function createToolResultElement(toolResult) {
         const jsonStr = JSON.stringify(result);
         resultSummary = jsonStr.length > 80 ? jsonStr.substring(0, 80) + '...' : jsonStr;
     }
-    
+
     resultDiv.innerHTML = `
         <div class="tool-name">${escapeHtml(toolResult.tool_name)}</div>
         <div class="tool-summary">${escapeHtml(resultSummary)}</div>
@@ -326,12 +326,12 @@ async function renderPreview(filePath) {
         if (response.ok) {
             const data = await response.json();
             console.log('File response data:', data);
-            
+
             // Handle different response structures
             // ToolResult structure: {"success": true, "result": {"content": [{"type": "text", "text": "..."}], "is_error": false}}
             // The text field may contain JSON string (for tool results) or direct content
             let content = null;
-            
+
             if (data.result) {
                 // Check if it's a ToolResult with content array
                 if (data.result.content && Array.isArray(data.result.content)) {
@@ -356,7 +356,7 @@ async function renderPreview(filePath) {
                         }
                     }
                 }
-                
+
                 // Fallback to direct structure
                 if (!content) {
                     if (typeof data.result === 'string') {
@@ -374,7 +374,7 @@ async function renderPreview(filePath) {
             } else if (data.content) {
                 content = data.content;
             }
-            
+
             if (content) {
                 // Create a blob URL and set it as iframe source
                 const blob = new Blob([content], { type: 'text/html' });
@@ -405,12 +405,12 @@ async function refreshPreview() {
         if (response.ok) {
             const data = await response.json();
             console.log('Files list response:', data);
-            
+
             // Handle different response structures
             // ToolResult structure: {"success": true, "result": {"content": [{"type": "text", "text": "..."}], "is_error": false}}
             // The text field contains JSON string with actual data
             let files = [];
-            
+
             if (data.result) {
                 // Check if it's a ToolResult with content array
                 if (data.result.content && Array.isArray(data.result.content)) {
@@ -429,7 +429,7 @@ async function refreshPreview() {
                         }
                     }
                 }
-                
+
                 // Fallback to direct structure
                 if (files.length === 0) {
                     if (Array.isArray(data.result)) {
@@ -445,16 +445,16 @@ async function refreshPreview() {
             } else if (data.files) {
                 files = data.files;
             }
-            
+
             console.log('Extracted files:', files);
-            
+
             if (files.length === 0) {
                 addTerminalLog('⚠ No files found in VFS. Response: ' + JSON.stringify(data).substring(0, 200), 'warning');
                 return;
             }
-            
+
             addTerminalLog(`📁 Found ${files.length} file(s): ${files.join(', ')}`, 'info');
-            
+
             // Look for common entry points (including game-related names)
             const entryPoints = ['index.html', 'app.html', 'main.html', 'game.html', 'snake.html'];
             for (const entry of entryPoints) {
@@ -464,7 +464,7 @@ async function refreshPreview() {
                     return;
                 }
             }
-            
+
             // If no entry point found, try to render the first HTML file
             const htmlFiles = files.filter(f => f.endsWith('.html'));
             if (htmlFiles.length > 0) {
@@ -513,7 +513,7 @@ function injectPreviewStyles() {
                 styleEl.id = 'preview-fit-styles';
                 iframeDoc.head.appendChild(styleEl);
             }
-            
+
             // Set styles to fit content and disable scrolling
             styleEl.textContent = `
                 html, body {
@@ -544,4 +544,3 @@ function injectPreviewStyles() {
 previewFrame.addEventListener('load', () => {
     setTimeout(injectPreviewStyles, 100);
 });
-

@@ -26,11 +26,11 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse, urlunparse
 
 import httpx
+from agents.tool import FunctionTool
+from agents.tool import Tool as OpenAITool
+from agents.tool_context import ToolContext
 from fastmcp import Client
 from fastmcp.client.transports import StreamableHttpTransport
-
-from agents.tool import FunctionTool, Tool as OpenAITool
-from agents.tool_context import ToolContext
 
 from aenv.client.scheduler_client import AEnvSchedulerClient
 from aenv.core.exceptions import EnvironmentError, ToolError

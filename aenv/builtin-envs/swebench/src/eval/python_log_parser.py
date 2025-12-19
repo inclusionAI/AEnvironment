@@ -63,9 +63,9 @@ def parse_log_pytest_options(log: str, test_spec: SweRun) -> dict[str, str]:
             if has_option:
                 main, option = has_option.groups()
                 if (
-                        option.startswith("/")
-                        and not option.startswith("//")
-                        and "*" not in option
+                    option.startswith("/")
+                    and not option.startswith("//")
+                    and "*" not in option
                 ):
                     option = "/" + option.split("/")[-1]
                 test_name = f"{main}[{option}]"
@@ -108,7 +108,7 @@ def parse_log_django(log: str, test_spec: SweRun) -> dict[str, str]:
                 # The proper fix should involve somehow getting the test results to
                 # print on a separate line, rather than the same line
                 if line.strip().startswith(
-                        "Applying sites.0002_alter_domain_unique...test_no_migrations"
+                    "Applying sites.0002_alter_domain_unique...test_no_migrations"
                 ):
                     line = line.split("...", 1)[-1].strip()
                 test = line.rsplit(suffix, 1)[0]

@@ -16,9 +16,8 @@
 Virtual File System (VFS) for managing mini program files.
 """
 
-import os
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 
 class VirtualFileSystem:
@@ -47,10 +46,11 @@ class VirtualFileSystem:
         """
         if directory == "/":
             return list(self.files.keys())
-        
+
         directory = directory.rstrip("/")
         return [
-            path for path in self.files.keys()
+            path
+            for path in self.files.keys()
             if path.startswith(directory + "/") or path == directory
         ]
 
@@ -126,4 +126,3 @@ _vfs = VirtualFileSystem()
 def get_vfs() -> VirtualFileSystem:
     """Get global VFS instance."""
     return _vfs
-
