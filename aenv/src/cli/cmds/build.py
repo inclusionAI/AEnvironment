@@ -128,6 +128,9 @@ def build(
 
     This command builds Docker images from your project and provides
     real-time progress updates with beautiful UI components.
+    Note that this command requires the docker package to be installed.
+    You can install it by running:
+    `pip install docker` or `uv pip install docker`.
 
     Examples:
         aenv build
