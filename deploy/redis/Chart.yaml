@@ -1,6 +1,9 @@
+# This directory contains values.yaml to override Bitnami Redis Chart defaults
+# The actual chart dependency is defined in the parent Chart.yaml
+# This file is kept for reference but not actively used
 apiVersion: v2
 name: redis
-description: A Helm chart for Redis
+description: Redis configuration overrides for Bitnami Redis Chart (Sentinel mode)
 type: application
 version: 0.1.0
 appVersion: "7.2.4"

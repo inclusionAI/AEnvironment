@@ -16,8 +16,8 @@ dependencies:
     repository: "file://./controller"
     condition: controller.enabled
   - name: redis
-    version: "0.1.0"
-    repository: "file://./redis"
+    version: "20.0.0"
+    repository: "https://charts.bitnami.com/bitnami"
     condition: redis.enabled
   - name: envhub
     version: "0.0.1"

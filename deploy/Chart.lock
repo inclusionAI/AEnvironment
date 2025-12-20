@@ -3,13 +3,13 @@ dependencies:
   repository: file://./controller
   version: 0.0.1
 - name: redis
-  repository: file://./redis
-  version: 0.1.0
+  repository: https://charts.bitnami.com/bitnami
+  version: 20.0.0
 - name: envhub
   repository: file://./envhub
   version: 0.0.1
 - name: api-service
   repository: file://./api-service
   version: 0.0.1
-digest: sha256:1f01dff06c6132524b527accdcfd47083224855e2104c7b53773cc4fcac9ebf4
-generated: "2025-12-11T15:05:52.740323+08:00"
+digest: sha256:69e5c1cd15c3a5e1659212cfeb348726ef76600fecea575031b99d1ae1777793
+generated: "2025-12-19T16:42:37.842523+08:00"

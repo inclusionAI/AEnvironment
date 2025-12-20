@@ -34,7 +34,12 @@ var ErrEnvNotFound = errors.New("env not found")
 
 // RedisEnvStorageOptions Redis storage configuration
 type RedisEnvStorageOptions struct {
+	// Direct connection mode: specify Addr to connect directly to Redis master
 	Addr      string
+	// Sentinel mode: specify SentinelAddrs and MasterName to use Sentinel
+	SentinelAddrs []string // Sentinel addresses (e.g., ["sentinel1:26379", "sentinel2:26379"])
+	MasterName    string   // Master name in Sentinel (default: "mymaster")
+	// Common options
 	Username  string
 	Password  string
 	DB        int
@@ -51,19 +56,40 @@ type RedisEnvStorage struct {
 var _ EnvStorage = (*RedisEnvStorage)(nil)
 
 // NewRedisEnvStorage creates RedisEnvStorage
+// Supports both direct connection and Sentinel mode
 func NewRedisEnvStorage(opts RedisEnvStorageOptions) (*RedisEnvStorage, error) {
-	if opts.Addr == "" {
-		return nil, fmt.Errorf("redis addr must not be empty")
-	}
 	if opts.KeyPrefix == "" {
 		opts.KeyPrefix = "env"
 	}
-	client := redis.NewClient(&redis.Options{
-		Addr:     opts.Addr,
-		Username: opts.Username,
-		Password: opts.Password,
-		DB:       opts.DB,
-	})
+
+	var client *redis.Client
+
+	// Check if using Sentinel mode
+	if len(opts.SentinelAddrs) > 0 {
+		// Sentinel mode
+		if opts.MasterName == "" {
+			opts.MasterName = "mymaster" // Default master name for Bitnami Redis Chart
+		}
+
+		client = redis.NewFailoverClient(&redis.FailoverOptions{
+			MasterName:    opts.MasterName,
+			SentinelAddrs: opts.SentinelAddrs,
+			Username:      opts.Username,
+			Password:      opts.Password,
+			DB:            opts.DB,
+		})
+	} else {
+		// Direct connection mode
+		if opts.Addr == "" {
+			return nil, fmt.Errorf("redis addr must not be empty when not using Sentinel mode")
+		}
+		client = redis.NewClient(&redis.Options{
+			Addr:     opts.Addr,
+			Username: opts.Username,
+			Password: opts.Password,
+			DB:       opts.DB,
+		})
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

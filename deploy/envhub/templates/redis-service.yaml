@@ -1,0 +1,24 @@
+# Service alias for Redis master to maintain backward compatibility
+# Bitnami Redis Chart creates "redis-master" service, but envhub expects "redis"
+# This service forwards traffic to the Redis master pod
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: {{ .Values.metadata.namespace }}
+  labels:
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: redis-master-alias
+spec:
+  type: ClusterIP
+  ports:
+    - port: 6379
+      targetPort: redis
+      protocol: TCP
+      name: redis
+  selector:
+    # Match Bitnami Redis Chart master pod labels
+    # Using fullnameOverride: redis, so labels should match
+    app.kubernetes.io/name: redis
+    app.kubernetes.io/component: master
+

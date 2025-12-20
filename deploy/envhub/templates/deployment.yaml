@@ -71,10 +71,31 @@ spec:
           args:
             - --storage-backend
             - redis
+            {{- if or (eq (.Values.redis.mode | default "sentinel") "sentinel") .Values.redis.sentinelAddrs }}
+            # Sentinel mode
+            - --redis-sentinel-addrs
+            - {{ include "envhub.redisSentinelAddrs" . | quote }}
+            - --redis-master-name
+            - {{ .Values.redis.masterName | default "mymaster" | quote }}
+            {{- else }}
+            # Direct connection mode
             - --redis-addr
-            - redis.aenv.svc.cluster.local:6379
+            - {{ .Values.redis.addr | default "redis.aenv.svc.cluster.local:6379" | quote }}
+            {{- end }}
             - --redis-key-prefix
-            - env
+            - {{ .Values.redis.keyPrefix | default "env" | quote }}
+            {{- if .Values.redis.username }}
+            - --redis-username
+            - {{ .Values.redis.username | quote }}
+            {{- end }}
+            {{- if .Values.redis.password }}
+            - --redis-password
+            - {{ .Values.redis.password | quote }}
+            {{- end }}
+            {{- if .Values.redis.db }}
+            - --redis-db
+            - {{ .Values.redis.db | quote }}
+            {{- end }}
             - --port
             - {{ .Values.service.port | quote }}
             - --metrics-port

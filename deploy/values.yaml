@@ -30,30 +30,11 @@ controller:
       memory: "0"
       ephemeral-storage: 10Gi
 
-# Redis component
+# Redis component - Using Bitnami Redis Chart with Sentinel mode
 redis:
   enabled: true
-  replicaCount: 1
-  name: redis
-  metadata:
-    namespace: aenv
-  namespace:
-    create: false
-  image:
-    repository: redis
-    tag: "7.2.4"
-  resources:
-    limits:
-      cpu: "1"
-      memory: "2Gi"
-    requests:
-      cpu: "0.5"
-      memory: "1Gi"
-  configmap:
-    enabled: false
-    clusterEnabled: "no"
-    password: ""
-  port: 6379
+  # Configuration is in redis/values.yaml
+  # Sentinel mode is enabled by default with minimal configuration
 
 # EnvHub component
 envhub:
@@ -78,6 +59,30 @@ envhub:
       cpu: "1"
       memory: "512Mi"
       ephemeral-storage: 1Gi
+  # Redis configuration for EnvHub
+  redis:
+    # Connection mode: "direct" or "sentinel"
+    # - "direct": Connect directly to Redis master
+    # - "sentinel": Use Sentinel mode for automatic failover (default, recommended for production)
+    mode: "sentinel"  # Default: "sentinel" for high availability
+    
+    # Direct connection mode: Redis connection address (only used when mode is "direct")
+    addr: ""
+    
+    # Sentinel mode: Number of Sentinel replicas (should match redis.sentinel.replicaCount)
+    # Used to auto-generate sentinelAddrs if sentinelAddrs is empty
+    sentinelReplicaCount: 3  # Should match redis/values.yaml sentinel.replicaCount
+    # Sentinel mode: Comma-separated Sentinel addresses
+    # If empty, will auto-generate based on sentinelReplicaCount
+    # Format: "redis-sentinel-0.redis-sentinel-headless.aenv.svc.cluster.local:26379,..."
+    sentinelAddrs: ""  # Leave empty to auto-generate based on sentinelReplicaCount
+    # Sentinel mode: Master name (default: "mymaster")
+    masterName: "mymaster"
+    
+    keyPrefix: "env"
+    username: ""
+    password: ""
+    db: 0
 
 # API Service component
 api-service:

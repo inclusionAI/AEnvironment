@@ -35,19 +35,23 @@ var (
 	serverPort  int
 	metricsPort int
 
-	storageBackend string
-	redisAddr      string
-	redisUsername  string
-	redisPassword  string
-	redisDB        int
-	redisKeyPrefix string
+	storageBackend      string
+	redisAddr           string
+	redisSentinelAddrs  string // Comma-separated Sentinel addresses (e.g., "sentinel1:26379,sentinel2:26379")
+	redisMasterName     string // Master name for Sentinel mode (default: "mymaster")
+	redisUsername       string
+	redisPassword       string
+	redisDB             int
+	redisKeyPrefix      string
 )
 
 func init() {
 	pflag.IntVar(&serverPort, "port", 8080, "Server port")
 	pflag.IntVar(&metricsPort, "metrics-port", 9091, "Metrics port")
 	pflag.StringVar(&storageBackend, "storage-backend", "redis", "Env storage backend: redis")
-	pflag.StringVar(&redisAddr, "redis-addr", "localhost:6379", "Redis address")
+	pflag.StringVar(&redisAddr, "redis-addr", "localhost:6379", "Redis address (for direct connection mode)")
+	pflag.StringVar(&redisSentinelAddrs, "redis-sentinel-addrs", "", "Redis Sentinel addresses, comma-separated (e.g., 'sentinel1:26379,sentinel2:26379'). If set, uses Sentinel mode")
+	pflag.StringVar(&redisMasterName, "redis-master-name", "mymaster", "Redis master name for Sentinel mode")
 	pflag.StringVar(&redisUsername, "redis-username", "", "Redis username")
 	pflag.StringVar(&redisPassword, "redis-password", "", "Redis password")
 	pflag.IntVar(&redisDB, "redis-db", 0, "Redis DB index")
@@ -153,13 +157,28 @@ func main() {
 func newEnvStorage(backend string) (service.EnvStorage, error) {
 	switch strings.ToLower(backend) {
 	case "", "redis":
-		return service.NewRedisEnvStorage(service.RedisEnvStorageOptions{
-			Addr:      redisAddr,
+		opts := service.RedisEnvStorageOptions{
 			Username:  redisUsername,
 			Password:  redisPassword,
 			DB:        redisDB,
 			KeyPrefix: redisKeyPrefix,
-		})
+		}
+
+		// Check if using Sentinel mode
+		if redisSentinelAddrs != "" {
+			// Parse comma-separated Sentinel addresses
+			addrs := strings.Split(redisSentinelAddrs, ",")
+			for i := range addrs {
+				addrs[i] = strings.TrimSpace(addrs[i])
+			}
+			opts.SentinelAddrs = addrs
+			opts.MasterName = redisMasterName
+		} else {
+			// Direct connection mode
+			opts.Addr = redisAddr
+		}
+
+		return service.NewRedisEnvStorage(opts)
 	default:
 		return nil, fmt.Errorf("unsupported storage backend %s, only redis is supported", backend)
 	}

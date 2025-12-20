@@ -61,6 +61,37 @@ nodeSelector: {}
 
 tolerations: {}
 
+# Redis Configuration
+redis:
+  # Connection mode: "direct" or "sentinel"
+  # - "direct": Connect directly to Redis master (use addr)
+  # - "sentinel": Use Sentinel mode for high availability (use sentinelAddrs and masterName)
+  mode: "sentinel"  # Default: "sentinel" for high availability
+  
+  # Direct connection mode: Redis connection address (service name or full FQDN)
+  # Only used when mode is "direct"
+  addr: "redis.aenv.svc.cluster.local:6379"
+  
+  # Sentinel mode: Number of Sentinel replicas (used to auto-generate sentinelAddrs)
+  # Should match redis.sentinel.replicaCount in redis/values.yaml (default: 3)
+  sentinelReplicaCount: 3
+  # Sentinel mode: Comma-separated list of Sentinel addresses
+  # If empty, will auto-generate based on sentinelReplicaCount
+  # Format: "redis-sentinel-0.redis-sentinel-headless.aenv.svc.cluster.local:26379,redis-sentinel-1..."
+  # Or use Service: "redis-sentinel.aenv.svc.cluster.local:26379" (simpler, auto-load-balanced)
+  sentinelAddrs: ""  # Leave empty to auto-generate based on sentinelReplicaCount
+  # Sentinel mode: Master name (default: "mymaster" for Bitnami Redis Chart)
+  masterName: "mymaster"
+  
+  # Redis key prefix for env data
+  keyPrefix: "env"
+  # Redis username (optional, leave empty if not using auth)
+  username: ""
+  # Redis password (optional, leave empty if not using auth)
+  password: ""
+  # Redis DB index (default: 0)
+  db: 0
+
 # OSS Configuration
 oss:
   endpoint: ""  # OSS endpoint, e.g., "http://oss-cn-hangzhou.aliyuncs.com"
