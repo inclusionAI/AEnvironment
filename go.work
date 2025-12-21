@@ -3,5 +3,6 @@ go 1.21
 use (
 	./api-service
 	./controller
+	./docker-controller
 	./envhub
 )
