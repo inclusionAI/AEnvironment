@@ -33,7 +33,8 @@ controller:
 # Redis component
 redis:
   enabled: true
-  replicaCount: 3
+  # For persistence with ReadWriteOnce access mode, replicaCount must be 1.
+  replicaCount: 1
   name: redis
   metadata:
     namespace: aenv
