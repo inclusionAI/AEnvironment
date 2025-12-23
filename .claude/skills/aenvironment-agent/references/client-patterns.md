@@ -266,5 +266,3 @@ async def with_timeout():
 5. **Pass environment variables**: Use `environment_variables` parameter for configuration
 6. **Validate inputs**: Check required environment variables before creating Environment
 
-
-

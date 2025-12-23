@@ -7,15 +7,6 @@ set -e
 WORKSPACE_PATH="${1:-/tmp}"
 ENV_NAME_PREFIX="${2:-agent}"
 
-# Check if aenvironment is installed
-if ! command -v aenv &> /dev/null; then
-    echo "⚠️  aenvironment not found. Installing aenvironment..."
-    pip install aenvironment
-    echo "✅ aenvironment installed successfully"
-else
-    echo "✅ aenvironment is already installed"
-fi
-
 cd "$WORKSPACE_PATH"
 mkdir -p temp
 cd temp

@@ -27,5 +27,3 @@ aenv push
 echo "✅ Build and deployment completed successfully!"
 echo "🚀 Environment available as: $ENV_IDR@$VERSION"
 
-
-
