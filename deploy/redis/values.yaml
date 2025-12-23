@@ -43,13 +43,13 @@ tolerations: {}
 
 affinity: {}
 
-# 持久化配置（可选）
+# 持久化配置
 persistence:
-  enabled: false
+  enabled: true
   storageClassName: ""
   accessModes:
     - ReadWriteOnce
-  size: 1Gi
+  size: 10Gi
 
 # Redis 配置（无密码模式）
 redis:
