@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import json
+import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -40,10 +41,15 @@ class CLIConfig:
     def __post_init__(self):
         """Initialize default configurations."""
         if self.build_config is None:
+            socket_path = (
+                "npipe:////./pipe/docker_engine"
+                if sys.platform == "win32"
+                else "unix:///var/run/docker.sock"
+            )
             self.build_config = {
                 "type": "local",
                 "build_args": {
-                    "socket": "unix:///var/run/docker.sock",
+                    "socket": socket_path,
                 },
                 "registry": {
                     "host": "docker.io",
@@ -67,7 +73,7 @@ class CLIConfig:
 
         if self.hub_config is None:
             self.hub_config = {
-                "hub_backend": "https://localhost:8080",
+                "hub_backend": "http://localhost:8080",
                 "api_key": "",
                 "timeout": 30,
             }
@@ -129,7 +135,18 @@ class CLIConfigManager:
         try:
             with open(self.config_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            return CLIConfig(**data)
+            config = CLIConfig(**data)
+
+            # Auto-fix Windows socket path if it's using the Unix default
+            if sys.platform == "win32" and config.build_config:
+                current_socket = config.build_config.get("build_args", {}).get("socket")
+                if current_socket == "unix:///var/run/docker.sock":
+                    config.build_config["build_args"][
+                        "socket"
+                    ] = "npipe:////./pipe/docker_engine"
+                    self.save_config(config)
+
+            return config
         except (json.JSONDecodeError, TypeError) as e:
             # If config is invalid, create default
             print(

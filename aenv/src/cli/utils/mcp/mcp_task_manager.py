@@ -52,13 +52,28 @@ class TaskManager:
             if env:
                 task_env.update(env)
 
+            # Sanitize SSL_CERT_FILE if it points to a missing file
+            if "SSL_CERT_FILE" in task_env:
+                ssl_file = task_env["SSL_CERT_FILE"]
+                if not os.path.exists(ssl_file):
+                    self.logger.warning(
+                        f"Removing invalid SSL_CERT_FILE from env: {ssl_file}"
+                    )
+                    task_env.pop("SSL_CERT_FILE")
+
             self.logger.info(f"Starting task: {name} - {' '.join(command)}")
+
+            # Windows requires shell=True for npx/npm/python aliases sometimes,
+            # and definitely for batch files if not fully resolved.
+            use_shell = sys.platform == "win32"
+
             process = subprocess.Popen(
                 command,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 env=task_env,
                 text=True,
+                shell=use_shell,
             )
             self.tasks[name] = process
 
@@ -74,7 +89,13 @@ class TaskManager:
 
     def start_inspector(self, port: int = 6274) -> None:
         """Start MCP Inspector"""
-        command = ["npx", "@modelcontextprotocol/inspector", "--port", str(port)]
+        command = [
+            "npx",
+            "--yes",
+            "@modelcontextprotocol/inspector",
+            "--port",
+            str(port),
+        ]
         self.add_task("inspector", command)
 
     def start_both(self, work_dir: str, inspector_port: int = 6274) -> None:
@@ -158,7 +179,7 @@ class TaskManager:
             try:
                 for line in iter(stream.readline, ""):
                     if line:
-                        self.logger.info(f"[{name}] {line.strip()}")
+                        self.logger.debug(f"[{name}] {line.strip()}")
             except Exception:
                 pass
 
@@ -218,6 +239,15 @@ class AsyncTaskManager:
         if env:
             task_env.update(env)
 
+        # Sanitize SSL_CERT_FILE if it points to a missing file
+        if "SSL_CERT_FILE" in task_env:
+            ssl_file = task_env["SSL_CERT_FILE"]
+            if not os.path.exists(ssl_file):
+                self.logger.warning(
+                    f"Removing invalid SSL_CERT_FILE from env: {ssl_file}"
+                )
+                task_env.pop("SSL_CERT_FILE")
+
         self.logger.info(f"Starting asynchronous task: {name} - {' '.join(command)}")
         process = await asyncio.create_subprocess_exec(
             *command,
@@ -275,7 +305,7 @@ class AsyncTaskManager:
             try:
                 async for line in stream:
                     if line:
-                        self.logger.info(f"[{name}] {line.decode().strip()}")
+                        self.logger.debug(f"[{name}] {line.decode().strip()}")
             except Exception:
                 pass
 

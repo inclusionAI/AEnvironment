@@ -143,12 +143,15 @@ def build(
     build_config = config_manager.get_build_config().copy()
     docker_sock = build_config.get("build_args", {}).get("socket", "")
     docker_sock_path = docker_sock.removeprefix("unix://")
-    docker_sock_idx = Path(docker_sock_path)
-    if not docker_sock_idx.exists():
-        console.print(
-            f"[red]Error: Docker sock:{docker_sock_idx} your provided in config:{config_path} is not exist[/red]"
-        )
-        return
+
+    # Skip path check for Windows named pipes
+    if not docker_sock.startswith("npipe://"):
+        docker_sock_idx = Path(docker_sock_path)
+        if not docker_sock_idx.exists():
+            console.print(
+                f"[red]Error: Docker sock:{docker_sock_idx} your provided in config:{config_path} is not exist[/red]"
+            )
+            return
 
     # Initialize build context
     work_path = Path(work_dir).resolve()
