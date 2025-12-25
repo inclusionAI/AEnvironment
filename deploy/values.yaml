@@ -5,6 +5,8 @@
 global:
   namespace: aenv
   createNamespace: true
+  selectorLabels:
+    app.kubernetes.io/name: "{{ .Values.name }}"
 
 # Controller component
 controller:
@@ -13,10 +15,11 @@ controller:
   name: controller
   metadata:
     namespace: aenv
-  sandboxNamespace: aenvsandbox
+  sandboxNamespace: aenv-sandbox
   namespace:
     create: true
   image: aenvironment/controller:0.1.0
+  imagePullPolicy: IfNotPresent
   service:
     type: LoadBalancer
     port: 8080
@@ -40,16 +43,20 @@ redis:
     namespace: aenv
   namespace:
     create: false
-  image:
-    repository: redis
-    tag: "7.2.4"
+  image: redis:7.2.4
+  imagePullPolicy: IfNotPresent
+  service:
+    type: LoadBalancer
+    port: 6379
   resources:
     limits:
       cpu: "1"
       memory: "2Gi"
+      ephemeral-storage: 10Gi
     requests:
       cpu: "0.5"
       memory: "1Gi"
+      ephemeral-storage: 10Gi
   configmap:
     enabled: false
     clusterEnabled: "no"
@@ -66,6 +73,7 @@ envhub:
   namespace:
     create: false
   image: aenvironment/envhub:0.1.0
+  imagePullPolicy: IfNotPresent
   service:
     type: LoadBalancer
     port: 8083
@@ -90,6 +98,7 @@ api-service:
   namespace:
     create: false
   image: aenvironment/api-service:0.1.0
+  imagePullPolicy: IfNotPresent
   service:
     type: LoadBalancer
     port: 8080

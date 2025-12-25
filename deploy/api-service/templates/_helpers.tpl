@@ -21,13 +21,18 @@ helm.sh/chart: {{ include "api-service.chart" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
+{{- with .Values.global.labels }}
+{{ toYaml . }}
+{{- end }}
 {{- end }}
 
 {{/*
 Selector labels
 */}}
 {{- define "api-service.selectorLabels" -}}
-app.kubernetes.io/name: {{ .Values.name }}
+{{- if .Values.global.selectorLabels }}
+{{ tpl (toYaml .Values.global.selectorLabels) . }}
+{{- end }}
 {{- end }}
 
 {{- define "api-service.backendAddr" -}}
