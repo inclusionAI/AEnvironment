@@ -30,7 +30,9 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 Selector labels
 */}}
 {{- define "controller.selectorLabels" -}}
-app.kubernetes.io/name: {{ .Values.name }}
+{{- if .Values.global.selectorLabels }}
+{{ tpl (toYaml .Values.global.selectorLabels) . }}
+{{- end }}
 {{- end }}
 
 {{- define "controller.storageAddr" -}}

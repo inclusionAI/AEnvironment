@@ -5,6 +5,8 @@
 global:
   namespace: aenv
   createNamespace: true
+  selectorLabels:
+    app.kubernetes.io/name: "{{ .Values.name }}"
 
 # Controller component
 controller:
@@ -13,7 +15,7 @@ controller:
   name: controller
   metadata:
     namespace: aenv
-  sandboxNamespace: aenvsandbox
+  sandboxNamespace: aenv-sandbox
   namespace:
     create: true
   image: aenvironment/controller:0.1.0

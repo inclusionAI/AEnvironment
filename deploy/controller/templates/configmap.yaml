@@ -6,7 +6,6 @@ metadata:
   namespace: {{ .Values.metadata.namespace }}
   labels:
     {{- include "controller.labels" . | nindent 4 }}
-    app.kubernetes.io/component: pod-template
 data:
   {{- range $templateName, $templateContent := .Values.podTemplates }}
   {{ $templateName }}.yaml: |
