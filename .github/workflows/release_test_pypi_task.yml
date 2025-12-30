@@ -1,4 +1,4 @@
-name: Release AEnvironment SDK
+name: Release Test AEnvironment SDK
 
 on:
   workflow_dispatch:
