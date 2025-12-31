@@ -33,7 +33,6 @@ jobs:
           unzip -p dist/*.whl | grep "Requires-Dist" || echo "WARNING: No dependencies found!"
 
       - name: Publish to PyPI
-        if: github.ref == 'refs/tags'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           password: ${{ secrets.PYPI_AUTH_PASSWORD }}
