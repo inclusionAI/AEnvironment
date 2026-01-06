@@ -12,6 +12,11 @@ spec:
   selector:
     matchLabels:
       {{ include "controller.selectorLabels" . | nindent 6 }}
+  strategy:
+    rollingUpdate:
+      maxSurge: 100%
+      maxUnavailable: 100%
+    type: RollingUpdate
   template:
     metadata:
     {{ with .Values.podAnnotations }}
@@ -25,6 +30,8 @@ spec:
       imagePullSecrets:
         {{ toYaml . | nindent 8 }}
       {{ end }}
+      restartPolicy: Always
+      serviceAccount: {{ include "controller.serviceAccountName" . }}
       serviceAccountName: {{ include "controller.serviceAccountName" . }}
       securityContext:
         {{ toYaml .Values.podSecurityContext | nindent 8 }}
@@ -33,7 +40,7 @@ spec:
           securityContext:
             {{ toYaml .Values.securityContext | nindent 12 }}
           image: {{ .Values.image }}
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
           {{- if .Values.command }}
           command:
             {{- toYaml .Values.command | nindent 12 }}
@@ -82,7 +89,10 @@ spec:
       affinity:
         {{ toYaml . | nindent 8 }}
       {{ end }}
-      {{ with .Values.tolerations }}
+      {{ with .Values.global.tolerations }}
       tolerations:
         {{ toYaml . | nindent 8 }}
+      {{ end }}
+      {{ with .Values.global.dns }}
+      {{ toYaml . | nindent 6 }}
       {{ end }}
