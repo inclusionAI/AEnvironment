@@ -16,7 +16,9 @@
 init command - Initialize aenv project using environmental scaffolding tools
 """
 
+import json
 import os
+from pathlib import Path
 
 import click
 from rich import box
@@ -43,8 +45,13 @@ from cli.utils.scaffold import ScaffoldParams, load_aenv_scaffold
     "--work-dir", "-w", help="Working directory for initialization", default=os.getcwd()
 )
 @click.option("--force", is_flag=True, help="Force overwrite existing directory")
+@click.option(
+    "--config-only",
+    is_flag=True,
+    help="Only create config.json file, skip other files and directories",
+)
 @pass_config
-def init(cfg: Config, name, version, template, work_dir, force):
+def init(cfg: Config, name, version, template, work_dir, force, config_only):
     """
     Initialize aenv project using environmental scaffolding tools
 
@@ -64,21 +71,22 @@ def init(cfg: Config, name, version, template, work_dir, force):
         )
     )
 
-    # Check if environment already exists in hub
-    with console.status("[bold green]Checking environment registry..."):
-        hub_client = AEnvHubClient.load_client()
-        exist = hub_client.check_env(name=name, version=version)
+    # Check if environment already exists in hub (skip for config-only mode)
+    if not config_only:
+        with console.status("[bold green]Checking environment registry..."):
+            hub_client = AEnvHubClient.load_client()
+            exist = hub_client.check_env(name=name, version=version)
 
-    if exist:
-        console.print(
-            Panel(
-                f"❌ Environment name '{name}' already exists in registry",
-                title="Error",
-                style="bold red",
-                box=box.ROUNDED,
+        if exist:
+            console.print(
+                Panel(
+                    f"❌ Environment name '{name}' already exists in registry",
+                    title="Error",
+                    style="bold red",
+                    box=box.ROUNDED,
+                )
             )
-        )
-        raise click.Abort()
+            raise click.Abort()
 
     # Use default template
     if not template:
@@ -97,73 +105,136 @@ def init(cfg: Config, name, version, template, work_dir, force):
     config_table.add_column("Value", style="green")
     config_table.add_row("Project Name", name)
     config_table.add_row("Version", version)
-    config_table.add_row("Template", template)
-    config_table.add_row("Target Directory", project_dir)
+    if not config_only:
+        config_table.add_row("Template", template)
+        config_table.add_row("Target Directory", project_dir)
+    config_table.add_row("Config Only", "✅ Enabled" if config_only else "❌ Disabled")
     config_table.add_row("Force Mode", "✅ Enabled" if force else "❌ Disabled")
 
     console.print(config_table)
     console.print()
 
-    params = ScaffoldParams(
-        name=name,
-        version=version,
-        template=template,
-        target_dir=project_dir,
-        policy=force,
-    )
-    try:
-        with console.status("[bold green]Creating project scaffolding..."):
-            scaffold = load_aenv_scaffold()
-            scaffold.init(params)
+    if config_only:
+        # Only create config.json in current directory from template
+        config_path = Path(work_dir) / "config.json"
+        if config_path.exists() and not force:
+            console.print(
+                Panel(
+                    f"❌ config.json already exists at {config_path}\nUse --force to overwrite",
+                    title="Error",
+                    style="bold red",
+                    box=box.ROUNDED,
+                )
+            )
+            raise click.Abort()
 
-    except Exception as e:
+        try:
+            with console.status("[bold green]Loading config.json from template..."):
+                # Load scaffold to get template config
+                scaffold = load_aenv_scaffold()
+                # Get config.json content from template
+                template_config = scaffold.get_template_config(template)
+                # Update only name and version
+                template_config["name"] = name
+                template_config["version"] = version
+
+            with console.status("[bold green]Creating config.json..."):
+                with open(config_path, "w") as f:
+                    json.dump(template_config, f, indent=4)
+        except Exception as e:
+            console.print(
+                Panel(
+                    f"❌ Failed to create config.json from template\n\n[red]{str(e)}[/red]",
+                    title="Error",
+                    style="bold red",
+                    box=box.ROUNDED,
+                )
+            )
+            if cfg.verbose:
+                console.print_exception()
+            raise click.Abort()
+
         console.print(
             Panel(
-                f"❌ Scaffolding creation failed\n\n[red]{str(e)}[/red]",
-                title="Error",
-                style="bold red",
+                f"✅ Successfully created config.json at {config_path}",
+                title="Success",
+                style="bold green",
                 box=box.ROUNDED,
             )
         )
-        if cfg.verbose:
-            console.print_exception()
-        raise click.Abort()
-
-    # Success message
-    console.print(
-        Panel(
-            f"✅ Successfully initialized project '{name}'",
-            title="Success",
-            style="bold green",
-            box=box.ROUNDED,
+    else:
+        # Full scaffolding initialization
+        params = ScaffoldParams(
+            name=name,
+            version=version,
+            template=template,
+            target_dir=project_dir,
+            policy=force,
         )
-    )
+        try:
+            with console.status("[bold green]Creating project scaffolding..."):
+                scaffold = load_aenv_scaffold()
+                scaffold.init(params)
 
-    # Next steps
-    next_steps_table = Table(title="Next Steps", box=box.ROUNDED, show_header=False)
-    next_steps_table.add_column("Action", style="cyan")
-    next_steps_table.add_column("Command", style="yellow")
+        except Exception as e:
+            console.print(
+                Panel(
+                    f"❌ Scaffolding creation failed\n\n[red]{str(e)}[/red]",
+                    title="Error",
+                    style="bold red",
+                    box=box.ROUNDED,
+                )
+            )
+            if cfg.verbose:
+                console.print_exception()
+            raise click.Abort()
 
-    next_steps_table.add_row(
-        "Navigate to project", f"cd {os.path.basename(project_dir)}"
-    )
-    next_steps_table.add_row("Review project structure", "ls -la")
-    next_steps_table.add_row("Test environment locally", "aenv test")
-    next_steps_table.add_row("Build the environment", "aenv build")
-    next_steps_table.add_row("View examples", "aenv examples")
-
-    console.print(next_steps_table)
-
-    # Quick start guide
-    console.print(
-        Panel(
-            Text("💡 Quick Start Guide\n\n", style="bold blue")
-            + Text("1. Edit config.json to customize your environment\n")
-            + Text("2. Modify Dockerfile for your specific requirements\n")
-            + Text("3. Implement your custom environment logic in src/\n")
-            + Text("4. Test with 'aenv test' before building"),
-            title="Tips",
-            box=box.ROUNDED,
-            style="blue",
+    if not config_only:
+        # Success message
+        console.print(
+            Panel(
+                f"✅ Successfully initialized project '{name}'",
+                title="Success",
+                style="bold green",
+                box=box.ROUNDED,
+            )
         )
-    )
+
+        # Next steps
+        next_steps_table = Table(title="Next Steps", box=box.ROUNDED, show_header=False)
+        next_steps_table.add_column("Action", style="cyan")
+        next_steps_table.add_column("Command", style="yellow")
+
+        next_steps_table.add_row(
+            "Navigate to project", f"cd {os.path.basename(project_dir)}"
+        )
+        next_steps_table.add_row("Review project structure", "ls -la")
+        next_steps_table.add_row("Test environment locally", "aenv test")
+        next_steps_table.add_row("Build the environment", "aenv build")
+        next_steps_table.add_row("View examples", "aenv examples")
+
+        console.print(next_steps_table)
+
+        # Quick start guide
+        console.print(
+            Panel(
+                Text("💡 Quick Start Guide\n\n", style="bold blue")
+                + Text("1. Edit config.json to customize your environment\n")
+                + Text("2. Modify Dockerfile for your specific requirements\n")
+                + Text("3. Implement your custom environment logic in src/\n")
+                + Text("4. Test with 'aenv test' before building"),
+                title="Tips",
+                box=box.ROUNDED,
+                style="blue",
+            )
+        )
+    else:
+        # Next steps for config-only mode
+        next_steps_table = Table(title="Next Steps", box=box.ROUNDED, show_header=False)
+        next_steps_table.add_column("Action", style="cyan")
+        next_steps_table.add_column("Command", style="yellow")
+
+        next_steps_table.add_row("Edit config.json", "Edit config.json to customize")
+        next_steps_table.add_row("Build the environment", "aenv build")
+
+        console.print(next_steps_table)

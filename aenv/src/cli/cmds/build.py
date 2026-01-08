@@ -103,7 +103,7 @@ class BuildProgressTracker:
     "-w",
     type=click.Path(exists=True, file_okay=False, dir_okay=True),
     default=".",
-    help="Working directory for the build",
+    help="Docker build context directory (defaults to current directory)",
 )
 @click.option("--image-name", "-n", type=str, help="Name for the Docker image")
 @click.option(
@@ -119,9 +119,23 @@ class BuildProgressTracker:
     "--push/--no-push", default=False, help="Push image to registry after build"
 )
 @click.option("--platform", "-p", type=str, help="Platform for the Docker image")
+@click.option(
+    "--dockerfile",
+    "-f",
+    type=str,
+    help="Path to the Dockerfile (relative to work-dir, defaults to Dockerfile)",
+)
 @pass_config
 def build(
-    cfg: Config, work_dir, image_name, image_tag, registry, namespace, platform, push
+    cfg: Config,
+    work_dir,
+    image_name,
+    image_tag,
+    registry,
+    namespace,
+    platform,
+    push,
+    dockerfile,
 ):
     """
     Build Docker images with real-time progress display.
@@ -133,9 +147,11 @@ def build(
         aenv build
         aenv build --image-name myapp --image-tag v1.0
         aenv build --work-dir ./myproject --registry myregistry.com
+        aenv build --work-dir ./build --dockerfile ./Dockerfile.prod
     """
     console = cfg.console.console() if cfg.console else Console()
-    env_build_config = _load_env_config(work_dir=work_dir)
+    # config.json must be in current directory, not work-dir
+    env_build_config = _load_env_config()
 
     # Get build configuration from CLI config
     config_manager = get_config_manager()
@@ -187,6 +203,14 @@ def build(
             warn_text = f"""Warning: Your provided username or password in config:{config_path} is invalid.
              Push may fail due to authentication issues.!"""
             console.print(warn_text, style="bold yellow")
+
+    # Set dockerfile path: if specified use it, otherwise default to work-dir/Dockerfile
+    if dockerfile:
+        build_config["dockerfile"] = dockerfile
+    else:
+        # Default to Dockerfile in work-dir
+        build_config["dockerfile"] = "Dockerfile"
+
     # Create build context
     ctx = ArtifactBuildContext(
         work_dir=str(work_path),
@@ -283,21 +307,23 @@ def build(
             )
             raise click.Abort()
 
-    _refresh_env_artifact(env_build_config, work_dir, full_image)
+    # config.json is always in current directory
+    _refresh_env_artifact(env_build_config, full_image)
 
 
-def _load_env_config(work_dir: str) -> Dict[str, Any]:
-    """Load build configuration from config.json.
-
-    Args:
-        work_dir: Working directory to search for config.json.
+def _load_env_config() -> Dict[str, Any]:
+    """Load build configuration from config.json in current directory.
 
     Returns:
         Dictionary containing build configuration.
+
+    Raises:
+        click.Abort: If config.json is not found in current directory.
     """
-    config_path = Path(work_dir) / "config.json"
+    # config.json must be in current working directory
+    config_path = Path(".").resolve() / "config.json"
     if not config_path.exists():
-        raise click.Abort("current working directory config.json does not exist")
+        raise click.Abort("config.json does not exist in current directory")
 
     with open(config_path, "r") as f:
         config = json.load(f)
@@ -305,17 +331,17 @@ def _load_env_config(work_dir: str) -> Dict[str, Any]:
     return config
 
 
-def _refresh_env_artifact(env_config, work_dir, artifact):
-    """Refresh build configuration to config.json.
+def _refresh_env_artifact(env_config, artifact):
+    """Refresh build configuration to config.json in current directory.
 
     Args:
         env_config: Environment configs.
-        work_dir: Working directory to search for config.json.
         artifact: Current build.
     """
-    config_path = Path(work_dir) / "config.json"
+    # config.json is always in current directory
+    config_path = Path(".").resolve() / "config.json"
     if not config_path.exists():
-        raise click.Abort("current working directory config.json does not exist")
+        raise click.Abort("config.json does not exist in current directory")
 
     with open(config_path, "w+") as f:
         artifacts = env_config.get("artifacts", [])

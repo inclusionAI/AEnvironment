@@ -76,12 +76,14 @@ Usage: aenv init [OPTIONS] NAME
   Examples:
     aenv init myproject --version 1.0.0
     aenv init myproject --template default --work-dir ./myproject --force
+    aenv init myproject --version 1.0.0 --config-only
 
 Options:
   -v, --version TEXT        Specify aenv version number
   -t, --template [default]  Scaffolding template selection
   -w, --work-dir TEXT       Working directory for initialization
   --force                   Force overwrite existing directory
+  --config-only             Only create config.json file, skip other files and directories
   --help                    Show this message and exit.
 ```
 
@@ -143,6 +145,23 @@ The final deliverable is primarily a container image, with the Dockerfile defini
 - **src**
 
 Environment business logic code is placed in the src directory. Use `@register` decorators to register code as corresponding tools, functions, and rewards.
+
+#### Config-Only Mode
+
+Use `--config-only` flag to create only the `config.json` file without generating other project files and directories. This is useful when you already have a project structure and only need the configuration file.
+
+```bash
+# Create only config.json in current directory
+aenv init myproject --version 1.0.0 --config-only
+
+# Create config.json in specified directory
+aenv init myproject --version 1.0.0 --config-only --work-dir ./myproject
+
+# Force overwrite existing config.json
+aenv init myproject --version 1.0.0 --config-only --force
+```
+
+> **Note**: When using `--config-only`, the `config.json` content is loaded from the template file, ensuring consistency with the full initialization process.
 
 ### `aenv run` - Validate Environment
 
@@ -229,9 +248,10 @@ Usage: aenv build [OPTIONS]
     aenv build
     aenv build --image-name myapp --image-tag v1.0
     aenv build --work-dir ./myproject --registry myregistry.com
+    aenv build --work-dir ./build --dockerfile ./Dockerfile.prod
 
 Options:
-  -w, --work-dir DIRECTORY  Working directory for the build
+  -w, --work-dir DIRECTORY  Docker build context directory (defaults to current directory)
   -n, --image-name TEXT     Name for the Docker image
   -t, --image-tag TEXT      Tags for the Docker image (can be used multiple
                             times)
@@ -239,6 +259,7 @@ Options:
   -s, --namespace TEXT      Namespace for the Docker image
   --push / --no-push        Push image to registry after build
   -p, --platform TEXT       Platform for the Docker image
+  -f, --dockerfile TEXT     Path to the Dockerfile (relative to work-dir, defaults to Dockerfile)
   --help                    Show this message and exit.
 ```
 
@@ -259,20 +280,29 @@ aenv build --image-tag v1.0.0 --image-tag latest
 
 # Specify platform
 aenv build --platform linux/amd64,linux/arm64
+
+# Specify custom Dockerfile
+aenv build --work-dir ./build --dockerfile ./Dockerfile.prod
 ```
 
 #### Advanced Options
 
 | Option | Short | Description | Example |
 |---|---|---|---|
-| `--work-dir` | `-w` | Working directory | `--work-dir ./project` |
+| `--work-dir` | `-w` | Docker build context directory | `--work-dir ./project` |
 | `--image-name` | `-n` | Image name | `--image-name search-tool` |
 | `--image-tag` | `-t` | Image tags | `--image-tag v1.0.0` |
 | `--registry` | `-r` | Registry URL | `--registry registry.company.com` |
 | `--namespace` | `-s` | Namespace | `--namespace myteam` |
 | `--platform` | `-p` | Target platform | `--platform linux/amd64` |
 | `--push` |  | Push after build | `--push` |
-| `--no-cache` |  | Disable cache | `--no-cache` |
+| `--dockerfile` | `-f` | Path to Dockerfile (relative to work-dir) | `--dockerfile ./Dockerfile.prod` |
+
+#### Important Notes
+
+- **config.json location**: The `config.json` file must be in the current working directory (where you run the command), not in the `--work-dir` directory.
+- **work-dir purpose**: The `--work-dir` option specifies the Docker build context directory, which is used as the base path for Dockerfile and all files referenced in it (COPY, ADD, etc.).
+- **Dockerfile path**: The `--dockerfile` path is relative to `--work-dir`. If not specified, defaults to `Dockerfile` in the `--work-dir` directory.
 
 #### Build Output Example
 

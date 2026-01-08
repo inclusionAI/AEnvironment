@@ -104,15 +104,11 @@ podTemplates:
         app.kubernetes.io/name: aenv-sandbox
         template-type: singleContainer
     spec:
+      automountServiceAccountToken: false
       containers:
       - name: main
         image: weather:v0.1.0
         imagePullPolicy: IfNotPresent
-        command:
-        - /bin/sh
-        - -c
-        - --
-        - python3 -m aenv.main /app/src
         resources:
           limits:
             cpu: "2"
@@ -150,14 +146,10 @@ podTemplates:
         app.kubernetes.io/name: aenv-sandbox
         template-type: dualContainer
     spec:
+      automountServiceAccountToken: false
       containers:
       - name: main
         image: aenv-base:latest
-        command:
-        - /bin/sh
-        - -c
-        - --
-        - python3 -m aenv.main /app/src
         imagePullPolicy: IfNotPresent
         resources:
           limits:

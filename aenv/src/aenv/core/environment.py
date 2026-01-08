@@ -93,6 +93,7 @@ class Environment:
         startup_timeout: float = 500.0,
         max_retries: int = 10,
         api_key: Optional[str] = None,
+        skip_for_healthy: bool = False,
     ):
         """
         Initialize environment.
@@ -108,12 +109,14 @@ class Environment:
             ttl: Time to live in seconds defaults to 10 minutes
             max_retries: Maximum retry attempts for failed requests
             api_key: Optional API key for authentication
+            skip_for_healthy: Skip health check if True (defaults to False)
         """
         self.env_name = env_name
         self.datasource = datasource
         self.environment_variables = environment_variables or {}
         self.arguments = arguments or []
         self.dummy_instance_ip = os.getenv("DUMMY_INSTANCE_IP")
+        self.skip_for_healthy = skip_for_healthy
 
         if not aenv_url:
             aenv_url = self.dummy_instance_ip or os.getenv(
@@ -676,6 +679,12 @@ class Environment:
 
     async def _wait_for_healthy(self, timeout: float = 300.0) -> None:
         """Wait for environment instance to be healthy."""
+        if self.skip_for_healthy:
+            logger.info(
+                f"{self._log_prefix()} Skipping health check for environment {self.env_name}"
+            )
+            return
+
         logger.info(
             f"{self._log_prefix()} Waiting for environment {self.env_name} to be healthy..."
         )

@@ -54,6 +54,37 @@ class AEnvScaffold(ABC):
             else:
                 click.echo(f"{prefix}{current_prefix}{item.name}")
 
+    def get_template_config(self, template_name: str) -> dict:
+        """Get config.json content from template.
+
+        Args:
+            template_name: Name of the template
+
+        Returns:
+            Dictionary containing config.json content from template
+
+        Raises:
+            click.ClickException: If template or config.json not found
+        """
+        template_dir = self._find_template_directory(template_name)
+        if not template_dir or not template_dir.exists():
+            available_templates = self._list_available_templates()
+            raise click.ClickException(
+                f"Template '{template_name}' not found. Available templates: {', '.join(available_templates)}"
+            )
+
+        config_path = template_dir / "config.json"
+        if not config_path.exists():
+            raise click.ClickException(
+                f"config.json not found in template '{template_name}' at {config_path}"
+            )
+
+        try:
+            with open(config_path, "r") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError) as e:
+            raise click.ClickException(f"Failed to read config.json from template: {e}")
+
     def update_config_json(self, target_path: Path, name: str, version: str):
         """Update config.json with project-specific information.
 
