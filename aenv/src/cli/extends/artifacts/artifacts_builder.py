@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import sys
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -205,10 +207,16 @@ class DockerArtifactBuilder(ArtifactBuilder):
                 )
                 # Process streaming build logs
                 current_step = 0
+                last_output_time = time.time()
+                heartbeat_interval = 30  # Show heartbeat every 30 seconds if no output
+                last_heartbeat_time = time.time()
 
                 for log_line in response:
                     if not log_line:
                         continue
+
+                    current_time = time.time()
+                    last_output_time = current_time
 
                     # Handle different types of log messages
                     if "stream" in log_line:
@@ -219,6 +227,7 @@ class DockerArtifactBuilder(ArtifactBuilder):
                                 current_step += 1
                                 step_description = stream_text
                                 print(f"\n📦 Step {current_step}: {step_description}")
+                                sys.stdout.flush()
                             elif "Running in" in stream_text:
                                 container_id = stream_text.split("Running in ")[
                                     1
@@ -226,6 +235,7 @@ class DockerArtifactBuilder(ArtifactBuilder):
                                 print(
                                     f"   🏃 Running in container: {container_id[:12]}"
                                 )
+                                sys.stdout.flush()
                             elif "Removing intermediate container" in stream_text:
                                 container_id = stream_text.split(
                                     "Removing intermediate container "
@@ -233,22 +243,29 @@ class DockerArtifactBuilder(ArtifactBuilder):
                                 print(
                                     f"   🗑️  Removing intermediate container: {container_id[:12]}"
                                 )
+                                sys.stdout.flush()
                             elif "Successfully built" in stream_text:
                                 image_id = stream_text.split("Successfully built ")[
                                     1
                                 ].strip()
                                 print(f"   ✅ Successfully built: {image_id[:12]}")
+                                sys.stdout.flush()
                             elif "Successfully tagged" in stream_text:
                                 tagged_image = stream_text.split(
                                     "Successfully tagged "
                                 )[1].strip()
                                 print(f"   🏷️  Successfully tagged: {tagged_image}")
+                                sys.stdout.flush()
                             else:
-                                # Regular build output
-                                if stream_text and not stream_text.startswith("--->"):
-                                    print(f"   {stream_text}")
-                                elif stream_text.startswith("--->"):
-                                    print(f"   {stream_text}")
+                                # Regular build output - print all output to show progress
+                                if stream_text:
+                                    # Filter out very verbose output but keep important ones
+                                    if not stream_text.startswith("--->"):
+                                        print(f"   {stream_text}")
+                                        sys.stdout.flush()
+                                    elif stream_text.startswith("--->"):
+                                        print(f"   {stream_text}")
+                                        sys.stdout.flush()
 
                     elif "status" in log_line:
                         status = log_line["status"]
@@ -274,26 +291,47 @@ class DockerArtifactBuilder(ArtifactBuilder):
                                         f"   📥 {layer_id}: {status} [{bar}] {percentage:.1f}%",
                                         end="\r",
                                     )
+                                    sys.stdout.flush()
                                 else:
                                     print(f"   📥 {layer_id}: {status}")
+                                    sys.stdout.flush()
                             else:
                                 print(f"   📥 {layer_id}: {status}")
+                                sys.stdout.flush()
 
                     elif "aux" in log_line:
                         aux_data = log_line["aux"]
                         if "ID" in aux_data:
                             print(f"   🎯 Build complete: {aux_data['ID'][:12]}")
+                            sys.stdout.flush()
 
                     elif "error" in log_line:
                         error_msg = log_line["error"].strip()
                         print(f"   ❌ Error: {error_msg}")
+                        sys.stdout.flush()
                         raise docker.errors.BuildError(error_msg, [log_line])
 
                     elif "errorDetail" in log_line:
                         error_detail = log_line["errorDetail"]
                         error_msg = error_detail.get("message", "Unknown error")
                         print(f"   ❌ Error: {error_msg}")
+                        sys.stdout.flush()
                         raise docker.errors.BuildError(error_msg, [log_line])
+                    
+                    # Show heartbeat if no output for a while (handled in a separate check)
+                    # Note: This is a simple approach. For better UX, consider using threading
+                    # to show periodic heartbeats during long-running steps
+                    
+                    # Handle any other log line types that might be present
+                    else:
+                        # Log unknown log line types for debugging
+                        if log_line:
+                            # Only print if it's not empty and might be useful
+                            if any(key in log_line for key in ["message", "log", "output"]):
+                                message = log_line.get("message") or log_line.get("log") or log_line.get("output", "")
+                                if message:
+                                    print(f"   {message}")
+                                    sys.stdout.flush()
 
                 print("\n─" * 80)
                 print(f"✅ Successfully built image: {full_image_name}")
