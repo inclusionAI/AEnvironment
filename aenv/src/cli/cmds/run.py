@@ -62,8 +62,16 @@ def run_environment(work_dir: str) -> None:
 def validate_dependencies() -> None:
     """Validate dependencies"""
     try:
-        mcp_inspector.check_inspector_requirements()
+        is_ok, msg = mcp_inspector.check_inspector_requirements()
+        if not is_ok:
+            raise DependencyError(
+                f"Dependency check failed: {msg}",
+                details={"error_type": "RequirementError", "error_detail": msg},
+                suggestion="Please ensure Node.js and npm are installed, then try again",
+            )
     except Exception as e:
+        if isinstance(e, DependencyError):
+            raise
         raise DependencyError(
             f"Dependency check failed: {str(e)}",
             details={"error_type": type(e).__name__, "error_detail": str(e)},

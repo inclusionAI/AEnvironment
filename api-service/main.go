@@ -20,7 +20,6 @@ package main
 import (
 	"log"
 	"net/http"
-	"runtime"
 	"time"
 
 	"api-service/controller"
@@ -114,6 +113,16 @@ func main() {
 	mainRouter.GET("/env-instance/:id/list", middleware.AuthTokenMiddleware(tokenEnabled, backendClient), envInstanceController.ListEnvInstances)
 	mainRouter.GET("/env-instance/:id", middleware.AuthTokenMiddleware(tokenEnabled, backendClient), envInstanceController.GetEnvInstance)
 	mainRouter.DELETE("/env-instance/:id", middleware.AuthTokenMiddleware(tokenEnabled, backendClient), envInstanceController.DeleteEnvInstance)
+
+	// Add this line with the other GET routes
+	mainRouter.GET("/env/:name/:version/exists", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"data": gin.H{
+				"exists": false,
+			},
+		})
+	})
 	mainRouter.GET("/health", healthChecker)
 	mainRouter.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
@@ -124,10 +133,10 @@ func main() {
 
 	// Start two services
 	go func() {
-		port := ":8080"
-		if runtime.GOOS != "linux" {
-			port = ":8070"
-		}
+		port := ":8080" // Change this to always be 8080
+		// if runtime.GOOS != "linux" {
+		// 	port = ":8070"
+		// }
 		if err := mainRouter.Run(port); err != nil {
 			log.Fatalf("Failed to start main server: %v", err)
 		}
@@ -140,13 +149,15 @@ func main() {
 	}()
 
 	// clean expired env instance
-	interval, err := time.ParseDuration(cleanupInterval)
-	if err != nil {
-		log.Fatalf("Invalid cleanup interval: %v", err)
-	}
-	cleanManager := service.NewAEnvCleanManager(service.NewKubeCleaner(scheduleClient), interval)
-	go cleanManager.Start()
-	defer cleanManager.Stop()
+	/*
+		interval, err := time.ParseDuration(cleanupInterval)
+		if err != nil {
+			log.Fatalf("Invalid cleanup interval: %v", err)
+		}
+		cleanManager := service.NewAEnvCleanManager(service.NewKubeCleaner(scheduleClient), interval)
+		go cleanManager.Start()
+		defer cleanManager.Stop()
+	*/
 
 	// Block main goroutine
 	select {}
