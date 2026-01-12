@@ -29,18 +29,21 @@ import (
 )
 
 // InitLogger initializes zap logger with log rotation
-func InitLogger() *zap.Logger {
+func InitLogger(logPath string) *zap.Logger {
+	if logPath == "" {
+		logPath = "/home/admin/logs/aenvcore-api-service.log"
+	}
 	// Console encoder
 	consoleEncoder := zapcore.NewConsoleEncoder(zap.NewDevelopmentEncoderConfig())
 	// File encoder (JSON format)
 	fileEncoder := zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig())
 	// Lumberjack log rotation configuration
 	logWriter := zapcore.AddSync(&lumberjack.Logger{
-		Filename:   "/home/admin/logs/aenvcore-api-service.log", // Log file path
-		MaxSize:    100,                                         // Maximum size of each log file (MB)
-		MaxBackups: 30,                                          // Maximum number of old files to retain
-		MaxAge:     0,                                           // Maximum age of old files in days (0 means permanent)
-		Compress:   false,                                       // Whether to compress old files
+		Filename:   logPath, // Log file path
+		MaxSize:    100,     // Maximum size of each log file (MB)
+		MaxBackups: 30,      // Maximum number of old files to retain
+		MaxAge:     0,       // Maximum age of old files in days (0 means permanent)
+		Compress:   false,   // Whether to compress old files
 	})
 	// Console output (stdout)
 	consoleDebugging := zapcore.Lock(os.Stdout)

@@ -76,7 +76,7 @@ func main() {
 	mainRouter.Use(middleware.MetricsMiddleware())
 
 	// Initialize logger
-	logger := middleware.InitLogger()
+	logger := middleware.InitLogger("")
 	defer func() {
 		if err := logger.Sync(); err != nil {
 			log.Printf("Failed to sync logger: %v", err)
@@ -118,7 +118,9 @@ func main() {
 	mainRouter.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// MCP dedicated routing engine
+	mcpLogger := middleware.InitLogger("/home/admin/logs/api-service-mcp.log")
 	mcpRouter := gin.Default()
+	mcpRouter.Use(middleware.LoggingMiddleware(mcpLogger))
 	mcpGroup := mcpRouter.Group("/")
 	controller.NewMCPGateway(mcpGroup)
 
