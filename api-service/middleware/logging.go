@@ -31,7 +31,7 @@ import (
 // InitLogger initializes zap logger with log rotation
 func InitLogger(logPath string) *zap.Logger {
 	if logPath == "" {
-		logPath = "/home/admin/logs/aenvcore-api-service.log"
+		logPath = "/home/admin/logs/api-service.log"
 	}
 	// Console encoder
 	consoleEncoder := zapcore.NewConsoleEncoder(zap.NewDevelopmentEncoderConfig())
@@ -116,6 +116,7 @@ func LoggingMiddleware(logger *zap.Logger) gin.HandlerFunc {
 		fields := []zap.Field{
 			zap.String("method", c.Request.Method),
 			zap.String("path", c.Request.URL.Path),
+			zap.Any("header", c.Request.Header),
 			zap.Int("status", statusCode),
 			zap.Duration("latency", latency),
 			zap.String("client_ip", c.ClientIP()),
