@@ -33,7 +33,7 @@ spec:
           securityContext:
             {{ toYaml .Values.securityContext | nindent 12 }}
           image: {{ .Values.image }}
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: {{.Values.imagePullPolicy }}
           env:
             - name: ACI_ACCESS
               valueFrom:
@@ -72,7 +72,7 @@ spec:
             - --storage-backend
             - redis
             - --redis-addr
-            - redis.aenv.svc.cluster.local:6379
+            - {{ include "envhub.redisAddr" . }}
             - --redis-key-prefix
             - env
             - --port
@@ -104,7 +104,10 @@ spec:
       affinity:
         {{ toYaml . | nindent 8 }}
       {{ end }}
-      {{ with .Values.tolerations }}
+      {{ with .Values.global.tolerations }}
       tolerations:
         {{ toYaml . | nindent 8 }}
+      {{ end }}
+      {{ with .Values.global.dns }}
+      {{ toYaml . | nindent 6 }}
       {{ end }}

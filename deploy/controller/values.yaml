@@ -21,6 +21,8 @@ namespace:
 storageAddr: ""
 leaderElect: false
 
+serviceAccountName: aenv-serviceaccount
+
 image: docker.io/library/controller:latest
 
 # Command to run in the container (optional)
