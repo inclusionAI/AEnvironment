@@ -17,8 +17,10 @@ limitations under the License.
 package middleware
 
 import (
+	"api-service/constants"
 	"bytes"
 	"io"
+	"net/http"
 	"os"
 	"time"
 
@@ -112,11 +114,15 @@ func LoggingMiddleware(logger *zap.Logger) gin.HandlerFunc {
 		// Get response status code
 		statusCode := c.Writer.Status()
 
+		// log redirect forward pod name and ip
+		safeHeaders := http.Header{}
+		safeHeaders.Set(constants.HeaderMCPServerURL, c.Request.Header.Get(constants.HeaderMCPServerURL))
+		safeHeaders.Set(constants.HeaderEnvInstanceID, c.Request.Header.Get(constants.HeaderEnvInstanceID))
 		// Log
 		fields := []zap.Field{
 			zap.String("method", c.Request.Method),
 			zap.String("path", c.Request.URL.Path),
-			zap.Any("header", c.Request.Header),
+			zap.Any("header", safeHeaders),
 			zap.Int("status", statusCode),
 			zap.Duration("latency", latency),
 			zap.String("client_ip", c.ClientIP()),
