@@ -17,8 +17,10 @@ limitations under the License.
 package middleware
 
 import (
+	"api-service/constants"
 	"bytes"
 	"io"
+	"net/http"
 	"os"
 	"time"
 
@@ -29,18 +31,21 @@ import (
 )
 
 // InitLogger initializes zap logger with log rotation
-func InitLogger() *zap.Logger {
+func InitLogger(logPath string) *zap.Logger {
+	if logPath == "" {
+		logPath = "/home/admin/logs/api-service.log"
+	}
 	// Console encoder
 	consoleEncoder := zapcore.NewConsoleEncoder(zap.NewDevelopmentEncoderConfig())
 	// File encoder (JSON format)
 	fileEncoder := zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig())
 	// Lumberjack log rotation configuration
 	logWriter := zapcore.AddSync(&lumberjack.Logger{
-		Filename:   "/home/admin/logs/aenvcore-api-service.log", // Log file path
-		MaxSize:    100,                                         // Maximum size of each log file (MB)
-		MaxBackups: 30,                                          // Maximum number of old files to retain
-		MaxAge:     0,                                           // Maximum age of old files in days (0 means permanent)
-		Compress:   false,                                       // Whether to compress old files
+		Filename:   logPath, // Log file path
+		MaxSize:    100,     // Maximum size of each log file (MB)
+		MaxBackups: 30,      // Maximum number of old files to retain
+		MaxAge:     0,       // Maximum age of old files in days (0 means permanent)
+		Compress:   false,   // Whether to compress old files
 	})
 	// Console output (stdout)
 	consoleDebugging := zapcore.Lock(os.Stdout)
@@ -109,10 +114,15 @@ func LoggingMiddleware(logger *zap.Logger) gin.HandlerFunc {
 		// Get response status code
 		statusCode := c.Writer.Status()
 
+		// log redirect forward pod name and ip
+		safeHeaders := http.Header{}
+		safeHeaders.Set(constants.HeaderMCPServerURL, c.Request.Header.Get(constants.HeaderMCPServerURL))
+		safeHeaders.Set(constants.HeaderEnvInstanceID, c.Request.Header.Get(constants.HeaderEnvInstanceID))
 		// Log
 		fields := []zap.Field{
 			zap.String("method", c.Request.Method),
 			zap.String("path", c.Request.URL.Path),
+			zap.Any("header", safeHeaders),
 			zap.Int("status", statusCode),
 			zap.Duration("latency", latency),
 			zap.String("client_ip", c.ClientIP()),
