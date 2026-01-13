@@ -21,7 +21,16 @@ import (
 	"log"
 )
 
-func ACIHook(env *models.Env) {
+type ACITrigger struct {
+	TemplateId  string
+	CallbackURL string
+}
+
+func (c ACITrigger) Trigger(env *models.Env) {
+	ACIHook(env, c.TemplateId, c.CallbackURL)
+}
+
+func ACIHook(env *models.Env, templateId string, callbackURL string) {
 	// Try to trigger pipeline, use hack logic first (crying)
 	artis := env.Artifacts
 	buildConfig := env.BuildConfig
@@ -38,7 +47,7 @@ func ACIHook(env *models.Env) {
 			return
 		}
 	}
-	err := Trigger(env.Name, env.Version)
+	err := Trigger(env.Name, env.Version, templateId, callbackURL)
 	if err != nil {
 		log.Printf("Trigger aenv aci image build err:%v", err)
 	}

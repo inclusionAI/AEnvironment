@@ -24,8 +24,8 @@ import (
 
 type ACIHackClient struct{}
 
-func (cli *ACIHackClient) trigger(name string, version string) error {
-	cmd := exec.Command("aci_hack", name, version)
+func (cli *ACIHackClient) trigger(name string, version string, templateId string, callbackURL string) error {
+	cmd := exec.Command("aci_hack", name, version, "--template", templateId, "--callback-url", callbackURL)
 	// Get output
 	output, err := cmd.Output()
 	if err != nil {
@@ -37,6 +37,6 @@ func (cli *ACIHackClient) trigger(name string, version string) error {
 
 var aci = &ACIHackClient{}
 
-func Trigger(name string, version string) error {
-	return aci.trigger(name, version)
+func Trigger(name string, version string, templateId string, callbackURL string) error {
+	return aci.trigger(name, version, templateId, callbackURL)
 }

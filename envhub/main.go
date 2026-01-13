@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"envhub/clients"
 	"fmt"
 	"log"
 	"net/http"
@@ -41,6 +42,9 @@ var (
 	redisPassword  string
 	redisDB        int
 	redisKeyPrefix string
+
+	templateId  string
+	callbackURL string
 )
 
 func init() {
@@ -52,6 +56,8 @@ func init() {
 	pflag.StringVar(&redisPassword, "redis-password", "", "Redis password")
 	pflag.IntVar(&redisDB, "redis-db", 0, "Redis DB index")
 	pflag.StringVar(&redisKeyPrefix, "redis-key-prefix", "env", "Redis key prefix for env data")
+	pflag.StringVar(&templateId, "template-id", "", "Template ID for pipeline or workflow (optional)")
+	pflag.StringVar(&callbackURL, "callback-url", "", "Callback URL to notify after operation completion (optional)")
 }
 
 func main() {
@@ -81,8 +87,16 @@ func main() {
 		log.Printf("OSS storage is not configured, OSS-related features will be disabled")
 	}
 
+	var ciTrigger clients.ACITrigger
+	if templateId != "" && callbackURL != "" {
+		ciTrigger = clients.ACITrigger{
+			TemplateId:  templateId,
+			CallbackURL: callbackURL,
+		}
+	}
+
 	// Initialize controllers
-	envController := controller.NewEnvController(envStorage, ossStorage)
+	envController := controller.NewEnvController(envStorage, ossStorage, ciTrigger)
 
 	healthController := controller.NewHealthController(metrics, healthChecker)
 	dataController := controller.NewDatasourceController()
