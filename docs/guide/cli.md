@@ -15,15 +15,16 @@ Options:
   --help         Show this message and exit.
 
 Commands:
-  build    Build Docker images with real-time progress display.
-  config   Manage CLI configuration.
-  get      Get specified environment details
-  init     Initialize aenv project using environmental scaffolding tools
-  list     List all environments with pagination
-  push     Push current aenv project to remote backend aenv hub
-  release  Release current aenv project
-  test     Test current aenv project by running local directly
-  version  Display version number and corresponding build/commit information
+  build      Build Docker images with real-time progress display.
+  config     Manage CLI configuration.
+  get        Get specified environment details
+  init       Initialize aenv project using environmental scaffolding tools
+  instances  List running environment instances
+  list       List all environments with pagination
+  push       Push current aenv project to remote backend aenv hub
+  release    Release current aenv project
+  test       Test current aenv project by running local directly
+  version    Display version number and corresponding build/commit information
 ```
 
 | Command Category | Command | Description |
@@ -34,6 +35,7 @@ Commands:
 | | `push` | Push environment to repository |
 | **Environment Management** | `list` | List all environments |
 | | `get` | Get environment details |
+| | `instances` | List running environment instances |
 | **Configuration Management** | `config` | Manage CLI configuration |
 | **System Information** | `version` | Display version information |
 
@@ -380,6 +382,73 @@ $ aenv list --format table
 +---------------------------+------------+---------------+-------------------------------------+
 ```
 
+### `aenv instances` - List Running Instances
+
+List running environment instances with detailed information.
+
+#### Instances Basic Usage
+
+```bash
+# List all running instances
+aenv instances
+
+# List instances for a specific environment
+aenv instances --name my-env
+
+# List instances for a specific environment and version
+aenv instances --name my-env --version 1.0.0
+
+# Output as JSON
+aenv instances --format json
+
+# Use custom system URL
+aenv instances --system-url http://api.example.com:8080
+```
+
+#### Instances Options
+
+| Option | Short | Description | Example |
+|---|---|---|---|
+| `--name` | `-n` | Filter by environment name | `--name test01` |
+| `--version` | `-v` | Filter by environment version (requires --name) | `--version 1.0.0` |
+| `--format` | `-f` | Output format (table or json) | `--format json` |
+| `--system-url` |  | AEnv system URL (defaults to AENV_SYSTEM_URL env var) | `--system-url http://localhost:8080` |
+
+#### Instances Output Format
+
+```bash
+$ aenv instances
++---------------+---------------+-----------+----------+------+----------------------+
+| Instance ID   | Environment   | Version   | Status   | IP   | Created At           |
++===============+===============+===========+==========+======+======================+
+| test01-tb9gp8 | test01        | 1.0.0     | Running  | -    | 2026-01-12T03:25:46Z |
++---------------+---------------+-----------+----------+------+======================+
+| test01-ccp5v4 | test01        | 1.0.0     | Running  | -    | 2026-01-12T03:25:50Z |
++---------------+---------------+-----------+----------+------+----------------------+
+```
+
+#### Environment Variables
+
+You can configure the API URL using environment variables:
+
+```bash
+# Set API URL (must include port 8080)
+export AENV_SYSTEM_URL=http://api-service:8080
+
+# Set API key (if authentication is enabled)
+export AENV_API_KEY=your-token-here
+
+# Then run the command
+aenv instances
+```
+
+#### Instances Notes
+
+- **API URL**: The CLI automatically uses port 8080 for the system URL. If you provide a URL with a different port, it will be adjusted.
+- **Authentication**: If token authentication is enabled, set the `AENV_API_KEY` environment variable
+- **Instance ID Format**: Instance IDs typically follow the pattern `environment-name-randomid` (e.g., `test01-tb9gp8`)
+- **Filtering**: Use `--name` to filter by environment name, optionally combined with `--version` for more specific filtering
+
 ### `aenv get` - Get Environment Details
 
 Retrieve detailed information about a specific environment.
@@ -543,6 +612,9 @@ aenv init → aenv run → aenv build → aenv push
 
 # Environment management
 aenv list → aenv get → aenv push
+
+# Instance management
+aenv instances → aenv instances --name <env> → aenv instances --format json
 
 # Configuration management
 aenv config path → aenv config set → aenv config show

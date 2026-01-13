@@ -222,9 +222,50 @@ func (c *ScheduleClient) DeleteEnvInstance(id string) error {
 	return nil
 }
 
-// ListEnvInstances implements EnvInstanceService interface - not implemented yet
+// ListEnvInstances implements EnvInstanceService interface
+// Lists environment instances, optionally filtered by environment name
 func (c *ScheduleClient) ListEnvInstances(envName string) ([]*models.EnvInstance, error) {
-	return nil, fmt.Errorf("ListEnvInstances is not implemented")
+	url := fmt.Sprintf("%s/pods", c.baseURL)
+	if envName != "" {
+		url = fmt.Sprintf("%s/pods?envName=%s", c.baseURL, envName)
+	}
+
+	httpReq, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("list env instances: failed to create request: %v", err)
+	}
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("list env instances: failed to send request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("list env instances: failed to read response body: %v", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("list env instances: request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var getResp models.ClientResponse[[]models.EnvInstance]
+	if err := json.Unmarshal(body, &getResp); err != nil {
+		return nil, fmt.Errorf("list env instances: failed to unmarshal response: %v", err)
+	}
+
+	if !getResp.Success {
+		return nil, fmt.Errorf("list env instances: server returned error, code: %d", getResp.Code)
+	}
+
+	// Convert []models.EnvInstance to []*models.EnvInstance
+	instances := make([]*models.EnvInstance, len(getResp.Data))
+	for i := range getResp.Data {
+		instances[i] = &getResp.Data[i]
+	}
+
+	return instances, nil
 }
 
 func (c *ScheduleClient) Warmup(req *backend.Env) error {

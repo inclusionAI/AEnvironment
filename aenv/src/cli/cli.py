@@ -14,7 +14,7 @@
 
 import click
 
-from cli.cmds import build, config, get, init, list, push, run, version
+from cli.cmds import build, config, get, init, instances, list, push, run, version
 from cli.cmds.common import Config, global_error_handler, pass_config
 
 
@@ -43,6 +43,7 @@ cli.add_command(list)
 cli.add_command(version)
 cli.add_command(build)
 cli.add_command(config)
+cli.add_command(instances)
 
 if __name__ == "__main__":
     cli()
