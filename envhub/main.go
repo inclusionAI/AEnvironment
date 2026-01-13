@@ -87,7 +87,7 @@ func main() {
 		log.Printf("OSS storage is not configured, OSS-related features will be disabled")
 	}
 
-	var ciTrigger clients.ACITrigger
+	var ciTrigger service.CITrigger
 	if templateId != "" && callbackURL != "" {
 		ciTrigger = clients.ACITrigger{
 			TemplateId:  templateId,
