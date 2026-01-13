@@ -442,7 +442,7 @@ export AENV_API_KEY=your-token-here
 aenv instances
 ```
 
-#### Important Notes
+#### Instances Notes
 
 - **API URL**: The `AENV_SYSTEM_URL` environment variable should include the port number (default: 8080)
 - **Authentication**: If token authentication is enabled, set the `AENV_API_KEY` environment variable

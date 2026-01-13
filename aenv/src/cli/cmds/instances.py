@@ -79,7 +79,7 @@ def _get_instance_info(system_url: str, instance_id: str) -> Optional[dict]:
     Returns:
         Instance details dict or None if failed
     """
-    import requests
+    import requests  # noqa: I001
 
     url = f"{system_url}/env-instance/{instance_id}"
 
@@ -118,7 +118,7 @@ def _list_instances_from_api(
     Returns:
         List of running instances
     """
-    import requests
+    import requests  # noqa: I001
 
     # Build the API endpoint
     # Route is /env-instance/:id/list where :id is required
