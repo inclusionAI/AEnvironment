@@ -24,7 +24,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"envhub/clients"
 	"envhub/models"
 	"envhub/service"
 )
@@ -32,12 +31,14 @@ import (
 type EnvController struct {
 	storage    service.EnvStorage
 	ossStorage *service.OssStorage
+	ciTrigger  service.CITrigger
 }
 
-func NewEnvController(storage service.EnvStorage, ossStorage *service.OssStorage) *EnvController {
+func NewEnvController(storage service.EnvStorage, ossStorage *service.OssStorage, ciTrigger service.CITrigger) *EnvController {
 	return &EnvController{
 		storage:    storage,
 		ossStorage: ossStorage,
+		ciTrigger:  ciTrigger,
 	}
 }
 
@@ -160,7 +161,9 @@ func (ctrl *EnvController) CreateEnv(c *gin.Context) {
 	}
 
 	// aci hook image build
-	go clients.ACIHook(env)
+	if ctrl.ciTrigger != nil {
+		go ctrl.ciTrigger.Trigger(env)
+	}
 
 	models.JSONSuccess(c, true)
 }
@@ -239,7 +242,9 @@ func (ctrl *EnvController) UpdateEnv(c *gin.Context) {
 	}
 
 	// Code changes trigger image build
-	go clients.ACIHook(env)
+	if ctrl.ciTrigger != nil {
+		go ctrl.ciTrigger.Trigger(env)
+	}
 
 	models.JSONSuccess(c, true)
 }
