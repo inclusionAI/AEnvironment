@@ -444,7 +444,7 @@ aenv instances
 
 #### Instances Notes
 
-- **API URL**: The `AENV_SYSTEM_URL` environment variable should include the port number (default: 8080)
+- **API URL**: The CLI automatically uses port 8080 for the system URL. If you provide a URL with a different port, it will be adjusted.
 - **Authentication**: If token authentication is enabled, set the `AENV_API_KEY` environment variable
 - **Instance ID Format**: Instance IDs typically follow the pattern `environment-name-randomid` (e.g., `test01-tb9gp8`)
 - **Filtering**: Use `--name` to filter by environment name, optionally combined with `--version` for more specific filtering
