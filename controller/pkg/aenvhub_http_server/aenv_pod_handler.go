@@ -195,6 +195,9 @@ type HttpListResponseData struct {
 	Status    string    `json:"status"`
 	TTL       string    `json:"ttl"`
 	CreatedAt time.Time `json:"created_at"`
+	EnvName   string    `json:"envname"`
+	Version   string    `json:"version"`
+	IP        string    `json:"ip"`
 }
 type HttpListResponse struct {
 	Success          bool                   `json:"success"`
@@ -228,13 +231,18 @@ func (h *AEnvPodHandler) createPod(w http.ResponseWriter, r *http.Request) {
 
 	// Generate name
 	pod.Name = fmt.Sprintf("%s-%s", aenvHubEnv.Name, RandString(6))
+	// Initialize labels if nil
+	labels := pod.Labels
+	if labels == nil {
+		labels = make(map[string]string)
+		pod.Labels = labels
+	}
+	// Set pods envname and version by label
+	labels[constants.AENV_NAME] = aenvHubEnv.Name
+	labels[constants.AENV_VERSION] = aenvHubEnv.Version
+	klog.Infof("add aenv-name label with value:%v and aenv-version label with value:%v for pod:%s", aenvHubEnv.Name, aenvHubEnv.Version, pod.Name)
 	// Set pods TTL by label
 	if aenvHubEnv.DeployConfig["ttl"] != nil {
-		labels := pod.Labels
-		if labels == nil {
-			labels = make(map[string]string)
-			pod.Labels = labels
-		}
 		ttlValue := aenvHubEnv.DeployConfig["ttl"].(string)
 		labels[constants.AENV_TTL] = ttlValue
 		klog.Infof("add aenv-ttl label with value:%v for pod:%s", ttlValue, pod.Name)
@@ -366,6 +374,9 @@ func (h *AEnvPodHandler) listPod(w http.ResponseWriter, r *http.Request) {
 			Status:    string(pod.Status.Phase),
 			CreatedAt: pod.CreationTimestamp.Time,
 			TTL:       pod.Labels[constants.AENV_TTL],
+			EnvName:   pod.Labels[constants.AENV_NAME],
+			Version:   pod.Labels[constants.AENV_VERSION],
+			IP:        pod.Status.PodIP,
 		})
 	}
 
