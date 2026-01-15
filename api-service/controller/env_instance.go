@@ -167,9 +167,15 @@ func (ctrl *EnvInstanceController) ListEnvInstances(c *gin.Context) {
 		backendmodels.JSONErrorWithMessage(c, 403, "token required")
 		return
 	}
+	id := c.Param("id")
+
+	// Handle wildcard "*" as "list all instances"
+	if id == "*" {
+		id = ""
+	}
+
 	if ctrl.redisClient != nil {
 		var query = models.EnvInstance{Env: &backendmodels.Env{}}
-		id := c.Param("id")
 		if id != "" {
 			name, version := util.SplitEnvNameVersion(id)
 			query.Env.Name = name
@@ -182,7 +188,16 @@ func (ctrl *EnvInstanceController) ListEnvInstances(c *gin.Context) {
 		}
 		log.Warnf("failed to list from redis: %v", err)
 	}
-	envName := c.Query("envName")
+
+	// Extract envName from id or query parameter
+	var envName string
+	if id != "" {
+		name, _ := util.SplitEnvNameVersion(id)
+		envName = name
+	} else {
+		envName = c.Query("envName")
+	}
+
 	instances, err := ctrl.envInstanceService.ListEnvInstances(envName)
 	if err != nil {
 		backendmodels.JSONErrorWithMessage(c, 500, err.Error())
