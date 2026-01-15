@@ -213,7 +213,11 @@ func (h *AEnvPodHandler) createPod(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Invalid request body: %v", err), http.StatusBadRequest)
 		return
 	}
-	defer r.Body.Close()
+	defer func() {
+		if closeErr := r.Body.Close(); closeErr != nil {
+			klog.Errorf("failed to close request body: %v", closeErr)
+		}
+	}()
 
 	// Get podTemplate type, default to "singleContainer"
 	templateType := SingleContainerTemplate

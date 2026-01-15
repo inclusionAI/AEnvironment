@@ -85,7 +85,7 @@ func PKCS5Padding(data []byte, blockSize int) []byte {
 // Returns: hexadecimal encrypted result
 func AESECBEncrypt(src, key string) (string, error) {
 	if len(key) != 16 {
-		return "", errors.New("Key must be 16 characters long")
+		return "", errors.New("key must be 16 characters long")
 	}
 
 	// Use UTF-8 encoding for key and plaintext

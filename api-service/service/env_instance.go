@@ -7,6 +7,7 @@ import (
 	backend "envhub/models"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"time"
 )
@@ -63,7 +64,11 @@ func (c *EnvInstanceClient) CreateEnvInstance(req *backend.Env) (*models.EnvInst
 	if err != nil {
 		return nil, fmt.Errorf("create env instance: failed to send request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Printf("failed to close response body: %v", closeErr)
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -106,7 +111,11 @@ func (c *EnvInstanceClient) GetEnvInstance(id string) (*models.EnvInstance, erro
 	if err != nil {
 		return nil, fmt.Errorf("get env instance %s: failed to send request: %v", id, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Printf("failed to close response body: %v", closeErr)
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -148,7 +157,11 @@ func (c *EnvInstanceClient) DeleteEnvInstance(id string) error {
 	if err != nil {
 		return fmt.Errorf("delete env instance %s: failed to send request: %v", id, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Printf("failed to close response body: %v", closeErr)
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -191,7 +204,11 @@ func (c *EnvInstanceClient) ListEnvInstances(envName string) ([]*models.EnvInsta
 	if err != nil {
 		return nil, fmt.Errorf("list env instances: failed to send request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Printf("failed to close response body: %v", closeErr)
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -233,7 +250,11 @@ func (c *EnvInstanceClient) Warmup(req *backend.Env) error {
 	if err != nil {
 		return fmt.Errorf("warmup env: failed to send request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Printf("failed to close response body: %v", closeErr)
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -275,7 +296,11 @@ func (c *EnvInstanceClient) Cleanup() error {
 	if err != nil {
 		return fmt.Errorf("cleanup env: failed to send request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Printf("failed to close response body: %v", closeErr)
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
