@@ -231,6 +231,7 @@ type PodListResponseData struct {
 	EnvName   string    `json:"envname"`
 	Version   string    `json:"version"`
 	IP        string    `json:"ip"`
+	Owner     string    `json:"owner"`
 }
 
 // PodListResponse represents the response structure from controller's list pod endpoint
@@ -298,6 +299,7 @@ func (c *ScheduleClient) ListEnvInstances(envName string) ([]*models.EnvInstance
 			UpdatedAt: nowStr,
 			IP:        podData.IP,
 			TTL:       podData.TTL,
+			Owner:     podData.Owner,
 		}
 	}
 

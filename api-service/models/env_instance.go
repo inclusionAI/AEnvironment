@@ -59,6 +59,7 @@ type EnvInstance struct {
 	UpdatedAt string       `json:"updated_at"` // Update time
 	IP        string       `json:"ip"`         // Instance IP
 	TTL       string       `json:"ttl"`        // time to live
+	Owner     string       `json:"owner"`      // Instance owner (user who created it)
 }
 
 // NewEnvInstance creates a new environment instance object
@@ -71,6 +72,21 @@ func NewEnvInstance(id string, env *backend.Env, ip string) *EnvInstance {
 		CreatedAt: now,
 		UpdatedAt: now,
 		IP:        ip,
+		Owner:     "",
+	}
+}
+
+// NewEnvInstanceWithOwner creates a new environment instance object with owner
+func NewEnvInstanceWithOwner(id string, env *backend.Env, ip string, owner string) *EnvInstance {
+	now := time.Now().Format("2006-01-02 15:04:05")
+	return &EnvInstance{
+		ID:        id,
+		Env:       env,
+		Status:    EnvInstanceStatusPending.String(),
+		CreatedAt: now,
+		UpdatedAt: now,
+		IP:        ip,
+		Owner:     owner,
 	}
 }
 
@@ -84,6 +100,7 @@ func NewEnvInstanceWithStatus(id string, env *backend.Env, status EnvInstanceSta
 		CreatedAt: now,
 		UpdatedAt: now,
 		IP:        ip,
+		Owner:     "",
 	}
 }
 
@@ -96,6 +113,7 @@ func NewEnvInstanceFull(id string, env *backend.Env, status EnvInstanceStatus, c
 		CreatedAt: createdAt,
 		UpdatedAt: updatedAt,
 		IP:        ip,
+		Owner:     "",
 	}
 }
 

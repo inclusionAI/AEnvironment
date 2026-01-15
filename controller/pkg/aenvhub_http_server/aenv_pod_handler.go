@@ -169,6 +169,7 @@ type HttpResponseData struct {
 	Status string `json:"status"`
 	IP     string `json:"ip"`
 	TTL    string `json:"ttl"`
+	Owner  string `json:"owner"`
 }
 type HttpResponse struct {
 	Success      bool             `json:"success"`
@@ -198,6 +199,7 @@ type HttpListResponseData struct {
 	EnvName   string    `json:"envname"`
 	Version   string    `json:"version"`
 	IP        string    `json:"ip"`
+	Owner     string    `json:"owner"`
 }
 type HttpListResponse struct {
 	Success          bool                   `json:"success"`
@@ -246,6 +248,12 @@ func (h *AEnvPodHandler) createPod(w http.ResponseWriter, r *http.Request) {
 		ttlValue := aenvHubEnv.DeployConfig["ttl"].(string)
 		labels[constants.AENV_TTL] = ttlValue
 		klog.Infof("add aenv-ttl label with value:%v for pod:%s", ttlValue, pod.Name)
+	}
+	// Set pods owner by label
+	if aenvHubEnv.DeployConfig["owner"] != nil {
+		ownerValue := aenvHubEnv.DeployConfig["owner"].(string)
+		labels[constants.AENV_OWNER] = ownerValue
+		klog.Infof("add aenv-owner label with value:%v for pod:%s", ownerValue, pod.Name)
 	}
 
 	createdPod, err := h.clientset.CoreV1().Pods(h.namespace).Create(r.Context(), pod, metav1.CreateOptions{})
@@ -312,6 +320,7 @@ func (h *AEnvPodHandler) getPod(podName string, w http.ResponseWriter, r *http.R
 			TTL:    pod.Labels[constants.AENV_TTL],
 			Status: string(pod.Status.Phase),
 			IP:     pod.Status.PodIP,
+			Owner:  pod.Labels[constants.AENV_OWNER],
 		},
 	}
 
@@ -343,6 +352,8 @@ func (h *AEnvPodHandler) getPod(podName string, w http.ResponseWriter, r *http.R
 func (h *AEnvPodHandler) listPod(w http.ResponseWriter, r *http.Request) {
 	// query param:?filter=expired
 	filterMark := r.URL.Query().Get("filter")
+	// query param:?envName=xxx
+	envNameFilter := r.URL.Query().Get("envName")
 
 	var podList []*corev1.Pod
 	var err error
@@ -369,6 +380,13 @@ func (h *AEnvPodHandler) listPod(w http.ResponseWriter, r *http.Request) {
 		Code:    0,
 	}
 	for _, pod := range podList {
+		// Filter by envName if specified
+		if envNameFilter != "" {
+			podEnvName := pod.Labels[constants.AENV_NAME]
+			if podEnvName != envNameFilter {
+				continue
+			}
+		}
 		httpListResponse.ListResponseData = append(httpListResponse.ListResponseData, HttpListResponseData{
 			ID:        pod.Name,
 			Status:    string(pod.Status.Phase),
@@ -377,6 +395,7 @@ func (h *AEnvPodHandler) listPod(w http.ResponseWriter, r *http.Request) {
 			EnvName:   pod.Labels[constants.AENV_NAME],
 			Version:   pod.Labels[constants.AENV_VERSION],
 			IP:        pod.Status.PodIP,
+			Owner:     pod.Labels[constants.AENV_OWNER],
 		})
 	}
 

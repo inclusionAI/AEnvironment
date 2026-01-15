@@ -82,6 +82,7 @@ class EnvInstanceCreateRequest(BaseModel):
         Field(None, description="Environment variables"),
     )
     arguments: Optional[List[str]] = (Field(None, description="Startup arguments"),)
+    owner: Optional[str] = Field(None, description="Instance owner")
 
 
 class EnvInstanceListResponse(BaseModel):

@@ -27,7 +27,7 @@ Uses Environment SDK for deployment operations (create)
 import asyncio
 import json
 import os
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 from urllib.parse import urlparse, urlunparse
 
 import click
@@ -71,6 +71,27 @@ def _parse_arguments(arg_list: tuple) -> list:
     return list(arg_list) if arg_list else []
 
 
+def _split_env_name_version(env_name: str) -> Tuple[str, str]:
+    """Split environment name into name and version.
+
+    Args:
+        env_name: Environment name in format "name@version" or just "name"
+
+    Returns:
+        Tuple of (name, version). If no @ symbol, version is empty string.
+    """
+    if not env_name:
+        return "", ""
+
+    parts = env_name.split("@", 1)
+    if len(parts) == 1:
+        # No @ symbol, use entire string as name
+        return parts[0], ""
+    else:
+        # Has @ symbol, first part as name, second part as version
+        return parts[0], parts[1]
+
+
 def _make_api_url(aenv_url: str, port: int = 8080) -> str:
     """Make API URL with specified port.
 
@@ -100,11 +121,45 @@ def _make_api_url(aenv_url: str, port: int = 8080) -> str:
     return urlunparse(new).rstrip("/")
 
 
-def _get_system_url() -> str:
-    """Get AEnv system URL from environment variable or config."""
+def _get_system_url_raw() -> Optional[str]:
+    """Get raw AEnv system URL from environment variable or config (without processing).
+
+    Priority order:
+    1. AENV_SYSTEM_URL environment variable (highest priority)
+    2. system_url in config file
+    3. None (no default)
+
+    Returns:
+        Raw system URL string or None if not found
+    """
+    # First check environment variable
     system_url = os.getenv("AENV_SYSTEM_URL")
+
+    # If not in env, check config
+    if not system_url:
+        config_manager = get_config_manager()
+        system_url = config_manager.get("system_url")
+
+    return system_url
+
+
+def _get_system_url() -> str:
+    """Get AEnv system URL from environment variable or config (processed for API).
+
+    Priority order:
+    1. AENV_SYSTEM_URL environment variable (highest priority)
+    2. system_url in config file
+    3. Default value (http://localhost:8080)
+
+    Returns:
+        Processed API URL with port
+    """
+    system_url = _get_system_url_raw()
+
+    # Use default if still not found
     if not system_url:
         system_url = "http://localhost:8080"
+
     return _make_api_url(system_url, port=8080)
 
 
@@ -121,7 +176,11 @@ def _get_api_headers() -> Dict[str, str]:
 
 
 def _list_instances_from_api(
-    system_url: str, env_name: Optional[str] = None, version: Optional[str] = None
+    system_url: str,
+    env_name: Optional[str] = None,
+    version: Optional[str] = None,
+    verbose: bool = False,
+    console=None,
 ) -> list:
     """List running instances from API service.
 
@@ -129,6 +188,8 @@ def _list_instances_from_api(
         system_url: AEnv system URL
         env_name: Optional environment name filter
         version: Optional version filter
+        verbose: Enable debug logging
+        console: Console object for logging (if verbose)
 
     Returns:
         List of running instances
@@ -145,24 +206,151 @@ def _list_instances_from_api(
     url = f"{system_url}/env-instance/{env_id}/list"
     headers = _get_api_headers()
 
+    # Add query parameters
+    params = {}
+
+    # Debug logging
+    if verbose and console:
+        console.print(f"[dim]🔍 Debug: Request URL: {url}[/dim]")
+        console.print(
+            f"[dim]🔍 Debug: Query params: {params if params else 'none'}[/dim]"
+        )
+        # Don't log full headers for security, but show if auth is present
+        has_auth = "Authorization" in headers
+        console.print(
+            f"[dim]🔍 Debug: Headers: Content-Type={headers.get('Content-Type')}, "
+            f"Authorization={'present' if has_auth else 'not set'}[/dim]"
+        )
+
     try:
-        response = requests.get(url, headers=headers, timeout=30)
+        if verbose and console:
+            console.print(f"[dim]🔍 Debug: Sending GET request...[/dim]")
+
+        response = requests.get(url, headers=headers, params=params, timeout=30)
+
+        if verbose and console:
+            console.print(
+                f"[dim]🔍 Debug: Response status: {response.status_code}[/dim]"
+            )
+            console.print(
+                f"[dim]🔍 Debug: Response headers: {dict(response.headers)}[/dim]"
+            )
+
+        # Check for HTTP errors
+        if response.status_code == 403:
+            error_detail = ""
+            if verbose and console:
+                try:
+                    error_body = response.json()
+                    error_detail = f"\nResponse: {error_body}"
+                except:
+                    error_detail = f"\nResponse body: {response.text[:200]}"
+            raise click.ClickException(
+                "Authentication failed (403). Please check your API key configuration.\n"
+                "You can set it with: aenv config set hub_config.api_key <your-key>\n"
+                "Or use AENV_API_KEY environment variable." + error_detail
+            )
+        elif response.status_code == 401:
+            error_detail = ""
+            if verbose and console:
+                try:
+                    error_body = response.json()
+                    error_detail = f"\nResponse: {error_body}"
+                except:
+                    error_detail = f"\nResponse body: {response.text[:200]}"
+            raise click.ClickException(
+                "Unauthorized (401). Invalid or missing API key.\n"
+                "Please check your API key configuration." + error_detail
+            )
+
         response.raise_for_status()
 
         result = response.json()
+
+        if verbose and console:
+            console.print(
+                f"[dim]🔍 Debug: Response body (success): {result.get('success')}[/dim]"
+            )
+            console.print(
+                f"[dim]🔍 Debug: Response body (code): {result.get('code')}[/dim]"
+            )
+            if result.get("data"):
+                data_len = (
+                    len(result.get("data", []))
+                    if isinstance(result.get("data"), list)
+                    else 1
+                )
+                console.print(
+                    f"[dim]🔍 Debug: Response data: {data_len} item(s) returned[/dim]"
+                )
+            else:
+                console.print(f"[dim]🔍 Debug: Response data: empty or null[/dim]")
+
         if result.get("success") and result.get("data"):
-            return result["data"]
+            instances = result["data"]
+
+            if verbose and console:
+                console.print(
+                    f"[dim]🔍 Debug: Found {len(instances)} instance(s)[/dim]"
+                )
+
+            return instances
+        elif not result.get("success"):
+            error_msg = result.get("message", "Unknown error")
+            if verbose and console:
+                console.print(f"[dim]🔍 Debug: API returned error: {error_msg}[/dim]")
+            raise click.ClickException(f"API returned error: {error_msg}")
+
+        if verbose and console:
+            console.print(
+                f"[dim]🔍 Debug: No data in response, returning empty list[/dim]"
+            )
+
         return []
+    except requests.exceptions.ConnectionError as e:
+        error_msg = (
+            f"Failed to connect to API service at {system_url}.\n"
+            f"Please check:\n"
+            f"  1. Is the API service running?\n"
+            f"  2. Is the system_url correct? (current: {system_url})\n"
+            f"  3. You can set it with: aenv config set system_url <url>\n"
+            f"  4. Or use AENV_SYSTEM_URL environment variable.\n"
+            f"Error: {str(e)}"
+        )
+        if verbose and console:
+            console.print(f"[dim]🔍 Debug: Connection error details: {str(e)}[/dim]")
+        raise click.ClickException(error_msg)
+    except requests.exceptions.Timeout as e:
+        error_msg = (
+            f"Request timeout while connecting to {system_url}.\n"
+            f"The API service may be slow or unreachable."
+        )
+        if verbose and console:
+            console.print(f"[dim]🔍 Debug: Timeout after 30 seconds[/dim]")
+        raise click.ClickException(error_msg)
     except requests.exceptions.RequestException as e:
-        raise click.ClickException(f"Failed to query instances: {str(e)}")
+        error_msg = f"Failed to query instances: {str(e)}"
+        if verbose and console:
+            console.print(f"[dim]🔍 Debug: Request exception: {str(e)}[/dim]")
+            import traceback
+
+            console.print(f"[dim]🔍 Debug: Traceback:\n{traceback.format_exc()}[/dim]")
+        raise click.ClickException(error_msg)
 
 
-def _get_instance_from_api(system_url: str, instance_id: str) -> Optional[dict]:
+def _get_instance_from_api(
+    system_url: str,
+    instance_id: str,
+    verbose: bool = False,
+    console=None,
+) -> Optional[dict]:
     """Get detailed information for a single instance.
 
     Args:
         system_url: AEnv system URL
         instance_id: Instance ID
+        verbose: Enable debug logging
+        console: Console object for logging (if verbose)
 
     Returns:
         Instance details dict or None if failed
@@ -170,16 +358,131 @@ def _get_instance_from_api(system_url: str, instance_id: str) -> Optional[dict]:
     url = f"{system_url}/env-instance/{instance_id}"
     headers = _get_api_headers()
 
+    # Debug logging
+    if verbose and console:
+        console.print(f"[dim]🔍 Debug: Request URL: {url}[/dim]")
+        has_auth = "Authorization" in headers
+        console.print(
+            f"[dim]🔍 Debug: Headers: Content-Type={headers.get('Content-Type')}, "
+            f"Authorization={'present' if has_auth else 'not set'}[/dim]"
+        )
+
     try:
+        if verbose and console:
+            console.print(f"[dim]🔍 Debug: Sending GET request...[/dim]")
+
         response = requests.get(url, headers=headers, timeout=10)
+
+        if verbose and console:
+            console.print(
+                f"[dim]🔍 Debug: Response status: {response.status_code}[/dim]"
+            )
+            console.print(
+                f"[dim]🔍 Debug: Response headers: {dict(response.headers)}[/dim]"
+            )
+
+        # Check for HTTP errors
+        if response.status_code == 403:
+            error_detail = ""
+            if verbose and console:
+                try:
+                    error_body = response.json()
+                    error_detail = f"\nResponse: {error_body}"
+                except:
+                    error_detail = f"\nResponse body: {response.text[:200]}"
+            raise click.ClickException(
+                "Authentication failed (403). Please check your API key configuration.\n"
+                "You can set it with: aenv config set hub_config.api_key <your-key>\n"
+                "Or use AENV_API_KEY environment variable." + error_detail
+            )
+        elif response.status_code == 401:
+            error_detail = ""
+            if verbose and console:
+                try:
+                    error_body = response.json()
+                    error_detail = f"\nResponse: {error_body}"
+                except:
+                    error_detail = f"\nResponse body: {response.text[:200]}"
+            raise click.ClickException(
+                "Unauthorized (401). Invalid or missing API key.\n"
+                "Please check your API key configuration." + error_detail
+            )
+
         response.raise_for_status()
 
         result = response.json()
+
+        if verbose and console:
+            console.print(
+                f"[dim]🔍 Debug: Response body (success): {result.get('success')}[/dim]"
+            )
+            console.print(
+                f"[dim]🔍 Debug: Response body (code): {result.get('code')}[/dim]"
+            )
+            if result.get("data"):
+                console.print(f"[dim]🔍 Debug: Response data: instance found[/dim]")
+            else:
+                console.print(f"[dim]🔍 Debug: Response data: empty or null[/dim]")
+
         if result.get("success") and result.get("data"):
             return result["data"]
+        elif not result.get("success"):
+            error_msg = result.get("message", "Unknown error")
+            if verbose and console:
+                console.print(f"[dim]🔍 Debug: API returned error: {error_msg}[/dim]")
+            raise click.ClickException(f"API returned error: {error_msg}")
         return None
+    except requests.exceptions.HTTPError as e:
+        # Extract error details from response body
+        error_detail = ""
+        if hasattr(e.response, "text"):
+            try:
+                error_body = e.response.json()
+                if isinstance(error_body, dict):
+                    error_msg = (
+                        error_body.get("message")
+                        or error_body.get("error")
+                        or str(error_body)
+                    )
+                    error_detail = f": {error_msg}"
+                else:
+                    error_detail = f": {str(error_body)[:200]}"
+            except:
+                error_detail = f": {e.response.text[:200]}"
+
+        error_msg = f"Failed to get instance info: {str(e)}{error_detail}"
+        if verbose and console:
+            console.print(f"[dim]🔍 Debug: HTTP error details: {error_detail}[/dim]")
+        raise click.ClickException(error_msg)
+    except requests.exceptions.ConnectionError as e:
+        error_msg = (
+            f"Failed to connect to API service at {system_url}.\n"
+            f"Please check:\n"
+            f"  1. Is the API service running?\n"
+            f"  2. Is the system_url correct? (current: {system_url})\n"
+            f"  3. You can set it with: aenv config set system_url <url>\n"
+            f"  4. Or use AENV_SYSTEM_URL environment variable.\n"
+            f"Error: {str(e)}"
+        )
+        if verbose and console:
+            console.print(f"[dim]🔍 Debug: Connection error details: {str(e)}[/dim]")
+        raise click.ClickException(error_msg)
+    except requests.exceptions.Timeout as e:
+        error_msg = (
+            f"Request timeout while connecting to {system_url}.\n"
+            f"The API service may be slow or unreachable."
+        )
+        if verbose and console:
+            console.print(f"[dim]🔍 Debug: Timeout after 10 seconds[/dim]")
+        raise click.ClickException(error_msg)
     except requests.exceptions.RequestException as e:
-        raise click.ClickException(f"Failed to get instance info: {str(e)}")
+        error_msg = f"Failed to get instance info: {str(e)}"
+        if verbose and console:
+            console.print(f"[dim]🔍 Debug: Request exception: {str(e)}[/dim]")
+            import traceback
+
+            console.print(f"[dim]🔍 Debug: Traceback:\n{traceback.format_exc()}[/dim]")
+        raise click.ClickException(error_msg)
 
 
 def _delete_instance_from_api(system_url: str, instance_id: str) -> bool:
@@ -217,6 +520,7 @@ async def _deploy_instance(
     max_retries: int,
     api_key: Optional[str],
     skip_health: bool,
+    owner: Optional[str],
 ) -> Environment:
     """Deploy a new environment instance.
 
@@ -235,6 +539,7 @@ async def _deploy_instance(
         max_retries=max_retries,
         api_key=api_key,
         skip_for_healthy=skip_health,
+        owner=owner,
     )
 
     await env.initialize()
@@ -303,7 +608,7 @@ def instance(cfg: Config):
 )
 @click.option(
     "--system-url",
-    help="AEnv system URL (defaults to AENV_SYSTEM_URL env var)",
+    help="AEnv system URL (defaults to AENV_SYSTEM_URL env var or config)",
 )
 @click.option(
     "--timeout",
@@ -344,6 +649,11 @@ def instance(cfg: Config):
     is_flag=True,
     help="Keep the instance running after deployment (doesn't auto-release)",
 )
+@click.option(
+    "--owner",
+    type=str,
+    help="Owner of the instance (defaults to owner in config if not specified)",
+)
 @pass_config
 def create(
     cfg: Config,
@@ -360,6 +670,7 @@ def create(
     skip_health: bool,
     output: str,
     keep_alive: bool,
+    owner: Optional[str],
 ):
     """Create a new environment instance
 
@@ -388,13 +699,23 @@ def create(
         console.print(f"[red]Error:[/red] {str(e)}")
         raise click.Abort()
 
+    # Parse env_name to extract name and version, and inject system environment variables
+    env_name_parsed, env_version_parsed = _split_env_name_version(env_name)
+    env_vars["envNAME"] = env_name_parsed
+    env_vars["envversion"] = env_version_parsed
+
     # Get API key from env if not provided
     if not api_key:
         api_key = os.getenv("AENV_API_KEY")
 
-    # Get system URL from env if not provided
+    # Get system URL from env, config, or use default
     if not system_url:
-        system_url = os.getenv("AENV_SYSTEM_URL")
+        system_url = _get_system_url_raw()
+
+    # Get owner from command line, config, or None
+    if not owner:
+        config_manager = get_config_manager()
+        owner = config_manager.get("owner")
 
     console.print(f"[cyan]🚀 Deploying environment instance:[/cyan] {env_name}")
     if datasource:
@@ -422,6 +743,7 @@ def create(
                     max_retries=max_retries,
                     api_key=api_key,
                     skip_health=skip_health,
+                    owner=owner,
                 )
             )
 
@@ -445,20 +767,27 @@ def create(
 
         # Store instance reference for potential cleanup
         if not keep_alive:
-            console.print("\n[yellow]⚠️  Instance will be released when the command exits[/yellow]")
-            console.print("[yellow]   Use --keep-alive flag to keep the instance running[/yellow]")
+            console.print(
+                "\n[yellow]⚠️  Instance will be released when the command exits[/yellow]"
+            )
+            console.print(
+                "[yellow]   Use --keep-alive flag to keep the instance running[/yellow]"
+            )
             # Release the instance
             asyncio.run(_stop_instance(env))
             console.print("[green]✅ Instance released[/green]")
         else:
             console.print("\n[green]✅ Instance is running and will stay alive[/green]")
             console.print(f"[cyan]Instance ID:[/cyan] {info.get('instance_id')}")
-            console.print(f"[cyan]Use 'aenv instances' to view all running instances[/cyan]")
+            console.print(
+                f"[cyan]Use 'aenv instances' to view all running instances[/cyan]"
+            )
 
     except Exception as e:
         console.print(f"[red]❌ Deployment failed:[/red] {str(e)}")
         if cfg.verbose:
             import traceback
+
             console.print(traceback.format_exc())
         raise click.Abort()
 
@@ -467,7 +796,7 @@ def create(
 @click.argument("env_name")
 @click.option(
     "--system-url",
-    help="AEnv system URL (defaults to AENV_SYSTEM_URL env var)",
+    help="AEnv system URL (defaults to AENV_SYSTEM_URL env var or config)",
 )
 @click.option(
     "--timeout",
@@ -514,9 +843,9 @@ def info(
     if not api_key:
         api_key = os.getenv("AENV_API_KEY")
 
-    # Get system URL from env if not provided
+    # Get system URL from env, config, or use default
     if not system_url:
-        system_url = os.getenv("AENV_SYSTEM_URL")
+        system_url = _get_system_url_raw()
 
     console.print(f"[cyan]ℹ️  Retrieving instance information:[/cyan] {env_name}\n")
 
@@ -556,6 +885,7 @@ def info(
         console.print(f"[red]❌ Failed to get instance information:[/red] {str(e)}")
         if cfg.verbose:
             import traceback
+
             console.print(traceback.format_exc())
         raise click.Abort()
 
@@ -569,7 +899,6 @@ def info(
 )
 @click.option(
     "--version",
-    "-v",
     type=str,
     help="Filter by environment version (requires --name)",
 )
@@ -583,14 +912,19 @@ def info(
 @click.option(
     "--system-url",
     type=str,
-    help="AEnv system URL (defaults to AENV_SYSTEM_URL env var)",
+    help="AEnv system URL (defaults to AENV_SYSTEM_URL env var or config)",
+)
+@click.option(
+    "--verbose",
+    is_flag=True,
+    help="Enable verbose/debug output",
 )
 @pass_config
-def list_instances(cfg: Config, name, version, output, system_url):
+def list_instances(cfg: Config, name, version, output, system_url, verbose):
     """List running environment instances
 
     Query and display running environment instances. Can filter by environment
-    name and optionally by version.
+    name and version.
 
     Examples:
         # List all running instances
@@ -621,12 +955,37 @@ def list_instances(cfg: Config, name, version, output, system_url):
     else:
         system_url = _make_api_url(system_url, port=8080)
 
+    # Use command-level verbose flag or config-level verbose
+    is_verbose = verbose or cfg.verbose
+
+    # Debug: show configuration if verbose
+    if is_verbose:
+        console.print(f"[dim]🔍 Debug: Configuration[/dim]")
+        console.print(f"[dim]  Using system URL: {system_url}[/dim]")
+        config_manager = get_config_manager()
+        config_url = config_manager.get("system_url")
+        env_url = os.getenv("AENV_SYSTEM_URL")
+        console.print(f"[dim]  Config system_url: {config_url or 'not set'}[/dim]")
+        console.print(f"[dim]  Env AENV_SYSTEM_URL: {env_url or 'not set'}[/dim]")
+        if name:
+            console.print(f"[dim]  Filter by env_name: {name}[/dim]")
+        if version:
+            console.print(f"[dim]  Filter by version: {version}[/dim]")
+        console.print()  # Empty line for readability
+
     try:
-        instances_list = _list_instances_from_api(system_url, name, version)
+        instances_list = _list_instances_from_api(
+            system_url,
+            name,
+            version,
+            verbose=is_verbose,
+            console=console if is_verbose else None,
+        )
     except Exception as e:
         console.print(f"[red]❌ Failed to list instances:[/red] {str(e)}")
-        if cfg.verbose:
+        if is_verbose:
             import traceback
+
             console.print(traceback.format_exc())
         raise click.Abort()
 
@@ -650,15 +1009,8 @@ def list_instances(cfg: Config, name, version, output, system_url):
             if not instance_id:
                 continue
 
-            # Try to get detailed info for each instance
-            detailed_info = _get_instance_from_api(system_url, instance_id)
-
-            # Use detailed info if available, otherwise use list data
-            if detailed_info:
-                env_info = detailed_info.get("env") or {}
-            else:
-                env_info = instance.get("env") or {}
-
+            # Use list data directly
+            env_info = instance.get("env") or {}
             env_name = env_info.get("name") if env_info else None
             env_version = env_info.get("version") if env_info else None
 
@@ -668,30 +1020,26 @@ def list_instances(cfg: Config, name, version, output, system_url):
                 if len(parts) >= 2:
                     env_name = parts[0]
 
-            # Get IP from detailed info or list data
-            if detailed_info:
-                ip = detailed_info.get("ip") or ""
-            else:
-                ip = instance.get("ip") or ""
-
+            # Get IP from list data
+            ip = instance.get("ip") or ""
             if not ip:
                 ip = "-"
 
-            # Get status from detailed info or list data
-            status = (
-                detailed_info.get("status")
-                if detailed_info
-                else instance.get("status") or "-"
-            )
+            # Get status from list data
+            status = instance.get("status") or "-"
 
             # Get created_at from list data
             created_at = instance.get("created_at") or "-"
+
+            # Get owner from list data
+            owner = instance.get("owner") or "-"
 
             table_data.append(
                 {
                     "Instance ID": instance_id,
                     "Environment": env_name or "-",
                     "Version": env_version or "-",
+                    "Owner": owner,
                     "Status": status,
                     "IP": ip,
                     "Created At": created_at,
@@ -718,8 +1066,13 @@ def list_instances(cfg: Config, name, version, output, system_url):
     type=str,
     help="AEnv system URL (defaults to AENV_SYSTEM_URL env var)",
 )
+@click.option(
+    "--verbose",
+    is_flag=True,
+    help="Enable verbose/debug output",
+)
 @pass_config
-def get_instance(cfg: Config, instance_id, output, system_url):
+def get_instance(cfg: Config, instance_id, output, system_url, verbose):
     """Get detailed information for a specific instance
 
     Retrieve detailed information about a running environment instance by its ID.
@@ -730,6 +1083,9 @@ def get_instance(cfg: Config, instance_id, output, system_url):
 
         # Get instance information in JSON format
         aenv instance get flowise-xxx-abc123 --output json
+
+        # Get instance information with verbose output
+        aenv instance get flowise-xxx-abc123 --verbose
     """
     console = cfg.console.console()
 
@@ -739,10 +1095,30 @@ def get_instance(cfg: Config, instance_id, output, system_url):
     else:
         system_url = _make_api_url(system_url, port=8080)
 
+    # Use command-level verbose flag or config-level verbose
+    is_verbose = verbose or cfg.verbose
+
+    # Debug: show configuration if verbose
+    if is_verbose:
+        console.print(f"[dim]🔍 Debug: Configuration[/dim]")
+        console.print(f"[dim]  Using system URL: {system_url}[/dim]")
+        config_manager = get_config_manager()
+        config_url = config_manager.get("system_url")
+        env_url = os.getenv("AENV_SYSTEM_URL")
+        console.print(f"[dim]  Config system_url: {config_url or 'not set'}[/dim]")
+        console.print(f"[dim]  Env AENV_SYSTEM_URL: {env_url or 'not set'}[/dim]")
+        console.print(f"[dim]  Instance ID: {instance_id}[/dim]")
+        console.print()  # Empty line for readability
+
     console.print(f"[cyan]ℹ️  Retrieving instance information:[/cyan] {instance_id}\n")
 
     try:
-        instance_info = _get_instance_from_api(system_url, instance_id)
+        instance_info = _get_instance_from_api(
+            system_url,
+            instance_id,
+            verbose=is_verbose,
+            console=console if is_verbose else None,
+        )
 
         if not instance_info:
             console.print(f"[red]❌ Instance not found:[/red] {instance_id}")
@@ -764,8 +1140,14 @@ def get_instance(cfg: Config, instance_id, output, system_url):
                 {"Property": "Version", "Value": env_version},
                 {"Property": "Status", "Value": instance_info.get("status", "-")},
                 {"Property": "IP Address", "Value": instance_info.get("ip", "-")},
-                {"Property": "Created At", "Value": instance_info.get("created_at", "-")},
-                {"Property": "Updated At", "Value": instance_info.get("updated_at", "-")},
+                {
+                    "Property": "Created At",
+                    "Value": instance_info.get("created_at", "-"),
+                },
+                {
+                    "Property": "Updated At",
+                    "Value": instance_info.get("updated_at", "-"),
+                },
             ]
             console.print(tabulate(table_data, headers="keys", tablefmt="grid"))
 
@@ -775,6 +1157,7 @@ def get_instance(cfg: Config, instance_id, output, system_url):
         console.print(f"[red]❌ Failed to get instance information:[/red] {str(e)}")
         if cfg.verbose:
             import traceback
+
             console.print(traceback.format_exc())
         raise click.Abort()
 
@@ -815,7 +1198,9 @@ def delete_instance(cfg: Config, instance_id, yes, system_url):
 
     # Confirm deletion unless --yes flag is provided
     if not yes:
-        console.print(f"[yellow]⚠️  You are about to delete instance:[/yellow] {instance_id}")
+        console.print(
+            f"[yellow]⚠️  You are about to delete instance:[/yellow] {instance_id}"
+        )
         if not click.confirm("Are you sure you want to continue?"):
             console.print("[cyan]Deletion cancelled[/cyan]")
             return
@@ -838,5 +1223,6 @@ def delete_instance(cfg: Config, instance_id, yes, system_url):
         console.print(f"[red]❌ Failed to delete instance:[/red] {str(e)}")
         if cfg.verbose:
             import traceback
+
             console.print(traceback.format_exc())
         raise click.Abort()

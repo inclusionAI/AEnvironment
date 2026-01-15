@@ -22,7 +22,7 @@ import json
 import os
 import traceback
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse, urlunparse
 
 import httpx
@@ -56,6 +56,28 @@ def make_mcp_url(aenv_url: str, port: str, path: str = "") -> str:
         fragment="",
     )
     return urlunparse(new)
+
+
+def split_env_name_version(env_name: str) -> Tuple[str, str]:
+    """
+    Split environment name into name and version.
+
+    Args:
+        env_name: Environment name in format "name@version" or just "name"
+
+    Returns:
+        Tuple of (name, version). If no @ symbol, version is empty string.
+    """
+    if not env_name:
+        return "", ""
+
+    parts = env_name.split("@", 1)
+    if len(parts) == 1:
+        # No @ symbol, use entire string as name
+        return parts[0], ""
+    else:
+        # Has @ symbol, first part as name, second part as version
+        return parts[0], parts[1]
 
 
 class ToolResult:
@@ -94,6 +116,7 @@ class Environment:
         max_retries: int = 10,
         api_key: Optional[str] = None,
         skip_for_healthy: bool = False,
+        owner: Optional[str] = None,
     ):
         """
         Initialize environment.
@@ -117,6 +140,7 @@ class Environment:
         self.arguments = arguments or []
         self.dummy_instance_ip = os.getenv("DUMMY_INSTANCE_IP")
         self.skip_for_healthy = skip_for_healthy
+        self.owner = owner
 
         if not aenv_url:
             aenv_url = self.dummy_instance_ip or os.getenv(
@@ -788,12 +812,23 @@ class Environment:
             f"{self._log_prefix()} Creating environment instance: {self.env_name}"
         )
         try:
+            # Parse env_name to extract name and version
+            env_name_parsed, env_version_parsed = split_env_name_version(self.env_name)
+
+            # Inject system environment variables envNAME and envversion
+            env_vars = (
+                dict(self.environment_variables) if self.environment_variables else {}
+            )
+            env_vars["envNAME"] = env_name_parsed
+            env_vars["envversion"] = env_version_parsed
+
             self._instance = await self._client.create_env_instance(
                 name=self.env_name,
                 datasource=self.datasource,
-                environment_variables=self.environment_variables,
+                environment_variables=env_vars,
                 arguments=self.arguments,
                 ttl=self.ttl,
+                owner=self.owner,
             )
             logger.info(
                 f"{self._log_prefix()} Environment instance created with ID: {self._instance.id}"

@@ -59,12 +59,25 @@ def _make_api_url(aenv_url: str, port: int = 8080) -> str:
 def _get_system_url() -> str:
     """Get AEnv system URL from environment variable or config.
 
+    Priority order:
+    1. AENV_SYSTEM_URL environment variable (highest priority)
+    2. system_url in config file
+    3. Default value (http://localhost:8080)
+
     Uses make_api_url logic to ensure port 8080 is specified.
     """
+    # First check environment variable
     system_url = os.getenv("AENV_SYSTEM_URL")
+
+    # If not in env, check config
     if not system_url:
-        # Try to get from config, but for now default to localhost
+        config_manager = get_config_manager()
+        system_url = config_manager.get("system_url")
+
+    # Use default if still not found
+    if not system_url:
         system_url = "http://localhost:8080"
+
     # Use make_api_url to ensure port 8080 is set
     return _make_api_url(system_url, port=8080)
 
@@ -178,7 +191,7 @@ def _list_instances_from_api(
 @click.option(
     "--system-url",
     type=str,
-    help="AEnv system URL (defaults to AENV_SYSTEM_URL env var or http://localhost:8080)",
+    help="AEnv system URL (defaults to AENV_SYSTEM_URL env var, config, or http://localhost:8080)",
 )
 @pass_config
 def instances(cfg: Config, name, version, format, system_url):
