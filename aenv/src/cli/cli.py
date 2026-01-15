@@ -14,7 +14,18 @@
 
 import click
 
-from cli.cmds import build, config, get, init, instance, instances, list, push, run, version
+from cli.cmds import (
+    build,
+    config,
+    get,
+    init,
+    instance,
+    instances,
+    list,
+    push,
+    run,
+    version,
+)
 from cli.cmds.common import Config, global_error_handler, pass_config
 
 

@@ -27,16 +27,16 @@ Uses Environment SDK for deployment operations (create)
 import asyncio
 import json
 import os
-from typing import Dict, Any, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 from urllib.parse import urlparse, urlunparse
 
 import click
 import requests
 from tabulate import tabulate
 
+from aenv.core.environment import Environment
 from cli.cmds.common import Config, pass_config
 from cli.utils.cli_config import get_config_manager
-from aenv.core.environment import Environment
 
 
 def _parse_env_vars(env_var_list: tuple) -> Dict[str, str]:
@@ -224,7 +224,7 @@ def _list_instances_from_api(
 
     try:
         if verbose and console:
-            console.print(f"[dim]🔍 Debug: Sending GET request...[/dim]")
+            console.print("[dim]🔍 Debug: Sending GET request...[/dim]")
 
         response = requests.get(url, headers=headers, params=params, timeout=30)
 
@@ -243,7 +243,7 @@ def _list_instances_from_api(
                 try:
                     error_body = response.json()
                     error_detail = f"\nResponse: {error_body}"
-                except:
+                except BaseException:
                     error_detail = f"\nResponse body: {response.text[:200]}"
             raise click.ClickException(
                 "Authentication failed (403). Please check your API key configuration.\n"
@@ -256,7 +256,7 @@ def _list_instances_from_api(
                 try:
                     error_body = response.json()
                     error_detail = f"\nResponse: {error_body}"
-                except:
+                except BaseException:
                     error_detail = f"\nResponse body: {response.text[:200]}"
             raise click.ClickException(
                 "Unauthorized (401). Invalid or missing API key.\n"
@@ -284,7 +284,7 @@ def _list_instances_from_api(
                     f"[dim]🔍 Debug: Response data: {data_len} item(s) returned[/dim]"
                 )
             else:
-                console.print(f"[dim]🔍 Debug: Response data: empty or null[/dim]")
+                console.print("[dim]🔍 Debug: Response data: empty or null[/dim]")
 
         if result.get("success") and result.get("data"):
             instances = result["data"]
@@ -303,7 +303,7 @@ def _list_instances_from_api(
 
         if verbose and console:
             console.print(
-                f"[dim]🔍 Debug: No data in response, returning empty list[/dim]"
+                "[dim]🔍 Debug: No data in response, returning empty list[/dim]"
             )
 
         return []
@@ -320,13 +320,13 @@ def _list_instances_from_api(
         if verbose and console:
             console.print(f"[dim]🔍 Debug: Connection error details: {str(e)}[/dim]")
         raise click.ClickException(error_msg)
-    except requests.exceptions.Timeout as e:
+    except requests.exceptions.Timeout:
         error_msg = (
             f"Request timeout while connecting to {system_url}.\n"
             f"The API service may be slow or unreachable."
         )
         if verbose and console:
-            console.print(f"[dim]🔍 Debug: Timeout after 30 seconds[/dim]")
+            console.print("[dim]🔍 Debug: Timeout after 30 seconds[/dim]")
         raise click.ClickException(error_msg)
     except requests.exceptions.RequestException as e:
         error_msg = f"Failed to query instances: {str(e)}"
@@ -369,7 +369,7 @@ def _get_instance_from_api(
 
     try:
         if verbose and console:
-            console.print(f"[dim]🔍 Debug: Sending GET request...[/dim]")
+            console.print("[dim]🔍 Debug: Sending GET request...[/dim]")
 
         response = requests.get(url, headers=headers, timeout=10)
 
@@ -388,7 +388,7 @@ def _get_instance_from_api(
                 try:
                     error_body = response.json()
                     error_detail = f"\nResponse: {error_body}"
-                except:
+                except BaseException:
                     error_detail = f"\nResponse body: {response.text[:200]}"
             raise click.ClickException(
                 "Authentication failed (403). Please check your API key configuration.\n"
@@ -401,7 +401,7 @@ def _get_instance_from_api(
                 try:
                     error_body = response.json()
                     error_detail = f"\nResponse: {error_body}"
-                except:
+                except BaseException:
                     error_detail = f"\nResponse body: {response.text[:200]}"
             raise click.ClickException(
                 "Unauthorized (401). Invalid or missing API key.\n"
@@ -420,9 +420,9 @@ def _get_instance_from_api(
                 f"[dim]🔍 Debug: Response body (code): {result.get('code')}[/dim]"
             )
             if result.get("data"):
-                console.print(f"[dim]🔍 Debug: Response data: instance found[/dim]")
+                console.print("[dim]🔍 Debug: Response data: instance found[/dim]")
             else:
-                console.print(f"[dim]🔍 Debug: Response data: empty or null[/dim]")
+                console.print("[dim]🔍 Debug: Response data: empty or null[/dim]")
 
         if result.get("success") and result.get("data"):
             return result["data"]
@@ -447,7 +447,7 @@ def _get_instance_from_api(
                     error_detail = f": {error_msg}"
                 else:
                     error_detail = f": {str(error_body)[:200]}"
-            except:
+            except BaseException:
                 error_detail = f": {e.response.text[:200]}"
 
         error_msg = f"Failed to get instance info: {str(e)}{error_detail}"
@@ -467,13 +467,13 @@ def _get_instance_from_api(
         if verbose and console:
             console.print(f"[dim]🔍 Debug: Connection error details: {str(e)}[/dim]")
         raise click.ClickException(error_msg)
-    except requests.exceptions.Timeout as e:
+    except requests.exceptions.Timeout:
         error_msg = (
             f"Request timeout while connecting to {system_url}.\n"
             f"The API service may be slow or unreachable."
         )
         if verbose and console:
-            console.print(f"[dim]🔍 Debug: Timeout after 10 seconds[/dim]")
+            console.print("[dim]🔍 Debug: Timeout after 10 seconds[/dim]")
         raise click.ClickException(error_msg)
     except requests.exceptions.RequestException as e:
         error_msg = f"Failed to get instance info: {str(e)}"
@@ -780,7 +780,7 @@ def create(
             console.print("\n[green]✅ Instance is running and will stay alive[/green]")
             console.print(f"[cyan]Instance ID:[/cyan] {info.get('instance_id')}")
             console.print(
-                f"[cyan]Use 'aenv instances' to view all running instances[/cyan]"
+                "[cyan]Use 'aenv instances' to view all running instances[/cyan]"
             )
 
     except Exception as e:
@@ -960,7 +960,7 @@ def list_instances(cfg: Config, name, version, output, system_url, verbose):
 
     # Debug: show configuration if verbose
     if is_verbose:
-        console.print(f"[dim]🔍 Debug: Configuration[/dim]")
+        console.print("[dim]🔍 Debug: Configuration[/dim]")
         console.print(f"[dim]  Using system URL: {system_url}[/dim]")
         config_manager = get_config_manager()
         config_url = config_manager.get("system_url")
@@ -1100,7 +1100,7 @@ def get_instance(cfg: Config, instance_id, output, system_url, verbose):
 
     # Debug: show configuration if verbose
     if is_verbose:
-        console.print(f"[dim]🔍 Debug: Configuration[/dim]")
+        console.print("[dim]🔍 Debug: Configuration[/dim]")
         console.print(f"[dim]  Using system URL: {system_url}[/dim]")
         config_manager = get_config_manager()
         config_url = config_manager.get("system_url")

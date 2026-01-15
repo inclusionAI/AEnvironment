@@ -100,7 +100,9 @@ class TestInstances:
                 assert "test-env" in result.output
                 assert "1.0.0" in result.output
 
-    def test_list_instances_with_name_filter(self, runner, mock_instances_list_response):
+    def test_list_instances_with_name_filter(
+        self, runner, mock_instances_list_response
+    ):
         """Test listing instances filtered by name"""
         with patch("cli.cmds.instances.requests.get") as mock_get:
             mock_response = Mock()
@@ -229,7 +231,9 @@ class TestInstances:
             )
 
             assert result.exit_code == 0
-            assert "No running instances found for nonexistent-env@1.0.0" in result.output
+            assert (
+                "No running instances found for nonexistent-env@1.0.0" in result.output
+            )
 
     def test_list_instances_version_without_name_error(self, runner):
         """Test that version option requires name option"""
@@ -238,7 +242,9 @@ class TestInstances:
         assert result.exit_code != 0
         assert "Version filter requires --name" in result.output
 
-    def test_list_instances_with_custom_system_url(self, runner, mock_instances_list_response):
+    def test_list_instances_with_custom_system_url(
+        self, runner, mock_instances_list_response
+    ):
         """Test listing instances with custom system URL"""
         with patch("cli.cmds.instances.requests.get") as mock_get:
             mock_response = Mock()
@@ -264,7 +270,9 @@ class TestInstances:
         with patch("cli.cmds.instances.requests.get") as mock_get:
             import requests
 
-            mock_get.side_effect = requests.exceptions.RequestException("Connection error")
+            mock_get.side_effect = requests.exceptions.RequestException(
+                "Connection error"
+            )
 
             result = runner.invoke(instances, [])
 
@@ -308,9 +316,13 @@ class TestInstances:
                     mock_get.assert_called_once()
                     call_kwargs = mock_get.call_args[1]
                     assert "Authorization" in call_kwargs["headers"]
-                    assert call_kwargs["headers"]["Authorization"] == "Bearer test-api-key"
+                    assert (
+                        call_kwargs["headers"]["Authorization"] == "Bearer test-api-key"
+                    )
 
-    def test_list_instances_with_env_api_key(self, runner, mock_instances_list_response):
+    def test_list_instances_with_env_api_key(
+        self, runner, mock_instances_list_response
+    ):
         """Test that API key from environment variable is used"""
         with patch("cli.cmds.instances.requests.get") as mock_get:
             mock_response = Mock()
@@ -325,7 +337,9 @@ class TestInstances:
 
                 with patch.dict(os.environ, {"AENV_API_KEY": "env-api-key"}):
                     with patch("cli.cmds.instances._get_instance_info") as mock_detail:
-                        mock_detail.return_value = mock_instances_list_response["data"][0]
+                        mock_detail.return_value = mock_instances_list_response["data"][
+                            0
+                        ]
 
                         result = runner.invoke(instances, [])
 
@@ -334,9 +348,14 @@ class TestInstances:
                         mock_get.assert_called_once()
                         call_kwargs = mock_get.call_args[1]
                         assert "Authorization" in call_kwargs["headers"]
-                        assert call_kwargs["headers"]["Authorization"] == "Bearer env-api-key"
+                        assert (
+                            call_kwargs["headers"]["Authorization"]
+                            == "Bearer env-api-key"
+                        )
 
-    def test_list_instances_with_env_system_url(self, runner, mock_instances_list_response):
+    def test_list_instances_with_env_system_url(
+        self, runner, mock_instances_list_response
+    ):
         """Test that system URL from environment variable is used"""
         with patch("cli.cmds.instances.requests.get") as mock_get:
             mock_response = Mock()
@@ -347,7 +366,9 @@ class TestInstances:
             with patch("cli.cmds.instances._get_instance_info") as mock_detail:
                 mock_detail.return_value = mock_instances_list_response["data"][0]
 
-                with patch.dict(os.environ, {"AENV_SYSTEM_URL": "http://env.example.com"}):
+                with patch.dict(
+                    os.environ, {"AENV_SYSTEM_URL": "http://env.example.com"}
+                ):
                     result = runner.invoke(instances, [])
 
                     assert result.exit_code == 0
@@ -356,7 +377,9 @@ class TestInstances:
                     call_args = mock_get.call_args[0]
                     assert "env.example.com:8080" in call_args[0]
 
-    def test_list_instances_detail_api_failure_fallback(self, runner, mock_instances_list_response):
+    def test_list_instances_detail_api_failure_fallback(
+        self, runner, mock_instances_list_response
+    ):
         """Test that list API data is used when detail API fails"""
         with patch("cli.cmds.instances.requests.get") as mock_get:
             mock_response = Mock()
@@ -444,4 +467,3 @@ class TestInstances:
                 del os.environ["AENV_SYSTEM_URL"]
             url = _get_system_url()
             assert url == "http://localhost:8080"
-
