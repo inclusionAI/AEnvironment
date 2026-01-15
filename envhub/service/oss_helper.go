@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"log"
 	"os"
 
 	"github.com/aliyun/alibabacloud-oss-go-sdk-v2/oss"
@@ -144,7 +145,11 @@ func readConfig(key string) string {
 	if err != nil {
 		return ""
 	}
-	defer configFile.Close()
+	defer func() {
+		if closeErr := configFile.Close(); closeErr != nil {
+			log.Printf("failed to close config file: %v", closeErr)
+		}
+	}()
 
 	var buffer bytes.Buffer
 	_, err = io.Copy(&buffer, configFile)

@@ -203,7 +203,9 @@ func (g *MCPGateway) handleMCPSSEWithHeader(c *gin.Context) {
 		return
 	}
 	defer func() {
-		resp.Body.Close()
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Printf("failed to close response body: %v", closeErr)
+		}
 	}()
 
 	// Check response status

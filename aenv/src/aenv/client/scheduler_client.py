@@ -109,6 +109,7 @@ class AEnvSchedulerClient:
         ttl: str = "",
         environment_variables: Optional[Dict[str, str]] = None,
         arguments: Optional[List[str]] = None,
+        owner: Optional[str] = None,
     ) -> EnvInstance:
         """
         Create a new environment instance.
@@ -119,6 +120,7 @@ class AEnvSchedulerClient:
             environment_variables: Optional environment variables
             arguments: Optional arguments
             ttl: Time to live for instance
+            owner: Optional owner of the instance
         Returns:
             Created EnvInstance
 
@@ -130,7 +132,7 @@ class AEnvSchedulerClient:
             raise NetworkError("Client not connected")
 
         logger.info(
-            f"Creating environment instance: {name}, datasource: {datasource}, ttl: {ttl}, environment_variables: {environment_variables}, arguments: {arguments}, url: {self.base_url}"
+            f"Creating environment instance: {name}, datasource: {datasource}, ttl: {ttl}, environment_variables: {environment_variables}, arguments: {arguments}, owner: {owner}, url: {self.base_url}"
         )
         request = EnvInstanceCreateRequest(
             envName=name,
@@ -138,6 +140,7 @@ class AEnvSchedulerClient:
             environment_variables=environment_variables,
             arguments=arguments,
             ttl=ttl,
+            owner=owner,
         )
 
         for attempt in range(self.max_retries + 1):

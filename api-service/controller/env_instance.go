@@ -54,6 +54,7 @@ type CreateEnvInstanceRequest struct {
 	EnvironmentVariables map[string]string `json:"environment_variables"`
 	Arguments            []string          `json:"arguments"`
 	TTL                  string            `json:"ttl"`
+	Owner                string            `json:"owner"`
 }
 
 // CreateEnvInstance creates a new EnvInstance
@@ -102,6 +103,10 @@ func (ctrl *EnvInstanceController) CreateEnvInstance(c *gin.Context) {
 	}
 	// Set TTL for environment
 	backendEnv.DeployConfig["ttl"] = req.TTL
+	// Set owner for controller to store in pod label
+	if req.Owner != "" {
+		backendEnv.DeployConfig["owner"] = req.Owner
+	}
 	// Call ScheduleClient to create Pod
 	envInstance, err := ctrl.envInstanceService.CreateEnvInstance(backendEnv)
 	if err != nil {
@@ -109,6 +114,15 @@ func (ctrl *EnvInstanceController) CreateEnvInstance(c *gin.Context) {
 		return
 	}
 	envInstance.Env = backendEnv
+
+	// Set owner from DeployConfig if available (controller stores it in pod labels but doesn't return it)
+	if backendEnv.DeployConfig != nil {
+		if ownerValue, ok := backendEnv.DeployConfig["owner"]; ok {
+			if ownerStr, ok := ownerValue.(string); ok && ownerStr != "" {
+				envInstance.Owner = ownerStr
+			}
+		}
+	}
 
 	token := util.GetCurrentToken(c)
 	if token != nil && ctrl.redisClient != nil {
@@ -167,22 +181,49 @@ func (ctrl *EnvInstanceController) ListEnvInstances(c *gin.Context) {
 		backendmodels.JSONErrorWithMessage(c, 403, "token required")
 		return
 	}
+	id := c.Param("id")
+
+	// Handle wildcard "*" as "list all instances"
+	if id == "*" {
+		id = ""
+	}
+
 	if ctrl.redisClient != nil {
 		var query = models.EnvInstance{Env: &backendmodels.Env{}}
-		id := c.Param("id")
 		if id != "" {
 			name, version := util.SplitEnvNameVersion(id)
 			query.Env.Name = name
 			query.Env.Version = version
 		}
 		instances, err := ctrl.redisClient.ListEnvInstancesFromRedis(token.Token, &query)
-		if err == nil {
-			backendmodels.JSONSuccess(c, instances)
-			return
+		if err == nil && len(instances) > 0 {
+			// Check if any instance is missing version info, if so, fetch from service
+			missingVersion := false
+			for _, instance := range instances {
+				if instance.Env == nil || instance.Env.Version == "" {
+					missingVersion = true
+					break
+				}
+			}
+			if !missingVersion {
+				backendmodels.JSONSuccess(c, instances)
+				return
+			}
+			log.Warnf("some instances from redis are missing version info, falling back to service")
+		} else if err != nil {
+			log.Warnf("failed to list from redis: %v", err)
 		}
-		log.Warnf("failed to list from redis: %v", err)
 	}
-	envName := c.Query("envName")
+
+	// Extract envName from id or query parameter
+	var envName string
+	if id != "" {
+		name, _ := util.SplitEnvNameVersion(id)
+		envName = name
+	} else {
+		envName = c.Query("envName")
+	}
+
 	instances, err := ctrl.envInstanceService.ListEnvInstances(envName)
 	if err != nil {
 		backendmodels.JSONErrorWithMessage(c, 500, err.Error())

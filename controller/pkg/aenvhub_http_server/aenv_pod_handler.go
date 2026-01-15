@@ -169,6 +169,7 @@ type HttpResponseData struct {
 	Status string `json:"status"`
 	IP     string `json:"ip"`
 	TTL    string `json:"ttl"`
+	Owner  string `json:"owner"`
 }
 type HttpResponse struct {
 	Success      bool             `json:"success"`
@@ -195,6 +196,10 @@ type HttpListResponseData struct {
 	Status    string    `json:"status"`
 	TTL       string    `json:"ttl"`
 	CreatedAt time.Time `json:"created_at"`
+	EnvName   string    `json:"envname"`
+	Version   string    `json:"version"`
+	IP        string    `json:"ip"`
+	Owner     string    `json:"owner"`
 }
 type HttpListResponse struct {
 	Success          bool                   `json:"success"`
@@ -208,7 +213,11 @@ func (h *AEnvPodHandler) createPod(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Invalid request body: %v", err), http.StatusBadRequest)
 		return
 	}
-	defer r.Body.Close()
+	defer func() {
+		if closeErr := r.Body.Close(); closeErr != nil {
+			klog.Errorf("failed to close request body: %v", closeErr)
+		}
+	}()
 
 	// Get podTemplate type, default to "singleContainer"
 	templateType := SingleContainerTemplate
@@ -228,16 +237,27 @@ func (h *AEnvPodHandler) createPod(w http.ResponseWriter, r *http.Request) {
 
 	// Generate name
 	pod.Name = fmt.Sprintf("%s-%s", aenvHubEnv.Name, RandString(6))
+	// Initialize labels if nil
+	labels := pod.Labels
+	if labels == nil {
+		labels = make(map[string]string)
+		pod.Labels = labels
+	}
+	// Set pods envname and version by label
+	labels[constants.AENV_NAME] = aenvHubEnv.Name
+	labels[constants.AENV_VERSION] = aenvHubEnv.Version
+	klog.Infof("add aenv-name label with value:%v and aenv-version label with value:%v for pod:%s", aenvHubEnv.Name, aenvHubEnv.Version, pod.Name)
 	// Set pods TTL by label
 	if aenvHubEnv.DeployConfig["ttl"] != nil {
-		labels := pod.Labels
-		if labels == nil {
-			labels = make(map[string]string)
-			pod.Labels = labels
-		}
 		ttlValue := aenvHubEnv.DeployConfig["ttl"].(string)
 		labels[constants.AENV_TTL] = ttlValue
 		klog.Infof("add aenv-ttl label with value:%v for pod:%s", ttlValue, pod.Name)
+	}
+	// Set pods owner by label
+	if aenvHubEnv.DeployConfig["owner"] != nil {
+		ownerValue := aenvHubEnv.DeployConfig["owner"].(string)
+		labels[constants.AENV_OWNER] = ownerValue
+		klog.Infof("add aenv-owner label with value:%v for pod:%s", ownerValue, pod.Name)
 	}
 
 	createdPod, err := h.clientset.CoreV1().Pods(h.namespace).Create(r.Context(), pod, metav1.CreateOptions{})
@@ -257,6 +277,7 @@ func (h *AEnvPodHandler) createPod(w http.ResponseWriter, r *http.Request) {
 			ID:     createdPod.Name,
 			Status: string(createdPod.Status.Phase),
 			IP:     createdPod.Status.PodIP,
+			Owner:  createdPod.Labels[constants.AENV_OWNER],
 		},
 	}
 	if err := json.NewEncoder(w).Encode(res); err != nil {
@@ -304,6 +325,7 @@ func (h *AEnvPodHandler) getPod(podName string, w http.ResponseWriter, r *http.R
 			TTL:    pod.Labels[constants.AENV_TTL],
 			Status: string(pod.Status.Phase),
 			IP:     pod.Status.PodIP,
+			Owner:  pod.Labels[constants.AENV_OWNER],
 		},
 	}
 
@@ -335,6 +357,8 @@ func (h *AEnvPodHandler) getPod(podName string, w http.ResponseWriter, r *http.R
 func (h *AEnvPodHandler) listPod(w http.ResponseWriter, r *http.Request) {
 	// query param:?filter=expired
 	filterMark := r.URL.Query().Get("filter")
+	// query param:?envName=xxx
+	envNameFilter := r.URL.Query().Get("envName")
 
 	var podList []*corev1.Pod
 	var err error
@@ -361,11 +385,22 @@ func (h *AEnvPodHandler) listPod(w http.ResponseWriter, r *http.Request) {
 		Code:    0,
 	}
 	for _, pod := range podList {
+		// Filter by envName if specified
+		if envNameFilter != "" {
+			podEnvName := pod.Labels[constants.AENV_NAME]
+			if podEnvName != envNameFilter {
+				continue
+			}
+		}
 		httpListResponse.ListResponseData = append(httpListResponse.ListResponseData, HttpListResponseData{
 			ID:        pod.Name,
 			Status:    string(pod.Status.Phase),
 			CreatedAt: pod.CreationTimestamp.Time,
 			TTL:       pod.Labels[constants.AENV_TTL],
+			EnvName:   pod.Labels[constants.AENV_NAME],
+			Version:   pod.Labels[constants.AENV_VERSION],
+			IP:        pod.Status.PodIP,
+			Owner:     pod.Labels[constants.AENV_OWNER],
 		})
 	}
 
@@ -494,12 +529,32 @@ func applyConfig(configs map[string]interface{}, container *corev1.Container) {
 		klog.Infof("resource not autoscale for container %s", container.Name)
 		return
 	}
-	cfgCpu := configs["cpu"]
-	strCpu := cfgCpu.(string)
-	strMemory := configs["memory"].(string)
-	klog.Infof("resource config cpu: %s, memory: %s", strCpu, strMemory)
 
-	resources := container.Resources
+	// Validate and parse CPU
+	cfgCpu, ok := configs["cpu"]
+	if !ok {
+		klog.Errorf("cpu config not found")
+		return
+	}
+	strCpu, ok := cfgCpu.(string)
+	if !ok {
+		klog.Errorf("cpu config is not a string: %v", cfgCpu)
+		return
+	}
+
+	// Validate and parse Memory
+	cfgMemory, ok := configs["memory"]
+	if !ok {
+		klog.Errorf("memory config not found")
+		return
+	}
+	strMemory, ok := cfgMemory.(string)
+	if !ok {
+		klog.Errorf("memory config is not a string: %v", cfgMemory)
+		return
+	}
+
+	klog.Infof("resource config cpu: %s, memory: %s", strCpu, strMemory)
 
 	var expectCpu resource.Quantity
 	var err error
@@ -513,22 +568,32 @@ func applyConfig(configs map[string]interface{}, container *corev1.Container) {
 		return
 	}
 
-	requestCpu := resources.Requests.Cpu()
+	// Initialize Requests if nil
+	if container.Resources.Requests == nil {
+		container.Resources.Requests = make(corev1.ResourceList)
+	}
+
+	// Initialize Limits if nil
+	if container.Resources.Limits == nil {
+		container.Resources.Limits = make(corev1.ResourceList)
+	}
+
+	requestCpu := container.Resources.Requests.Cpu()
 	if requestCpu.Cmp(expectCpu) != 0 {
 		klog.Infof("reset resource request cpu: %s, expect: %s", requestCpu.String(), expectCpu.String())
 		container.Resources.Requests[corev1.ResourceCPU] = expectCpu
 	}
-	requestMemory := resources.Requests[corev1.ResourceMemory]
+	requestMemory := container.Resources.Requests[corev1.ResourceMemory]
 	if requestMemory.Cmp(expectMemory) != 0 {
 		container.Resources.Requests[corev1.ResourceMemory] = expectMemory
 	}
 
-	limitCpu := resources.Limits[corev1.ResourceCPU]
+	limitCpu := container.Resources.Limits[corev1.ResourceCPU]
 	if limitCpu.Cmp(expectCpu) != 0 {
 		klog.Infof("reset limit request cpu: %s, expect: %s", limitCpu.String(), expectCpu.String())
 		container.Resources.Limits[corev1.ResourceCPU] = expectCpu
 	}
-	limitMemory := resources.Limits[corev1.ResourceMemory]
+	limitMemory := container.Resources.Limits[corev1.ResourceMemory]
 	if limitMemory.Cmp(expectMemory) != 0 {
 		container.Resources.Limits[corev1.ResourceMemory] = expectMemory
 	}

@@ -96,11 +96,12 @@ func main() {
 	}
 
 	var scheduleClient service.EnvInstanceService
-	if scheduleType == "k8s" {
+	switch scheduleType {
+	case "k8s":
 		scheduleClient = service.NewScheduleClient(scheduleAddr)
-	} else if scheduleType == "standard" {
+	case "standard":
 		scheduleClient = service.NewEnvInstanceClient(scheduleAddr)
-	} else {
+	default:
 		log.Fatalf("unsupported schedule type: %v", scheduleType)
 	}
 

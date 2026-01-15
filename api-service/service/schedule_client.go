@@ -64,7 +64,11 @@ func (c *ScheduleClient) CreatePod(req *backend.Env) (*models.EnvInstance, error
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Printf("failed to close response body: %v", closeErr)
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -100,7 +104,11 @@ func (c *ScheduleClient) GetPod(podName string) (*models.EnvInstance, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Printf("failed to close response body: %v", closeErr)
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -136,7 +144,11 @@ func (c *ScheduleClient) DeletePod(podName string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("failed to send request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Printf("failed to close response body: %v", closeErr)
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -171,7 +183,11 @@ func (c *ScheduleClient) FilterPods() (*[]models.EnvInstance, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Printf("failed to close response body: %v", closeErr)
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -222,6 +238,25 @@ func (c *ScheduleClient) DeleteEnvInstance(id string) error {
 	return nil
 }
 
+// PodListResponseData represents the data structure returned by controller's list pod endpoint
+type PodListResponseData struct {
+	ID        string    `json:"id"`
+	Status    string    `json:"status"`
+	TTL       string    `json:"ttl"`
+	CreatedAt time.Time `json:"created_at"`
+	EnvName   string    `json:"envname"`
+	Version   string    `json:"version"`
+	IP        string    `json:"ip"`
+	Owner     string    `json:"owner"`
+}
+
+// PodListResponse represents the response structure from controller's list pod endpoint
+type PodListResponse struct {
+	Success bool                  `json:"success"`
+	Code    int                   `json:"code"`
+	Data    []PodListResponseData `json:"data"`
+}
+
 // ListEnvInstances implements EnvInstanceService interface
 // Lists environment instances, optionally filtered by environment name
 func (c *ScheduleClient) ListEnvInstances(envName string) ([]*models.EnvInstance, error) {
@@ -239,7 +274,11 @@ func (c *ScheduleClient) ListEnvInstances(envName string) ([]*models.EnvInstance
 	if err != nil {
 		return nil, fmt.Errorf("list env instances: failed to send request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Printf("failed to close response body: %v", closeErr)
+		}
+	}()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -250,19 +289,38 @@ func (c *ScheduleClient) ListEnvInstances(envName string) ([]*models.EnvInstance
 		return nil, fmt.Errorf("list env instances: request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
-	var getResp models.ClientResponse[[]models.EnvInstance]
-	if err := json.Unmarshal(body, &getResp); err != nil {
+	var podListResp PodListResponse
+	if err := json.Unmarshal(body, &podListResp); err != nil {
 		return nil, fmt.Errorf("list env instances: failed to unmarshal response: %v", err)
 	}
 
-	if !getResp.Success {
-		return nil, fmt.Errorf("list env instances: server returned error, code: %d", getResp.Code)
+	if !podListResp.Success {
+		return nil, fmt.Errorf("list env instances: server returned error, code: %d", podListResp.Code)
 	}
 
-	// Convert []models.EnvInstance to []*models.EnvInstance
-	instances := make([]*models.EnvInstance, len(getResp.Data))
-	for i := range getResp.Data {
-		instances[i] = &getResp.Data[i]
+	// Convert PodListResponseData to EnvInstance
+	instances := make([]*models.EnvInstance, len(podListResp.Data))
+	for i, podData := range podListResp.Data {
+		// Create a minimal Env object with Name and Version
+		env := &backend.Env{
+			Name:    podData.EnvName,
+			Version: podData.Version,
+		}
+
+		// Format CreatedAt time
+		createdAtStr := podData.CreatedAt.Format("2006-01-02 15:04:05")
+		nowStr := time.Now().Format("2006-01-02 15:04:05")
+
+		instances[i] = &models.EnvInstance{
+			ID:        podData.ID,
+			Env:       env,
+			Status:    podData.Status,
+			CreatedAt: createdAtStr,
+			UpdatedAt: nowStr,
+			IP:        podData.IP,
+			TTL:       podData.TTL,
+			Owner:     podData.Owner,
+		}
 	}
 
 	return instances, nil
