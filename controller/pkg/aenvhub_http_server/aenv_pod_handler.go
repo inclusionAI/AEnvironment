@@ -525,12 +525,32 @@ func applyConfig(configs map[string]interface{}, container *corev1.Container) {
 		klog.Infof("resource not autoscale for container %s", container.Name)
 		return
 	}
-	cfgCpu := configs["cpu"]
-	strCpu := cfgCpu.(string)
-	strMemory := configs["memory"].(string)
-	klog.Infof("resource config cpu: %s, memory: %s", strCpu, strMemory)
 
-	resources := container.Resources
+	// Validate and parse CPU
+	cfgCpu, ok := configs["cpu"]
+	if !ok {
+		klog.Errorf("cpu config not found")
+		return
+	}
+	strCpu, ok := cfgCpu.(string)
+	if !ok {
+		klog.Errorf("cpu config is not a string: %v", cfgCpu)
+		return
+	}
+
+	// Validate and parse Memory
+	cfgMemory, ok := configs["memory"]
+	if !ok {
+		klog.Errorf("memory config not found")
+		return
+	}
+	strMemory, ok := cfgMemory.(string)
+	if !ok {
+		klog.Errorf("memory config is not a string: %v", cfgMemory)
+		return
+	}
+
+	klog.Infof("resource config cpu: %s, memory: %s", strCpu, strMemory)
 
 	var expectCpu resource.Quantity
 	var err error
@@ -544,22 +564,32 @@ func applyConfig(configs map[string]interface{}, container *corev1.Container) {
 		return
 	}
 
-	requestCpu := resources.Requests.Cpu()
+	// Initialize Requests if nil
+	if container.Resources.Requests == nil {
+		container.Resources.Requests = make(corev1.ResourceList)
+	}
+
+	// Initialize Limits if nil
+	if container.Resources.Limits == nil {
+		container.Resources.Limits = make(corev1.ResourceList)
+	}
+
+	requestCpu := container.Resources.Requests.Cpu()
 	if requestCpu.Cmp(expectCpu) != 0 {
 		klog.Infof("reset resource request cpu: %s, expect: %s", requestCpu.String(), expectCpu.String())
 		container.Resources.Requests[corev1.ResourceCPU] = expectCpu
 	}
-	requestMemory := resources.Requests[corev1.ResourceMemory]
+	requestMemory := container.Resources.Requests[corev1.ResourceMemory]
 	if requestMemory.Cmp(expectMemory) != 0 {
 		container.Resources.Requests[corev1.ResourceMemory] = expectMemory
 	}
 
-	limitCpu := resources.Limits[corev1.ResourceCPU]
+	limitCpu := container.Resources.Limits[corev1.ResourceCPU]
 	if limitCpu.Cmp(expectCpu) != 0 {
 		klog.Infof("reset limit request cpu: %s, expect: %s", limitCpu.String(), expectCpu.String())
 		container.Resources.Limits[corev1.ResourceCPU] = expectCpu
 	}
-	limitMemory := resources.Limits[corev1.ResourceMemory]
+	limitMemory := container.Resources.Limits[corev1.ResourceMemory]
 	if limitMemory.Cmp(expectMemory) != 0 {
 		container.Resources.Limits[corev1.ResourceMemory] = expectMemory
 	}
