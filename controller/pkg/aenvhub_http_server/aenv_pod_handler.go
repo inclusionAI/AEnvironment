@@ -273,6 +273,7 @@ func (h *AEnvPodHandler) createPod(w http.ResponseWriter, r *http.Request) {
 			ID:     createdPod.Name,
 			Status: string(createdPod.Status.Phase),
 			IP:     createdPod.Status.PodIP,
+			Owner:  createdPod.Labels[constants.AENV_OWNER],
 		},
 	}
 	if err := json.NewEncoder(w).Encode(res); err != nil {

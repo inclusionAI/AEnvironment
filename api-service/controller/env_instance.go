@@ -115,6 +115,15 @@ func (ctrl *EnvInstanceController) CreateEnvInstance(c *gin.Context) {
 	}
 	envInstance.Env = backendEnv
 
+	// Set owner from DeployConfig if available (controller stores it in pod labels but doesn't return it)
+	if backendEnv.DeployConfig != nil {
+		if ownerValue, ok := backendEnv.DeployConfig["owner"]; ok {
+			if ownerStr, ok := ownerValue.(string); ok && ownerStr != "" {
+				envInstance.Owner = ownerStr
+			}
+		}
+	}
+
 	token := util.GetCurrentToken(c)
 	if token != nil && ctrl.redisClient != nil {
 		if result, err := ctrl.redisClient.StoreEnvInstanceToRedis(token.Token, envInstance); !result || err != nil {
