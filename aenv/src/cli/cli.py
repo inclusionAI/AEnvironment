@@ -20,10 +20,10 @@ from cli.cmds import (
     get,
     init,
     instance,
-    instances,
     list,
     push,
     run,
+    service,
     version,
 )
 from cli.cmds.common import Config, global_error_handler, pass_config
@@ -54,8 +54,8 @@ cli.add_command(list)
 cli.add_command(version)
 cli.add_command(build)
 cli.add_command(config)
-cli.add_command(instances)
 cli.add_command(instance)
+cli.add_command(service)
 
 if __name__ == "__main__":
     cli()

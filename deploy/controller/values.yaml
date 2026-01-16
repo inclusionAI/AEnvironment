@@ -193,3 +193,96 @@ podTemplates:
       - name: shared-data
         emptyDir: {}
       restartPolicy: Never
+
+  # Deployment 模板（用于 service 功能）
+  deployment: |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: placeholder
+      namespace: {{ .Values.sandboxNamespace }}
+      labels:
+        app.kubernetes.io/name: aenv-service
+        template-type: deployment
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: placeholder
+      template:
+        metadata:
+          labels:
+            app: placeholder
+        spec:
+          automountServiceAccountToken: false
+          containers:
+          - name: main
+            image: weather:v0.1.0
+            imagePullPolicy: IfNotPresent
+            resources:
+              limits:
+                cpu: "2"
+                memory: "4Gi"
+                ephemeral-storage: "10Gi"
+              requests:
+                cpu: "1"
+                memory: "2Gi"
+                ephemeral-storage: "5Gi"
+            livenessProbe:
+              failureThreshold: 30
+              initialDelaySeconds: 3
+              periodSeconds: 10
+              successThreshold: 1
+              httpGet:
+                path: /health
+                port: 8081
+                scheme: HTTP
+              timeoutSeconds: 60
+            env:
+            - name: AENV_TYPE
+              value: "service"
+            volumeMounts:
+            - name: data
+              mountPath: /home/admin/data
+          volumes:
+          - name: data
+            persistentVolumeClaim:
+              claimName: placeholder-pvc
+
+  # Service 模板（用于 service 功能）
+  service: |
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: placeholder
+      namespace: {{ .Values.sandboxNamespace }}
+      labels:
+        app.kubernetes.io/name: aenv-service
+        template-type: service
+    spec:
+      type: ClusterIP
+      selector:
+        app: placeholder
+      ports:
+      - name: http
+        protocol: TCP
+        port: 8080
+        targetPort: 8080
+
+  # PVC 模板（用于 service 功能）
+  pvc: |
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: placeholder
+      namespace: {{ .Values.sandboxNamespace }}
+      labels:
+        app.kubernetes.io/name: aenv-service
+        template-type: pvc
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      storageClassName: alilocal-ssd
+      resources:
+        requests:
+          storage: 10Gi

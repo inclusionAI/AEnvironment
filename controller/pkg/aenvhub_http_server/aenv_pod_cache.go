@@ -134,8 +134,8 @@ func (c *AEnvPodCache) ListExpiredPods(namespace string) ([]*corev1.Pod, error) 
 		currentTime := time.Now()
 		if currentTime.Sub(createdAt.Time) > limited {
 			klog.Infof("Instance %s has expired (created: %s, ttl: %v), deleting...", pod.Name, createdAt, limited)
+			expired = append(expired, pod)
 		}
-		expired = append(expired, pod)
 	}
 	return expired, nil
 }

@@ -27,8 +27,8 @@ Uses Environment SDK for deployment operations (create)
 import asyncio
 import json
 import os
+from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
-from urllib.parse import urlparse, urlunparse
 
 import click
 import requests
@@ -36,27 +36,13 @@ from tabulate import tabulate
 
 from aenv.core.environment import Environment
 from cli.cmds.common import Config, pass_config
+from cli.utils.api_helpers import (
+    get_api_headers,
+    get_system_url_raw,
+    make_api_url,
+    parse_env_vars as _parse_env_vars,
+)
 from cli.utils.cli_config import get_config_manager
-
-
-def _parse_env_vars(env_var_list: tuple) -> Dict[str, str]:
-    """Parse environment variables from command line arguments.
-
-    Args:
-        env_var_list: Tuple of strings in format "KEY=VALUE"
-
-    Returns:
-        Dictionary of environment variables
-    """
-    env_vars = {}
-    for env_var in env_var_list:
-        if "=" not in env_var:
-            raise click.BadParameter(
-                f"Environment variable must be in format KEY=VALUE, got: {env_var}"
-            )
-        key, value = env_var.split("=", 1)
-        env_vars[key.strip()] = value.strip()
-    return env_vars
 
 
 def _parse_arguments(arg_list: tuple) -> list:
@@ -69,6 +55,24 @@ def _parse_arguments(arg_list: tuple) -> list:
         List of arguments
     """
     return list(arg_list) if arg_list else []
+
+
+def _load_env_config() -> Optional[Dict[str, Any]]:
+    """Load build configuration from config.json in current directory.
+
+    Returns:
+        Dictionary containing build configuration, or None if not found.
+    """
+    config_path = Path(".").resolve() / "config.json"
+    if not config_path.exists():
+        return None
+
+    try:
+        with open(config_path, "r") as f:
+            config = json.load(f)
+        return config
+    except Exception:
+        return None
 
 
 def _split_env_name_version(env_name: str) -> Tuple[str, str]:
@@ -92,57 +96,6 @@ def _split_env_name_version(env_name: str) -> Tuple[str, str]:
         return parts[0], parts[1]
 
 
-def _make_api_url(aenv_url: str, port: int = 8080) -> str:
-    """Make API URL with specified port.
-
-    Args:
-        aenv_url: Base URL (with or without protocol)
-        port: Port number (default 8080)
-
-    Returns:
-        URL with specified port
-    """
-    if not aenv_url:
-        return f"http://localhost:{port}"
-
-    if "://" not in aenv_url:
-        aenv_url = f"http://{aenv_url}"
-
-    p = urlparse(aenv_url)
-    host = p.hostname or "127.0.0.1"
-    new = p._replace(
-        scheme="http",
-        netloc=f"{host}:{port}",
-        path="",
-        params="",
-        query="",
-        fragment="",
-    )
-    return urlunparse(new).rstrip("/")
-
-
-def _get_system_url_raw() -> Optional[str]:
-    """Get raw AEnv system URL from environment variable or config (without processing).
-
-    Priority order:
-    1. AENV_SYSTEM_URL environment variable (highest priority)
-    2. system_url in config file
-    3. None (no default)
-
-    Returns:
-        Raw system URL string or None if not found
-    """
-    # First check environment variable
-    system_url = os.getenv("AENV_SYSTEM_URL")
-
-    # If not in env, check config
-    if not system_url:
-        config_manager = get_config_manager()
-        system_url = config_manager.get("system_url")
-
-    return system_url
-
-
 def _get_system_url() -> str:
     """Get AEnv system URL from environment variable or config (processed for API).
 
@@ -154,25 +107,13 @@ def _get_system_url() -> str:
     Returns:
         Processed API URL with port
     """
-    system_url = _get_system_url_raw()
+    system_url = get_system_url_raw()
 
     # Use default if still not found
     if not system_url:
         system_url = "http://localhost:8080"
 
-    return _make_api_url(system_url, port=8080)
-
-
-def _get_api_headers() -> Dict[str, str]:
-    """Get API headers with authentication if available."""
-    config_manager = get_config_manager()
-    hub_config = config_manager.get_hub_config()
-    api_key = hub_config.get("api_key") or os.getenv("AENV_API_KEY")
-
-    headers = {"Content-Type": "application/json", "Accept": "application/json"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
-    return headers
+    return make_api_url(system_url, port=8080)
 
 
 def _list_instances_from_api(
@@ -204,7 +145,7 @@ def _list_instances_from_api(
         env_id = "*"
 
     url = f"{system_url}/env-instance/{env_id}/list"
-    headers = _get_api_headers()
+    headers = get_api_headers()
 
     # Add query parameters
     params = {}
@@ -356,7 +297,7 @@ def _get_instance_from_api(
         Instance details dict or None if failed
     """
     url = f"{system_url}/env-instance/{instance_id}"
-    headers = _get_api_headers()
+    headers = get_api_headers()
 
     # Debug logging
     if verbose and console:
@@ -496,7 +437,7 @@ def _delete_instance_from_api(system_url: str, instance_id: str) -> bool:
         True if deletion successful
     """
     url = f"{system_url}/env-instance/{instance_id}"
-    headers = _get_api_headers()
+    headers = get_api_headers()
 
     try:
         response = requests.delete(url, headers=headers, timeout=30)
@@ -579,7 +520,7 @@ def instance(cfg: Config):
 
 
 @instance.command("create")
-@click.argument("env_name")
+@click.argument("env_name", required=False)
 @click.option(
     "--datasource",
     "-d",
@@ -657,7 +598,7 @@ def instance(cfg: Config):
 @pass_config
 def create(
     cfg: Config,
-    env_name: str,
+    env_name: Optional[str],
     datasource: str,
     ttl: str,
     environment_variables: tuple,
@@ -676,8 +617,14 @@ def create(
 
     Create and initialize a new environment instance with the specified configuration.
 
+    The env_name argument is optional. If not provided, it will be read from config.json
+    in the current directory.
+
     Examples:
-        # Create a basic instance
+        # Create using config.json in current directory
+        aenv instance create
+
+        # Create with explicit environment name
         aenv instance create flowise-xxx@1.0.2
 
         # Create with custom TTL and environment variables
@@ -690,6 +637,21 @@ def create(
         aenv instance create flowise-xxx@1.0.2 --keep-alive
     """
     console = cfg.console.console()
+
+    # If env_name not provided, try to load from config.json
+    if not env_name:
+        config = _load_env_config()
+        if config and "name" in config and "version" in config:
+            env_name = f"{config['name']}@{config['version']}"
+            console.print(
+                f"[dim]📄 Reading from config.json: {env_name}[/dim]\n"
+            )
+        else:
+            console.print(
+                "[red]Error:[/red] env_name not provided and config.json not found or invalid.\n"
+                "Either provide env_name as argument or ensure config.json exists in current directory."
+            )
+            raise click.Abort()
 
     # Parse environment variables and arguments
     try:
@@ -710,7 +672,7 @@ def create(
 
     # Get system URL from env, config, or use default
     if not system_url:
-        system_url = _get_system_url_raw()
+        system_url = get_system_url_raw()
 
     # Get owner from command line, config, or None
     if not owner:
@@ -845,7 +807,7 @@ def info(
 
     # Get system URL from env, config, or use default
     if not system_url:
-        system_url = _get_system_url_raw()
+        system_url = get_system_url_raw()
 
     console.print(f"[cyan]ℹ️  Retrieving instance information:[/cyan] {env_name}\n")
 

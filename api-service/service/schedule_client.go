@@ -212,6 +212,244 @@ func (c *ScheduleClient) FilterPods() (*[]models.EnvInstance, error) {
 
 /*
 ====================================
+==== Service Management Methods ====
+====================================
+*/
+
+// CreateService creates a Service (Deployment + Service + PVC)
+func (c *ScheduleClient) CreateService(req *backend.Env) (*models.EnvService, error) {
+	url := fmt.Sprintf("%s/services", c.baseURL)
+
+	jsonData, err := req.ToJSON()
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %v", err)
+	}
+	httpReq, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send request: %v", err)
+	}
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Printf("failed to close response body: %v", closeErr)
+		}
+	}()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %v", err)
+	}
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return nil, fmt.Errorf("request failed with status: %d, body: %s", resp.StatusCode, string(body))
+	}
+
+	var createResp models.ClientResponse[models.EnvService]
+	if err := json.Unmarshal(body, &createResp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %v", err)
+	}
+
+	if !createResp.Success {
+		return nil, fmt.Errorf("server returned error, code: %d", createResp.Code)
+	}
+
+	return &createResp.Data, nil
+}
+
+// GetService queries a Service
+func (c *ScheduleClient) GetService(serviceName string) (*models.EnvService, error) {
+	url := fmt.Sprintf("%s/services/%s", c.baseURL, serviceName)
+
+	httpReq, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send request: %v", err)
+	}
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Printf("failed to close response body: %v", closeErr)
+		}
+	}()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %v", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("request failed with status: %d, body: %s", resp.StatusCode, string(body))
+	}
+
+	var getResp models.ClientResponse[models.EnvService]
+	if err := json.Unmarshal(body, &getResp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %v", err)
+	}
+
+	if !getResp.Success {
+		return nil, fmt.Errorf("server returned error, code: %d", getResp.Code)
+	}
+
+	return &getResp.Data, nil
+}
+
+// DeleteService deletes a Service
+func (c *ScheduleClient) DeleteService(serviceName string) (bool, error) {
+	url := fmt.Sprintf("%s/services/%s", c.baseURL, serviceName)
+
+	httpReq, err := http.NewRequest("DELETE", url, nil)
+	if err != nil {
+		return false, fmt.Errorf("failed to create request: %v", err)
+	}
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return false, fmt.Errorf("failed to send request: %v", err)
+	}
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Printf("failed to close response body: %v", closeErr)
+		}
+	}()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return false, fmt.Errorf("failed to read response body: %v", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("request failed with status: %d, body: %s", resp.StatusCode, string(body))
+	}
+	var deleteResp models.ClientResponse[bool]
+	if err := json.Unmarshal(body, &deleteResp); err != nil {
+		return false, fmt.Errorf("failed to unmarshal response: %v", err)
+	}
+
+	if !deleteResp.Success {
+		return false, fmt.Errorf("server returned error, code: %d", deleteResp.Code)
+	}
+
+	return deleteResp.Data, nil
+}
+
+// UpdateServiceRequest represents the request body for updating a service
+type UpdateServiceRequest struct {
+	Replicas             *int32             `json:"replicas,omitempty"`
+	Image                *string            `json:"image,omitempty"`
+	EnvironmentVariables *map[string]string `json:"environment_variables,omitempty"`
+}
+
+// UpdateService updates a Service (replicas, image, env vars)
+func (c *ScheduleClient) UpdateService(serviceName string, updateReq *UpdateServiceRequest) (*models.EnvService, error) {
+	url := fmt.Sprintf("%s/services/%s", c.baseURL, serviceName)
+
+	jsonData, err := json.Marshal(updateReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %v", err)
+	}
+	httpReq, err := http.NewRequest("PUT", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send request: %v", err)
+	}
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Printf("failed to close response body: %v", closeErr)
+		}
+	}()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %v", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("request failed with status: %d, body: %s", resp.StatusCode, string(body))
+	}
+
+	var updateResp models.ClientResponse[models.EnvService]
+	if err := json.Unmarshal(body, &updateResp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %v", err)
+	}
+
+	if !updateResp.Success {
+		return nil, fmt.Errorf("server returned error, code: %d", updateResp.Code)
+	}
+
+	return &updateResp.Data, nil
+}
+
+// ServiceListResponse represents the response structure from controller's list service endpoint
+type ServiceListResponse struct {
+	Success bool                `json:"success"`
+	Code    int                 `json:"code"`
+	Data    []models.EnvService `json:"data"`
+}
+
+// ListServices lists services, optionally filtered by environment name
+func (c *ScheduleClient) ListServices(envName string) ([]*models.EnvService, error) {
+	url := fmt.Sprintf("%s/services", c.baseURL)
+	if envName != "" {
+		url = fmt.Sprintf("%s/services?envName=%s", c.baseURL, envName)
+	}
+
+	httpReq, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("list services: failed to create request: %v", err)
+	}
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("list services: failed to send request: %v", err)
+	}
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Printf("failed to close response body: %v", closeErr)
+		}
+	}()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("list services: failed to read response body: %v", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("list services: request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var serviceListResp ServiceListResponse
+	if err := json.Unmarshal(body, &serviceListResp); err != nil {
+		return nil, fmt.Errorf("list services: failed to unmarshal response: %v", err)
+	}
+
+	if !serviceListResp.Success {
+		return nil, fmt.Errorf("list services: server returned error, code: %d", serviceListResp.Code)
+	}
+
+	// Convert to pointer slice
+	services := make([]*models.EnvService, len(serviceListResp.Data))
+	for i := range serviceListResp.Data {
+		services[i] = &serviceListResp.Data[i]
+	}
+
+	return services, nil
+}
+
+/*
+====================================
 ==== EnvInstanceService adapter ====
 ====================================
 */

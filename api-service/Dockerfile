@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.21-alpine AS builder
+FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/golang:1.21-alpine AS builder
 
 RUN apk add --no-cache git
 

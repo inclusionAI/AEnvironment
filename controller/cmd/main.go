@@ -68,11 +68,19 @@ func StartHttpServer() {
 		klog.Fatalf("failed to create AENV Pod manager, err is %v", err)
 	}
 
+	// AENV Service Manager
+	aenvServiceManager, err := aenvhubserver.NewAEnvServiceHandler()
+	if err != nil {
+		klog.Fatalf("failed to create AENV Service manager, err is %v", err)
+	}
+
 	// Set up routes
 	mux := http.NewServeMux()
 
 	mux.Handle("/pods", aenvPodManager)
 	mux.Handle("/pods/", aenvPodManager)
+	mux.Handle("/services", aenvServiceManager)
+	mux.Handle("/services/", aenvServiceManager)
 
 	// Start server
 	poolserver := &http.Server{

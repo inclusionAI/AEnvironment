@@ -22,6 +22,7 @@ import (
 	"os"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/klog"
@@ -34,7 +35,21 @@ const (
 	AMD64                   = "amd64"
 	WIN64                   = "win64"
 	SingleContainerTemplate = "singleContainer"
+	DeploymentTemplate      = "deployment"
+	ServiceTemplate         = "service"
+	PVCTemplate             = "pvc"
+	podTemplateBaseDir      = "/etc/aenv/pod-templates"
 )
+
+// ResourceConfig holds resource configuration for containers
+type ResourceConfig struct {
+	CPURequest              string
+	CPULimit                string
+	MemoryRequest           string
+	MemoryLimit             string
+	EphemeralStorageRequest string
+	EphemeralStorageLimit   string
+}
 
 func RandString(n int) string {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -164,8 +179,6 @@ func MergePod(pod *corev1.Pod, labels map[string]string, environs map[string]str
 // LoadPodTemplateFromYaml loads Pod template from mounted ConfigMap directory
 // machineType: template type, such as "amd64", "win64", "singleContainer", etc.
 func LoadPodTemplateFromYaml(machineType string) *corev1.Pod {
-	const podTemplateBaseDir = "/etc/aenv/pod-templates"
-
 	// Construct template file path
 	templateFilePath := fmt.Sprintf("%s/%s.yaml", podTemplateBaseDir, machineType)
 
@@ -262,4 +275,280 @@ func (ct *CustomTime) UnmarshalJSON(data []byte) error {
 	}
 	ct.Time = t
 	return nil
+}
+
+// LoadDeploymentTemplateFromYaml loads Deployment template from mounted ConfigMap directory
+func LoadDeploymentTemplateFromYaml() *appsv1.Deployment {
+	templateFilePath := fmt.Sprintf("%s/%s.yaml", podTemplateBaseDir, DeploymentTemplate)
+
+	yamlFile, err := os.ReadFile(templateFilePath)
+	if err != nil {
+		panic(fmt.Errorf("failed to read deployment template from %s: %v", templateFilePath, err))
+	}
+
+	klog.Infof("loaded deployment template from %s", templateFilePath)
+
+	var deployment *appsv1.Deployment
+	if err := yaml.Unmarshal(yamlFile, &deployment); err != nil {
+		panic(fmt.Errorf("failed to unmarshal deployment YAML from %s: %v", templateFilePath, err))
+	}
+
+	// Clear auto-generated fields
+	deployment.ResourceVersion = ""
+	deployment.UID = ""
+
+	return deployment
+}
+
+// LoadServiceTemplateFromYaml loads Service template from mounted ConfigMap directory
+func LoadServiceTemplateFromYaml() *corev1.Service {
+	templateFilePath := fmt.Sprintf("%s/%s.yaml", podTemplateBaseDir, ServiceTemplate)
+
+	yamlFile, err := os.ReadFile(templateFilePath)
+	if err != nil {
+		panic(fmt.Errorf("failed to read service template from %s: %v", templateFilePath, err))
+	}
+
+	klog.Infof("loaded service template from %s", templateFilePath)
+
+	var service *corev1.Service
+	if err := yaml.Unmarshal(yamlFile, &service); err != nil {
+		panic(fmt.Errorf("failed to unmarshal service YAML from %s: %v", templateFilePath, err))
+	}
+
+	// Clear auto-generated fields
+	service.ResourceVersion = ""
+	service.UID = ""
+
+	return service
+}
+
+// LoadPVCTemplateFromYaml loads PVC template from mounted ConfigMap directory
+func LoadPVCTemplateFromYaml() *corev1.PersistentVolumeClaim {
+	templateFilePath := fmt.Sprintf("%s/%s.yaml", podTemplateBaseDir, PVCTemplate)
+
+	yamlFile, err := os.ReadFile(templateFilePath)
+	if err != nil {
+		panic(fmt.Errorf("failed to read PVC template from %s: %v", templateFilePath, err))
+	}
+
+	klog.Infof("loaded PVC template from %s", templateFilePath)
+
+	var pvc *corev1.PersistentVolumeClaim
+	if err := yaml.Unmarshal(yamlFile, &pvc); err != nil {
+		panic(fmt.Errorf("failed to unmarshal PVC YAML from %s: %v", templateFilePath, err))
+	}
+
+	// Clear auto-generated fields
+	pvc.ResourceVersion = ""
+	pvc.UID = ""
+
+	return pvc
+}
+
+// MergeDeployment merges environment-specific configuration into a Deployment template
+func MergeDeployment(deployment *appsv1.Deployment, name string, replicas int32, labels map[string]string, environs map[string]string, image string, pvcName string, mountPath string, resources *ResourceConfig) {
+	// Set deployment name
+	deployment.Name = name
+	deployment.Spec.Replicas = &replicas
+
+	// Update selector labels and template labels based on what's defined in the template
+	// Preserve the selector keys from template, only update their values
+	if deployment.Spec.Selector.MatchLabels == nil {
+		deployment.Spec.Selector.MatchLabels = make(map[string]string)
+	}
+	if deployment.Spec.Template.Labels == nil {
+		deployment.Spec.Template.Labels = make(map[string]string)
+	}
+
+	for key := range deployment.Spec.Selector.MatchLabels {
+		deployment.Spec.Selector.MatchLabels[key] = name
+		deployment.Spec.Template.Labels[key] = name
+	}
+
+	// Merge additional labels (preserve existing labels from template)
+	// These additional labels are only added to deployment metadata and template labels
+	// NOT to selector, to avoid selector mismatch
+	if deployment.Labels == nil {
+		deployment.Labels = make(map[string]string)
+	}
+	if labels != nil {
+		for k, v := range labels {
+			deployment.Labels[k] = v
+			deployment.Spec.Template.Labels[k] = v
+		}
+	}
+
+	// Update container image, env vars, and resources
+	for i := range deployment.Spec.Template.Spec.Containers {
+		container := &deployment.Spec.Template.Spec.Containers[i]
+
+		// Set image
+		if image != "" {
+			container.Image = image
+		}
+
+		// Merge environment variables
+		if environs != nil {
+			for k, v := range environs {
+				found := false
+				for j := range container.Env {
+					if container.Env[j].Name == k {
+						container.Env[j].Value = v
+						found = true
+						break
+					}
+				}
+				if !found {
+					container.Env = append(container.Env, corev1.EnvVar{
+						Name:  k,
+						Value: v,
+					})
+				}
+			}
+		}
+
+		// Update resource limits and requests
+		if resources != nil {
+			if container.Resources.Requests == nil {
+				container.Resources.Requests = make(corev1.ResourceList)
+			}
+			if container.Resources.Limits == nil {
+				container.Resources.Limits = make(corev1.ResourceList)
+			}
+
+			// CPU
+			if cpuReq, err := resource.ParseQuantity(resources.CPURequest); err == nil {
+				container.Resources.Requests[corev1.ResourceCPU] = cpuReq
+			} else {
+				klog.Warningf("failed to parse CPU request %s: %v", resources.CPURequest, err)
+			}
+			if cpuLimit, err := resource.ParseQuantity(resources.CPULimit); err == nil {
+				container.Resources.Limits[corev1.ResourceCPU] = cpuLimit
+			} else {
+				klog.Warningf("failed to parse CPU limit %s: %v", resources.CPULimit, err)
+			}
+
+			// Memory
+			if memReq, err := resource.ParseQuantity(resources.MemoryRequest); err == nil {
+				container.Resources.Requests[corev1.ResourceMemory] = memReq
+			} else {
+				klog.Warningf("failed to parse memory request %s: %v", resources.MemoryRequest, err)
+			}
+			if memLimit, err := resource.ParseQuantity(resources.MemoryLimit); err == nil {
+				container.Resources.Limits[corev1.ResourceMemory] = memLimit
+			} else {
+				klog.Warningf("failed to parse memory limit %s: %v", resources.MemoryLimit, err)
+			}
+
+			// Ephemeral Storage
+			if storageReq, err := resource.ParseQuantity(resources.EphemeralStorageRequest); err == nil {
+				container.Resources.Requests[corev1.ResourceEphemeralStorage] = storageReq
+			} else {
+				klog.Warningf("failed to parse ephemeral storage request %s: %v", resources.EphemeralStorageRequest, err)
+			}
+			if storageLimit, err := resource.ParseQuantity(resources.EphemeralStorageLimit); err == nil {
+				container.Resources.Limits[corev1.ResourceEphemeralStorage] = storageLimit
+			} else {
+				klog.Warningf("failed to parse ephemeral storage limit %s: %v", resources.EphemeralStorageLimit, err)
+			}
+		}
+
+		// Update mount path in volumeMounts
+		if mountPath != "" {
+			for j := range container.VolumeMounts {
+				volumeMount := &container.VolumeMounts[j]
+				// Update the data volume mount path
+				if volumeMount.Name == "data" {
+					volumeMount.MountPath = mountPath
+				}
+			}
+		}
+	}
+
+	// Update PVC name in volumes, or remove PVC volumes if pvcName is empty
+	if pvcName == "" {
+		// Remove PVC volumes and their corresponding volumeMounts when no storage is requested
+		var filteredVolumes []corev1.Volume
+		for i := range deployment.Spec.Template.Spec.Volumes {
+			volume := &deployment.Spec.Template.Spec.Volumes[i]
+			if volume.PersistentVolumeClaim == nil {
+				// Keep non-PVC volumes
+				filteredVolumes = append(filteredVolumes, *volume)
+			}
+		}
+		deployment.Spec.Template.Spec.Volumes = filteredVolumes
+
+		// Remove volumeMounts that reference removed PVC volumes (e.g., "data" volume)
+		for i := range deployment.Spec.Template.Spec.Containers {
+			container := &deployment.Spec.Template.Spec.Containers[i]
+			var filteredMounts []corev1.VolumeMount
+			for j := range container.VolumeMounts {
+				volumeMount := &container.VolumeMounts[j]
+				// Keep volumeMounts that have a corresponding volume in the deployment
+				hasVolume := false
+				for k := range deployment.Spec.Template.Spec.Volumes {
+					if deployment.Spec.Template.Spec.Volumes[k].Name == volumeMount.Name {
+						hasVolume = true
+						break
+					}
+				}
+				if hasVolume {
+					filteredMounts = append(filteredMounts, *volumeMount)
+				}
+			}
+			container.VolumeMounts = filteredMounts
+		}
+	} else {
+		// Update PVC ClaimName when pvcName is provided
+		for i := range deployment.Spec.Template.Spec.Volumes {
+			volume := &deployment.Spec.Template.Spec.Volumes[i]
+			if volume.PersistentVolumeClaim != nil {
+				volume.PersistentVolumeClaim.ClaimName = pvcName
+			}
+		}
+	}
+}
+
+// MergeService merges environment-specific configuration into a Service template
+func MergeService(service *corev1.Service, name string, port int32) {
+	// Set service name
+	service.Name = name
+
+	// Update selector
+	if service.Spec.Selector == nil {
+		service.Spec.Selector = make(map[string]string)
+	}
+	service.Spec.Selector["app"] = name
+
+	// Update port if specified
+	if port > 0 && len(service.Spec.Ports) > 0 {
+		service.Spec.Ports[0].Port = port
+		service.Spec.Ports[0].TargetPort.IntVal = port
+	}
+}
+
+// MergePVC merges environment-specific configuration into a PVC template
+func MergePVC(pvc *corev1.PersistentVolumeClaim, name string, storageSize string, storageClass string) {
+	// Set PVC name
+	pvc.Name = name
+
+	// Update storage size if specified
+	if storageSize != "" {
+		if pvc.Spec.Resources.Requests == nil {
+			pvc.Spec.Resources.Requests = make(corev1.ResourceList)
+		}
+		quantity, err := resource.ParseQuantity(storageSize)
+		if err == nil {
+			pvc.Spec.Resources.Requests[corev1.ResourceStorage] = quantity
+		} else {
+			klog.Warningf("failed to parse storage size %s: %v", storageSize, err)
+		}
+	}
+
+	// Update storage class only if specified (otherwise use template default)
+	if storageClass != "" {
+		pvc.Spec.StorageClassName = &storageClass
+	}
+	// Note: If storageClass is empty, the StorageClassName from template (values.yaml) is preserved
 }
