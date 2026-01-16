@@ -1,5 +1,5 @@
 # Build stage
-FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/golang:1.21-alpine AS builder
+FROM golang:1.21-alpine AS builder
 
 RUN apk add --no-cache git
 
@@ -51,3 +51,4 @@ COPY --from=builder /workspace/api-service/api-service /usr/bin/api-service
 EXPOSE 8080
 
 ENTRYPOINT ["/usr/bin/api-service"]
+

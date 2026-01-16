@@ -182,10 +182,18 @@ class EnvServiceListResponse(BaseModel):
 class APIResponse(BaseModel):
     """Standard API response format."""
 
-    error_code: int = Field(0, alias="errorCode")
-    error_message: str = Field("", alias="errorMessage")
     success: bool = True
+    code: Optional[int] = Field(None, description="Response code")
+    message: Optional[str] = Field(None, description="Response message")
     data: Optional[Any] = None
+
+    # Legacy fields for backwards compatibility
+    error_code: Optional[int] = Field(None, alias="errorCode")
+    error_message: Optional[str] = Field(None, alias="errorMessage")
+
+    def get_error_message(self) -> str:
+        """Get error message from either message or error_message field."""
+        return self.message or self.error_message or "Unknown error"
 
 
 class APIError(BaseModel):

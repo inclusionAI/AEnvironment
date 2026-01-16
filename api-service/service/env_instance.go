@@ -85,7 +85,12 @@ func (c *EnvInstanceClient) CreateEnvInstance(req *backend.Env) (*models.EnvInst
 	}
 
 	if !createResp.Success {
-		return nil, fmt.Errorf("create env instance: server returned error, code: %d", createResp.Code)
+		// Include both code and message in error
+		errMsg := fmt.Sprintf("create env instance: server returned error, code: %d", createResp.Code)
+		if createResp.Message != "" {
+			errMsg = fmt.Sprintf("create env instance: server returned error (code %d): %s", createResp.Code, createResp.Message)
+		}
+		return nil, fmt.Errorf("%s", errMsg)
 	}
 
 	return &createResp.Data, nil
@@ -132,7 +137,12 @@ func (c *EnvInstanceClient) GetEnvInstance(id string) (*models.EnvInstance, erro
 	}
 
 	if !getResp.Success {
-		return nil, fmt.Errorf("get env instance %s: server returned error, code: %d", id, getResp.Code)
+		// Include both code and message in error
+		errMsg := fmt.Sprintf("get env instance %s: server returned error, code: %d", id, getResp.Code)
+		if getResp.Message != "" {
+			errMsg = fmt.Sprintf("get env instance %s: server returned error (code %d): %s", id, getResp.Code, getResp.Message)
+		}
+		return nil, fmt.Errorf("%s", errMsg)
 	}
 
 	return &getResp.Data, nil
@@ -178,7 +188,12 @@ func (c *EnvInstanceClient) DeleteEnvInstance(id string) error {
 	}
 
 	if !deleteResp.Success {
-		return fmt.Errorf("delete env instance %s: server returned error, code: %d", id, deleteResp.Code)
+		// Include both code and message in error
+		errMsg := fmt.Sprintf("delete env instance %s: server returned error, code: %d", id, deleteResp.Code)
+		if deleteResp.Message != "" {
+			errMsg = fmt.Sprintf("delete env instance %s: server returned error (code %d): %s", id, deleteResp.Code, deleteResp.Message)
+		}
+		return fmt.Errorf("%s", errMsg)
 	}
 
 	return nil
@@ -225,7 +240,12 @@ func (c *EnvInstanceClient) ListEnvInstances(envName string) ([]*models.EnvInsta
 	}
 
 	if !getResp.Success {
-		return nil, fmt.Errorf("list env instances: server returned error, code: %d", getResp.Code)
+		// Include both code and message in error
+		errMsg := fmt.Sprintf("list env instances: server returned error, code: %d", getResp.Code)
+		if getResp.Message != "" {
+			errMsg = fmt.Sprintf("list env instances: server returned error (code %d): %s", getResp.Code, getResp.Message)
+		}
+		return nil, fmt.Errorf("%s", errMsg)
 	}
 
 	return getResp.Data, nil
@@ -271,7 +291,12 @@ func (c *EnvInstanceClient) Warmup(req *backend.Env) error {
 	}
 
 	if !getResp.Success {
-		return fmt.Errorf("warmup env: server returned error, code: %d", getResp.Code)
+		// Include both code and message in error
+		errMsg := fmt.Sprintf("warmup env: server returned error, code: %d", getResp.Code)
+		if getResp.Message != "" {
+			errMsg = fmt.Sprintf("warmup env: server returned error (code %d): %s", getResp.Code, getResp.Message)
+		}
+		return fmt.Errorf("%s", errMsg)
 	}
 
 	return nil
@@ -317,7 +342,12 @@ func (c *EnvInstanceClient) Cleanup() error {
 	}
 
 	if !getResp.Success {
-		return fmt.Errorf("cleanup env: server returned error, code: %d", getResp.Code)
+		// Include both code and message in error
+		errMsg := fmt.Sprintf("cleanup env: server returned error, code: %d", getResp.Code)
+		if getResp.Message != "" {
+			errMsg = fmt.Sprintf("cleanup env: server returned error (code %d): %s", getResp.Code, getResp.Message)
+		}
+		return fmt.Errorf("%s", errMsg)
 	}
 
 	return nil

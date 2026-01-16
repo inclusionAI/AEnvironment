@@ -60,7 +60,7 @@ def validate_env_name(name: str) -> tuple[bool, str]:
         return False, "Environment name must start with a lowercase letter or number"
 
     # Check if name ends with a letter or number
-    if not re.match(r'[a-z0-9]$', name):
+    if not re.search(r'[a-z0-9]$', name):
         return False, "Environment name must end with a lowercase letter or number"
 
     return True, ""

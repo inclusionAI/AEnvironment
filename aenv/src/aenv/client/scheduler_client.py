@@ -157,11 +157,9 @@ class AEnvSchedulerClient:
                         logger.info(f"Environment instance created: {instance.id}")
                         return instance
                     else:
-                        error_msg = getattr(
-                            api_response, "error_message", "Unknown error"
-                        )
+                        error_msg = api_response.get_error_message()
                         raise EnvironmentError(
-                            f"Failed to create instance: {error_msg}, rsp: {api_response}"
+                            f"Failed to create instance: {error_msg}"
                         )
                 except ValueError as e:
                     raise EnvironmentError(
@@ -211,9 +209,7 @@ class AEnvSchedulerClient:
                         )
                         return instance
                     else:
-                        error_msg = getattr(
-                            api_response, "error_message", "Unknown error"
-                        )
+                        error_msg = api_response.get_error_message()
                         raise EnvironmentError(f"Failed to get instance: {error_msg}")
                 except ValueError as e:
                     raise EnvironmentError(
@@ -445,11 +441,9 @@ class AEnvSchedulerClient:
                         logger.info(f"Environment service created: {service.id}")
                         return service
                     else:
-                        error_msg = getattr(
-                            api_response, "error_message", "Unknown error"
-                        )
+                        error_msg = api_response.get_error_message()
                         raise EnvironmentError(
-                            f"Failed to create service: {error_msg}, rsp: {api_response}"
+                            f"Failed to create service: {error_msg}"
                         )
                 except ValueError as e:
                     raise EnvironmentError(
@@ -501,9 +495,7 @@ class AEnvSchedulerClient:
                         )
                         return service
                     else:
-                        error_msg = getattr(
-                            api_response, "error_message", "Unknown error"
-                        )
+                        error_msg = api_response.get_error_message()
                         raise EnvironmentError(f"Failed to get service: {error_msg}")
                 except ValueError as e:
                     raise EnvironmentError(
@@ -652,9 +644,7 @@ class AEnvSchedulerClient:
                         logger.info(f"Environment service updated: {service.id}")
                         return service
                     else:
-                        error_msg = getattr(
-                            api_response, "error_message", "Unknown error"
-                        )
+                        error_msg = api_response.get_error_message()
                         raise EnvironmentError(f"Failed to update service: {error_msg}")
                 except ValueError as e:
                     raise EnvironmentError(
