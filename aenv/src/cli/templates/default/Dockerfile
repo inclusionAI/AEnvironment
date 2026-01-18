@@ -1,4 +1,5 @@
-FROM python:3.12-slim
+ARG REGISTRY_PREFIX=
+FROM ${REGISTRY_PREFIX}python:3.12-slim
 
 WORKDIR /app
 ENV PYTHONPATH=/app/src
