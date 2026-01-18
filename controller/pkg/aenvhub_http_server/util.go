@@ -515,11 +515,14 @@ func MergeService(service *corev1.Service, name string, port int32) {
 	// Set service name
 	service.Name = name
 
-	// Update selector
+	// Update selector to match the deployment selector keys from template
+	// Preserve the selector keys from template, only update their values
 	if service.Spec.Selector == nil {
 		service.Spec.Selector = make(map[string]string)
 	}
-	service.Spec.Selector["app"] = name
+	for key := range service.Spec.Selector {
+		service.Spec.Selector[key] = name
+	}
 
 	// Update port if specified
 	if port > 0 && len(service.Spec.Ports) > 0 {

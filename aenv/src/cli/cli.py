@@ -27,6 +27,7 @@ from cli.cmds import (
     version,
 )
 from cli.cmds.common import Config, global_error_handler, pass_config
+from cli.utils.common.aenv_logger import configure_logging
 
 
 class CLI(click.Group):
@@ -43,6 +44,8 @@ def cli(cfg: Config, debug: bool, verbose: bool):
     """Aenv cli helps build your custom aenv"""
     cfg.debug = debug
     cfg.verbose = verbose
+    # Configure logging based on verbose flag
+    configure_logging(verbose)
 
 
 # add subcommand

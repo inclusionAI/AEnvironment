@@ -32,17 +32,18 @@ from typing import Any, Dict, Optional, Tuple
 
 import click
 import requests
-from tabulate import tabulate
 
 from aenv.core.environment import Environment
 from cli.cmds.common import Config, pass_config
 from cli.utils.api_helpers import (
+    format_time_to_local,
     get_api_headers,
     get_system_url_raw,
     make_api_url,
     parse_env_vars as _parse_env_vars,
 )
 from cli.utils.cli_config import get_config_manager
+from cli.utils.table_formatter import print_detail_table, print_instance_list
 
 
 def _parse_arguments(arg_list: tuple) -> list:
@@ -723,9 +724,9 @@ def create(
                 {"Property": "Environment", "Value": info.get("name", "-")},
                 {"Property": "Status", "Value": info.get("status", "-")},
                 {"Property": "IP Address", "Value": info.get("ip", "-")},
-                {"Property": "Created At", "Value": info.get("created_at", "-")},
+                {"Property": "Created At", "Value": format_time_to_local(info.get("created_at"))},
             ]
-            console.print(tabulate(table_data, headers="keys", tablefmt="grid"))
+            print_detail_table(table_data, console, title="Instance Deployed")
 
         # Store instance reference for potential cleanup
         if not keep_alive:
@@ -835,10 +836,10 @@ def info(
                 {"Property": "Environment", "Value": info.get("name", "-")},
                 {"Property": "Status", "Value": info.get("status", "-")},
                 {"Property": "IP Address", "Value": info.get("ip", "-")},
-                {"Property": "Created At", "Value": info.get("created_at", "-")},
-                {"Property": "Updated At", "Value": info.get("updated_at", "-")},
+                {"Property": "Created At", "Value": format_time_to_local(info.get("created_at"))},
+                {"Property": "Updated At", "Value": format_time_to_local(info.get("updated_at"))},
             ]
-            console.print(tabulate(table_data, headers="keys", tablefmt="grid"))
+            print_detail_table(table_data, console, title="Instance Information")
 
         # Release the environment
         asyncio.run(_stop_instance(env))
@@ -876,13 +877,8 @@ def info(
     type=str,
     help="AEnv system URL (defaults to AENV_SYSTEM_URL env var or config)",
 )
-@click.option(
-    "--verbose",
-    is_flag=True,
-    help="Enable verbose/debug output",
-)
 @pass_config
-def list_instances(cfg: Config, name, version, output, system_url, verbose):
+def list_instances(cfg: Config, name, version, output, system_url):
     """List running environment instances
 
     Query and display running environment instances. Can filter by environment
@@ -917,8 +913,8 @@ def list_instances(cfg: Config, name, version, output, system_url, verbose):
     else:
         system_url = _make_api_url(system_url, port=8080)
 
-    # Use command-level verbose flag or config-level verbose
-    is_verbose = verbose or cfg.verbose
+    # Use config-level verbose
+    is_verbose = cfg.verbose
 
     # Debug: show configuration if verbose
     if is_verbose:
@@ -944,11 +940,26 @@ def list_instances(cfg: Config, name, version, output, system_url, verbose):
             console=console if is_verbose else None,
         )
     except Exception as e:
-        console.print(f"[red]❌ Failed to list instances:[/red] {str(e)}")
-        if is_verbose:
-            import traceback
+        error_msg = str(e)
 
+        # Parse and simplify error messages
+        if "403" in error_msg or "401" in error_msg:
+            console.print(f"[red]❌ Authentication failed[/red]")
+            console.print("\n[dim]Please check your API key configuration.[/dim]")
+            console.print("[dim]You can set it with: [cyan]aenv config set hub_config.api_key <your-key>[/cyan][/dim]")
+        elif "connection" in error_msg.lower() or "timeout" in error_msg.lower():
+            console.print(f"[red]❌ Connection failed[/red]")
+            console.print(f"\n[dim]Cannot connect to the API service at: [cyan]{system_url}[/cyan][/dim]")
+            console.print("[dim]Please check your network connection and system_url configuration.[/dim]")
+        else:
+            console.print(f"[red]❌ Failed to list instances[/red]")
+            console.print(f"\n[yellow]Error:[/yellow] {error_msg}")
+
+        if is_verbose:
+            console.print("\n[dim]--- Full error trace ---[/dim]")
+            import traceback
             console.print(traceback.format_exc())
+
         raise click.Abort()
 
     if not instances_list:
@@ -964,52 +975,25 @@ def list_instances(cfg: Config, name, version, output, system_url, verbose):
     if output == "json":
         console.print(json.dumps(instances_list, indent=2, ensure_ascii=False))
     elif output == "table":
-        # Prepare table data
-        table_data = []
+        # Prepare data for the rich table formatter
+        instances_data = []
         for instance in instances_list:
             instance_id = instance.get("id", "")
             if not instance_id:
                 continue
 
-            # Use list data directly
-            env_info = instance.get("env") or {}
-            env_name = env_info.get("name") if env_info else None
-            env_version = env_info.get("version") if env_info else None
+            # Format the data for display
+            instances_data.append({
+                "id": instance_id,
+                "env": instance.get("env"),
+                "owner": instance.get("owner"),
+                "status": instance.get("status"),
+                "ip": instance.get("ip"),
+                "created_at": format_time_to_local(instance.get("created_at")),
+            })
 
-            # If env is None, try to extract from instance ID
-            if not env_name and instance_id:
-                parts = instance_id.split("-")
-                if len(parts) >= 2:
-                    env_name = parts[0]
-
-            # Get IP from list data
-            ip = instance.get("ip") or ""
-            if not ip:
-                ip = "-"
-
-            # Get status from list data
-            status = instance.get("status") or "-"
-
-            # Get created_at from list data
-            created_at = instance.get("created_at") or "-"
-
-            # Get owner from list data
-            owner = instance.get("owner") or "-"
-
-            table_data.append(
-                {
-                    "Instance ID": instance_id,
-                    "Environment": env_name or "-",
-                    "Version": env_version or "-",
-                    "Owner": owner,
-                    "Status": status,
-                    "IP": ip,
-                    "Created At": created_at,
-                }
-            )
-
-        if table_data:
-            console.print(tabulate(table_data, headers="keys", tablefmt="grid"))
+        if instances_data:
+            print_instance_list(instances_data, console)
         else:
             console.print("📭 No running instances found")
 
@@ -1028,13 +1012,8 @@ def list_instances(cfg: Config, name, version, output, system_url, verbose):
     type=str,
     help="AEnv system URL (defaults to AENV_SYSTEM_URL env var)",
 )
-@click.option(
-    "--verbose",
-    is_flag=True,
-    help="Enable verbose/debug output",
-)
 @pass_config
-def get_instance(cfg: Config, instance_id, output, system_url, verbose):
+def get_instance(cfg: Config, instance_id, output, system_url):
     """Get detailed information for a specific instance
 
     Retrieve detailed information about a running environment instance by its ID.
@@ -1057,8 +1036,8 @@ def get_instance(cfg: Config, instance_id, output, system_url, verbose):
     else:
         system_url = _make_api_url(system_url, port=8080)
 
-    # Use command-level verbose flag or config-level verbose
-    is_verbose = verbose or cfg.verbose
+    # Use config-level verbose
+    is_verbose = cfg.verbose
 
     # Debug: show configuration if verbose
     if is_verbose:
@@ -1083,7 +1062,9 @@ def get_instance(cfg: Config, instance_id, output, system_url, verbose):
         )
 
         if not instance_info:
-            console.print(f"[red]❌ Instance not found:[/red] {instance_id}")
+            console.print(f"[red]❌ Instance not found:[/red] [yellow]{instance_id}[/yellow]")
+            console.print("\n[dim]The instance does not exist or has been deleted.[/dim]")
+            console.print("[dim]Use [cyan]aenv instance list[/cyan] to see available instances.[/dim]")
             raise click.Abort()
 
         console.print("[green]✅ Instance information retrieved![/green]\n")
@@ -1104,23 +1085,47 @@ def get_instance(cfg: Config, instance_id, output, system_url, verbose):
                 {"Property": "IP Address", "Value": instance_info.get("ip", "-")},
                 {
                     "Property": "Created At",
-                    "Value": instance_info.get("created_at", "-"),
+                    "Value": format_time_to_local(instance_info.get("created_at")),
                 },
                 {
                     "Property": "Updated At",
-                    "Value": instance_info.get("updated_at", "-"),
+                    "Value": format_time_to_local(instance_info.get("updated_at")),
                 },
             ]
-            console.print(tabulate(table_data, headers="keys", tablefmt="grid"))
+            print_detail_table(table_data, console, title="Instance Details")
 
     except click.Abort:
         raise
     except Exception as e:
-        console.print(f"[red]❌ Failed to get instance information:[/red] {str(e)}")
-        if cfg.verbose:
-            import traceback
+        error_msg = str(e).lower()
 
-            console.print(traceback.format_exc())
+        # Parse and simplify error messages - focus on user-friendly messages
+        if ("404" in error_msg and "not found" in error_msg) or "pods" in error_msg or ("500" in error_msg and "not found" in error_msg):
+            console.print(f"[red]❌ Instance not found:[/red] [yellow]{instance_id}[/yellow]")
+            console.print("\n[dim]The instance does not exist or has been deleted.[/dim]")
+            console.print("[dim]Use [cyan]aenv instance list[/cyan] to see available instances.[/dim]")
+        elif "403" in error_msg or "401" in error_msg:
+            console.print(f"[red]❌ Authentication failed[/red]")
+            console.print("\n[dim]Please check your API key configuration.[/dim]")
+            console.print("[dim]You can set it with: [cyan]aenv config set hub_config.api_key <your-key>[/cyan][/dim]")
+        elif "500" in error_msg and "internal server error" in error_msg:
+            console.print(f"[red]❌ Server error occurred[/red]")
+            console.print("\n[dim]The API service encountered an internal error.[/dim]")
+            console.print("[dim]Please try again or contact support if the issue persists.[/dim]")
+        elif "connection" in error_msg or "timeout" in error_msg:
+            console.print(f"[red]❌ Connection failed[/red]")
+            console.print(f"\n[dim]Cannot connect to the API service at: [cyan]{system_url}[/cyan][/dim]")
+            console.print("[dim]Please check your network connection and system_url configuration.[/dim]")
+        else:
+            console.print(f"[red]❌ Failed to get instance information[/red]")
+            console.print(f"\n[dim]The instance [yellow]{instance_id}[/yellow] could not be retrieved.[/dim]")
+            console.print("[dim]It may have been deleted or never existed.[/dim]")
+
+        if cfg.verbose:
+            console.print(f"\n[dim]Technical details: {str(e)}[/dim]")
+            import traceback
+            console.print(f"[dim]{traceback.format_exc()}[/dim]")
+
         raise click.Abort()
 
 

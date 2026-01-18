@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """
-service command - Manage environment services (Deployment + Service + PVC)
+service command - Manage environment services (Deployment + Service + Storage)
 
 This command provides interface for managing long-running services:
 - service create: Create new services
@@ -29,17 +29,18 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import click
-from tabulate import tabulate
 
 from aenv.client.scheduler_client import AEnvSchedulerClient
 from cli.cmds.common import Config, pass_config
 from cli.utils.api_helpers import (
+    format_time_to_local,
     get_api_headers,
     get_system_url_raw,
     make_api_url,
     parse_env_vars,
 )
 from cli.utils.cli_config import get_config_manager
+from cli.utils.table_formatter import print_detail_table, print_service_list
 
 
 def _load_env_config() -> Optional[Dict[str, Any]]:
@@ -85,10 +86,10 @@ def _get_system_url() -> str:
 @pass_config
 def service(cfg: Config):
     """Manage environment services (long-running deployments)
-    
+
     Services are persistent deployments with:
     - Multiple replicas
-    - Persistent storage (PVC)
+    - Persistent storage
     - Cluster DNS service URL
     - No TTL (always running)
     """
@@ -120,7 +121,7 @@ def service(cfg: Config):
     "--enable-storage",
     is_flag=True,
     default=False,
-    help="Enable PVC storage. Storage configuration (storageSize, pvcName, mountPath) will be read from config.json's deployConfig.",
+    help="Enable storage. Storage configuration (storageSize, storageName, mountPath) will be read from config.json's deployConfig.service.",
 )
 @click.option(
     "--output",
@@ -141,32 +142,41 @@ def create(
 ):
     """Create a new environment service
 
-    Creates a long-running service with Deployment, Service, and optionally PVC.
+    Creates a long-running service with Deployment, Service, and optionally persistent storage.
 
     The env_name argument is optional. If not provided, it will be read from config.json
     in the current directory.
 
     Configuration priority (high to low):
     1. CLI parameters (--replicas, --port, --enable-storage)
-    2. config.json's deployConfig
-    3. System defaults
+    2. config.json's deployConfig.service (new structure)
+    3. config.json's deployConfig (legacy flat structure, for backward compatibility)
+    4. System defaults
 
-    PVC creation behavior:
-    - Use --enable-storage flag to enable PVC
-    - Storage configuration (storageSize, pvcName, mountPath) is read from config.json's deployConfig
-    - When PVC is created, replicas must be 1 (enforced by backend)
+    Storage creation behavior:
+    - Use --enable-storage flag to enable persistent storage
+    - Storage configuration (storageSize, storageName, mountPath) is read from config.json's deployConfig.service
+    - When storage is created, replicas must be 1 (enforced by backend)
     - storageClass is configured in helm values.yaml deployment, not in config.json
 
-    config.json deployConfig fields:
+    config.json deployConfig.service fields (new structure):
     - replicas: Number of replicas (default: 1)
     - port: Service port (default: 8080)
+    - enableStorage: Enable storage by default (default: false, CLI --enable-storage overrides)
     - storageSize: Storage size like "10Gi", "20Gi" (required when --enable-storage is used)
-    - pvcName: PVC name (default: environment name)
+    - storageName: Storage name (default: environment name)
     - mountPath: Mount path (default: /home/admin/data)
-    - cpuRequest, cpuLimit: CPU resources (default: 1, 2)
-    - memoryRequest, memoryLimit: Memory resources (default: 2Gi, 4Gi)
-    - ephemeralStorageRequest, ephemeralStorageLimit: Storage (default: 5Gi, 10Gi)
+
+    config.json deployConfig fields (shared by both Pod and Service):
+    - cpu: CPU resource (used as both request and limit, default: "1")
+    - memory: Memory resource (used as both request and limit, default: "2Gi")
+    - ephemeralStorage: Ephemeral storage (used as both request and limit, default: "5Gi")
     - environmentVariables: Environment variables dict
+
+    Legacy config.json deployConfig fields (deprecated, kept for backward compatibility):
+    - cpuRequest, cpuLimit: CPU resources (if not set, both use cpu value)
+    - memoryRequest, memoryLimit: Memory resources (if not set, both use memory value)
+    - ephemeralStorageRequest, ephemeralStorageLimit: Storage (if not set, both use ephemeralStorage value)
 
     Examples:
         # Create using config.json in current directory
@@ -175,10 +185,10 @@ def create(
         # Create with explicit environment name
         aenv service create myapp@1.0.0
 
-        # Create with 3 replicas and custom port (no PVC)
+        # Create with 3 replicas and custom port (no storage)
         aenv service create myapp@1.0.0 --replicas 3 --port 8000
 
-        # Create with PVC enabled (storageSize must be in config.json)
+        # Create with storage enabled (storageSize must be in config.json)
         aenv service create myapp@1.0.0 --enable-storage
 
         # Create with environment variables
@@ -189,6 +199,12 @@ def create(
     # Load config.json if exists
     config = _load_env_config()
     deploy_config = config.get("deployConfig", {}) if config else {}
+
+    # Get service config (support both new nested structure and legacy flat structure)
+    service_config = deploy_config.get("service", {})
+    # For backward compatibility, fall back to root deployConfig if service config is empty
+    if not service_config:
+        service_config = deploy_config
 
     # If env_name not provided, try to load from config.json
     if not env_name:
@@ -205,31 +221,49 @@ def create(
             raise click.Abort()
 
     # Merge parameters: CLI > config.json > defaults
-    final_replicas = replicas if replicas is not None else deploy_config.get("replicas", 1)
-    final_port = port if port is not None else deploy_config.get("port")
+    final_replicas = replicas if replicas is not None else service_config.get("replicas", 1)
+    final_port = port if port is not None else service_config.get("port")
 
-    # Storage configuration - only use if --enable-storage is set
+    # Storage configuration - enabled by --enable-storage flag OR config.json enableStorage
+    enable_storage_from_config = service_config.get("enableStorage", False)
+    should_enable_storage = enable_storage or enable_storage_from_config
+
     final_storage_size = None
-    final_pvc_name = None
+    final_storage_name = None
     final_mount_path = None
-    if enable_storage:
-        final_storage_size = deploy_config.get("storageSize")
+    if should_enable_storage:
+        final_storage_size = service_config.get("storageSize")
         if not final_storage_size:
             console.print(
-                "[red]Error:[/red] --enable-storage flag is set but 'storageSize' is not found in config.json's deployConfig.\n"
-                "Please add 'storageSize' (e.g., '10Gi', '20Gi') to deployConfig in config.json."
+                "[red]Error:[/red] Storage is enabled but 'storageSize' is not found in config.json's deployConfig.service.\n"
+                "Please add 'storageSize' (e.g., '10Gi', '20Gi') to deployConfig.service in config.json."
             )
             raise click.Abort()
-        final_pvc_name = deploy_config.get("pvcName")
-        final_mount_path = deploy_config.get("mountPath")
+        final_storage_name = service_config.get("storageName")
+        final_mount_path = service_config.get("mountPath")
 
-    # Resource configurations from deployConfig
-    cpu_request = deploy_config.get("cpuRequest")
-    cpu_limit = deploy_config.get("cpuLimit")
-    memory_request = deploy_config.get("memoryRequest")
-    memory_limit = deploy_config.get("memoryLimit")
-    ephemeral_storage_request = deploy_config.get("ephemeralStorageRequest")
-    ephemeral_storage_limit = deploy_config.get("ephemeralStorageLimit")
+        # Validate replicas must be 1 when storage is enabled
+        if final_replicas != 1:
+            console.print(
+                "[red]Error:[/red] When storage is enabled (enableStorage=true or --enable-storage), replicas must be 1.\n"
+                f"Current replicas: {final_replicas}. Please set replicas to 1 in config.json or use --replicas 1."
+            )
+            raise click.Abort()
+
+    # Resource configurations from deployConfig (kept at root level for backward compatibility)
+    # These can be derived from simplified parameters (cpu, memory, ephemeralStorage)
+    # Priority: explicit resource params > derived from simplified params > defaults
+    cpu = deploy_config.get("cpu", "1")
+    memory = deploy_config.get("memory", "2Gi")
+    ephemeral_storage = deploy_config.get("ephemeralStorage", "5Gi")
+
+    # Try explicit resource configs first (for backward compatibility with old configs)
+    cpu_request = deploy_config.get("cpuRequest") or cpu
+    cpu_limit = deploy_config.get("cpuLimit") or cpu
+    memory_request = deploy_config.get("memoryRequest") or memory
+    memory_limit = deploy_config.get("memoryLimit") or memory
+    ephemeral_storage_request = deploy_config.get("ephemeralStorageRequest") or ephemeral_storage
+    ephemeral_storage_limit = deploy_config.get("ephemeralStorageLimit") or ephemeral_storage
 
     # Parse environment variables from CLI
     try:
@@ -266,20 +300,21 @@ def create(
     if owner:
         console.print(f"   Owner: {owner}")
 
-    if enable_storage:
-        console.print(f"[cyan]   Storage Configuration:[/cyan]")
+    if should_enable_storage:
+        storage_source = "CLI flag" if enable_storage else "config.json"
+        console.print(f"[cyan]   Storage Configuration (from {storage_source}):[/cyan]")
         console.print(f"     - Size: {final_storage_size}")
-        if final_pvc_name:
-            console.print(f"     - PVC Name: {final_pvc_name}")
+        if final_storage_name:
+            console.print(f"     - Storage Name: {final_storage_name}")
         else:
-            console.print(f"     - PVC Name: {env_name.split('@')[0]} (default)")
+            console.print(f"     - Storage Name: {env_name.split('@')[0]} (default)")
         if final_mount_path:
             console.print(f"     - Mount Path: {final_mount_path}")
         else:
             console.print(f"     - Mount Path: /home/admin/data (default)")
-        console.print(f"   [yellow]⚠️  With PVC enabled, replicas must be 1[/yellow]")
+        console.print(f"   [yellow]⚠️  With storage enabled, replicas must be 1[/yellow]")
     else:
-        console.print(f"[dim]   Storage: Disabled (use --enable-storage to enable PVC)[/dim]")
+        console.print(f"[dim]   Storage: Disabled (use --enable-storage to enable storage)[/dim]")
     console.print()
 
     async def _create():
@@ -293,7 +328,7 @@ def create(
                 environment_variables=env_vars,
                 owner=owner,
                 port=final_port,
-                pvc_name=final_pvc_name,
+                pvc_name=final_storage_name,
                 storage_size=final_storage_size,
                 mount_path=final_mount_path,
                 cpu_request=cpu_request,
@@ -318,10 +353,10 @@ def create(
                 {"Property": "Status", "Value": svc.status},
                 {"Property": "Service URL", "Value": svc.service_url or "-"},
                 {"Property": "Replicas", "Value": f"{svc.available_replicas}/{svc.replicas}"},
-                {"Property": "PVC Name", "Value": svc.pvc_name or "-"},
-                {"Property": "Created At", "Value": svc.created_at},
+                {"Property": "Storage Name", "Value": svc.pvc_name or "-"},
+                {"Property": "Created At", "Value": format_time_to_local(svc.created_at)},
             ]
-            console.print(tabulate(table_data, headers="keys", tablefmt="grid"))
+            print_detail_table(table_data, console, title="Service Created")
 
     except Exception as e:
         console.print(f"[red]❌ Creation failed:[/red] {str(e)}")
@@ -376,10 +411,26 @@ def list_services(cfg: Config, name, output):
     try:
         services_list = asyncio.run(_list())
     except Exception as e:
-        console.print(f"[red]❌ Failed to list services:[/red] {str(e)}")
+        error_msg = str(e)
+
+        # Parse and simplify error messages
+        if "403" in error_msg or "401" in error_msg:
+            console.print(f"[red]❌ Authentication failed[/red]")
+            console.print("\n[dim]Please check your API key configuration.[/dim]")
+            console.print("[dim]You can set it with: [cyan]aenv config set hub_config.api_key <your-key>[/cyan][/dim]")
+        elif "connection" in error_msg.lower() or "timeout" in error_msg.lower():
+            console.print(f"[red]❌ Connection failed[/red]")
+            console.print(f"\n[dim]Cannot connect to the API service.[/dim]")
+            console.print("[dim]Please check your network connection and system_url configuration.[/dim]")
+        else:
+            console.print(f"[red]❌ Failed to list services[/red]")
+            console.print(f"\n[yellow]Error:[/yellow] {error_msg}")
+
         if cfg.verbose:
+            console.print("\n[dim]--- Full error trace ---[/dim]")
             import traceback
             console.print(traceback.format_exc())
+
         raise click.Abort()
     
     if not services_list:
@@ -388,30 +439,30 @@ def list_services(cfg: Config, name, output):
         else:
             console.print("📭 No running services found")
         return
-    
+
     if output == "json":
         console.print(json.dumps([s.model_dump() for s in services_list], indent=2, default=str))
     else:
-        table_data = []
+        # Convert service objects to dictionaries for the formatter
+        services_data = []
         for svc in services_list:
-            env_name = svc.env.name if svc.env else "-"
-            env_version = svc.env.version if svc.env else "-"
-            
-            table_data.append({
-                "Service ID": svc.id,
-                "Environment": env_name,
-                "Version": env_version,
-                "Owner": svc.owner or "-",
-                "Status": svc.status,
-                "Replicas": f"{svc.available_replicas}/{svc.replicas}",
-                "Service URL": svc.service_url or "-",
-                "Created At": svc.created_at,
+            env_info = {}
+            if svc.env:
+                env_info["name"] = svc.env.name
+                env_info["version"] = svc.env.version
+
+            services_data.append({
+                "id": svc.id,
+                "env": env_info if env_info else None,
+                "owner": svc.owner,
+                "status": svc.status,
+                "available_replicas": svc.available_replicas,
+                "replicas": svc.replicas,
+                "storage_name": svc.pvc_name,
+                "created_at": format_time_to_local(svc.created_at),
             })
-        
-        if table_data:
-            console.print(tabulate(table_data, headers="keys", tablefmt="grid"))
-        else:
-            console.print("📭 No running services found")
+
+        print_service_list(services_data, console)
 
 
 @service.command("get")
@@ -452,15 +503,15 @@ def get_service(cfg: Config, service_id, output):
     
     try:
         svc = asyncio.run(_get())
-        
+
         console.print("[green]✅ Service information retrieved![/green]\n")
-        
+
         if output == "json":
             console.print(json.dumps(svc.model_dump(), indent=2, default=str))
         else:
             env_name = svc.env.name if svc.env else "-"
             env_version = svc.env.version if svc.env else "-"
-            
+
             table_data = [
                 {"Property": "Service ID", "Value": svc.id},
                 {"Property": "Environment", "Value": env_name},
@@ -469,17 +520,38 @@ def get_service(cfg: Config, service_id, output):
                 {"Property": "Status", "Value": svc.status},
                 {"Property": "Replicas", "Value": f"{svc.available_replicas}/{svc.replicas}"},
                 {"Property": "Service URL", "Value": svc.service_url or "-"},
-                {"Property": "PVC Name", "Value": svc.pvc_name or "-"},
-                {"Property": "Created At", "Value": svc.created_at},
-                {"Property": "Updated At", "Value": svc.updated_at},
+                {"Property": "Storage Name", "Value": svc.pvc_name or "-"},
+                {"Property": "Created At", "Value": format_time_to_local(svc.created_at)},
+                {"Property": "Updated At", "Value": format_time_to_local(svc.updated_at)},
             ]
-            console.print(tabulate(table_data, headers="keys", tablefmt="grid"))
-    
+            print_detail_table(table_data, console, title="Service Details")
+
     except Exception as e:
-        console.print(f"[red]❌ Failed to get service information:[/red] {str(e)}")
+        error_msg = str(e).lower()
+
+        # Parse and simplify error messages
+        if ("404" in error_msg and "not found" in error_msg) or "deployment" in error_msg:
+            console.print(f"[red]❌ Service not found:[/red] [yellow]{service_id}[/yellow]")
+            console.print("\n[dim]The service does not exist or has been deleted.[/dim]")
+            console.print("[dim]Use [cyan]aenv service list[/cyan] to see available services.[/dim]")
+        elif "403" in error_msg or "401" in error_msg:
+            console.print(f"[red]❌ Authentication failed[/red]")
+            console.print("\n[dim]Please check your API key configuration.[/dim]")
+            console.print("[dim]You can set it with: [cyan]aenv config set hub_config.api_key <your-key>[/cyan][/dim]")
+        elif "connection" in error_msg or "timeout" in error_msg:
+            console.print(f"[red]❌ Connection failed[/red]")
+            console.print(f"\n[dim]Cannot connect to the API service at: [cyan]{system_url}[/cyan][/dim]")
+            console.print("[dim]Please check your network connection and system_url configuration.[/dim]")
+        else:
+            console.print(f"[red]❌ Failed to get service information[/red]")
+            console.print(f"\n[dim]The service [yellow]{service_id}[/yellow] could not be retrieved.[/dim]")
+            console.print("[dim]It may have been deleted or never existed.[/dim]")
+
         if cfg.verbose:
+            console.print(f"\n[dim]Technical details: {str(e)}[/dim]")
             import traceback
-            console.print(traceback.format_exc())
+            console.print(f"[dim]{traceback.format_exc()}[/dim]")
+
         raise click.Abort()
 
 
@@ -491,53 +563,71 @@ def get_service(cfg: Config, service_id, output):
     is_flag=True,
     help="Skip confirmation prompt",
 )
+@click.option(
+    "--delete-storage",
+    is_flag=True,
+    help="Also delete the associated storage. Warning: This will permanently delete all data.",
+)
 @pass_config
-def delete_service(cfg: Config, service_id, yes):
+def delete_service(cfg: Config, service_id, yes, delete_storage):
     """Delete a running service
-    
-    Note: This deletes the Deployment and Service, but keeps the PVC for reuse.
-    
+
+    By default, this deletes the Deployment and Service, but keeps the storage for reuse.
+    Use --delete-storage to also delete the storage and all associated data.
+
     Examples:
-        # Delete a service (with confirmation)
+        # Delete a service (with confirmation), keep storage
         aenv service delete myapp-svc-abc123
-        
+
         # Delete without confirmation
         aenv service delete myapp-svc-abc123 --yes
+
+        # Delete service and storage
+        aenv service delete myapp-svc-abc123 --delete-storage
     """
     console = cfg.console.console()
-    
+
     if not yes:
         console.print(f"[yellow]⚠️  You are about to delete service:[/yellow] {service_id}")
-        console.print("[yellow]Note: PVC will be kept for reuse[/yellow]")
+        if delete_storage:
+            console.print("[red]⚠️  WARNING: Storage will be PERMANENTLY deleted (all data will be lost)[/red]")
+        else:
+            console.print("[yellow]Note: Storage will be kept for reuse[/yellow]")
         if not click.confirm("Are you sure you want to continue?"):
             console.print("[cyan]Deletion cancelled[/cyan]")
             return
-    
+
     system_url = _get_system_url()
     config_manager = get_config_manager()
     hub_config = config_manager.get_hub_config()
     api_key = hub_config.get("api_key") or os.getenv("AENV_API_KEY")
-    
-    console.print(f"[cyan]🗑️  Deleting service:[/cyan] {service_id}\n")
-    
+
+    console.print(f"[cyan]🗑️  Deleting service:[/cyan] {service_id}")
+    if delete_storage:
+        console.print("[yellow]   Also deleting storage...[/yellow]")
+    console.print()
+
     async def _delete():
         async with AEnvSchedulerClient(
             base_url=system_url,
             api_key=api_key,
         ) as client:
-            return await client.delete_env_service(service_id)
-    
+            return await client.delete_env_service(service_id, delete_storage=delete_storage)
+
     try:
         with console.status("[bold green]Deleting service..."):
             success = asyncio.run(_delete())
-        
+
         if success:
             console.print("[green]✅ Service deleted successfully![/green]")
-            console.print("[cyan]Note: PVC was kept for reuse[/cyan]")
+            if delete_storage:
+                console.print("[cyan]Note: Storage was also deleted[/cyan]")
+            else:
+                console.print("[cyan]Note: Storage was kept for reuse[/cyan]")
         else:
             console.print("[red]❌ Failed to delete service[/red]")
             raise click.Abort()
-    
+
     except Exception as e:
         console.print(f"[red]❌ Failed to delete service:[/red] {str(e)}")
         if cfg.verbose:
@@ -645,7 +735,7 @@ def update_service(
             svc = asyncio.run(_update())
         
         console.print("[green]✅ Service updated successfully![/green]\n")
-        
+
         if output == "json":
             console.print(json.dumps(svc.model_dump(), indent=2, default=str))
         else:
@@ -654,9 +744,9 @@ def update_service(
                 {"Property": "Status", "Value": svc.status},
                 {"Property": "Replicas", "Value": f"{svc.available_replicas}/{svc.replicas}"},
                 {"Property": "Service URL", "Value": svc.service_url or "-"},
-                {"Property": "Updated At", "Value": svc.updated_at},
+                {"Property": "Updated At", "Value": format_time_to_local(svc.updated_at)},
             ]
-            console.print(tabulate(table_data, headers="keys", tablefmt="grid"))
+            print_detail_table(table_data, console, title="Service Updated")
     
     except Exception as e:
         console.print(f"[red]❌ Update failed:[/red] {str(e)}")

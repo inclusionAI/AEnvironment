@@ -40,8 +40,9 @@ import (
 
 // AEnvServiceHandler handles Kubernetes Deployment + Service + PVC operations
 type AEnvServiceHandler struct {
-	clientset kubernetes.Interface
-	namespace string
+	clientset           kubernetes.Interface
+	namespace           string
+	serviceDomainSuffix string
 }
 
 // NewAEnvServiceHandler creates new ServiceHandler
@@ -75,7 +76,14 @@ func NewAEnvServiceHandler() (*AEnvServiceHandler, error) {
 	namespace := LoadNsFromPodTemplate(SingleContainerTemplate)
 	serviceHandler.namespace = namespace
 
-	klog.Infof("AEnv service handler is created, namespace is %s", serviceHandler.namespace)
+	// Get service domain suffix from environment variable, default to "svc.cluster.local"
+	serviceDomainSuffix := os.Getenv("SERVICE_DOMAIN_SUFFIX")
+	if serviceDomainSuffix == "" {
+		serviceDomainSuffix = "svc.cluster.local"
+	}
+	serviceHandler.serviceDomainSuffix = serviceDomainSuffix
+
+	klog.Infof("AEnv service handler is created, namespace is %s, serviceDomainSuffix is %s", serviceHandler.namespace, serviceHandler.serviceDomainSuffix)
 
 	return serviceHandler, nil
 }
@@ -236,8 +244,8 @@ func (h *AEnvServiceHandler) createService(w http.ResponseWriter, r *http.Reques
 	}
 	klog.Infof("created k8s service %s/%s successfully", h.namespace, service.Name)
 
-	// Build service URL
-	serviceURL := fmt.Sprintf("%s.%s.svc.cluster.local", service.Name, h.namespace)
+	// Build service URL with port
+	serviceURL := fmt.Sprintf("%s.%s.%s:%d", service.Name, h.namespace, h.serviceDomainSuffix, service.Spec.Ports[0].Port)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -407,7 +415,11 @@ func (h *AEnvServiceHandler) getService(serviceName string, w http.ResponseWrite
 		return
 	}
 
-	serviceURL := fmt.Sprintf("%s.%s.svc.cluster.local", service.Name, h.namespace)
+	// Build service URL with port
+	serviceURL := ""
+	if len(service.Spec.Ports) > 0 {
+		serviceURL = fmt.Sprintf("%s.%s.%s:%d", service.Name, h.namespace, h.serviceDomainSuffix, service.Spec.Ports[0].Port)
+	}
 
 	status := "Running"
 	if deployment.Status.AvailableReplicas == 0 {
@@ -457,9 +469,31 @@ func (h *AEnvServiceHandler) getService(serviceName string, w http.ResponseWrite
 	}
 }
 
-// deleteService deletes a service (Deployment + Service, keep PVC)
+// deleteService deletes a service (Deployment + Service, optionally delete PVC/storage)
 func (h *AEnvServiceHandler) deleteService(serviceName string, w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
+	// Check if deleteStorage query parameter is set
+	deleteStorage := r.URL.Query().Get("deleteStorage") == "true"
+
+	// Get deployment first to extract PVC name before deletion
+	var pvcName string
+	if deleteStorage {
+		deployment, err := h.clientset.AppsV1().Deployments(h.namespace).Get(ctx, serviceName, metav1.GetOptions{})
+		if err != nil && !errors.IsNotFound(err) {
+			handleK8sAPiError(w, err, "failed to get deployment")
+			return
+		}
+		if deployment != nil {
+			// Extract PVC name from deployment spec
+			for _, volume := range deployment.Spec.Template.Spec.Volumes {
+				if volume.PersistentVolumeClaim != nil {
+					pvcName = volume.PersistentVolumeClaim.ClaimName
+					break
+				}
+			}
+		}
+	}
 
 	// Delete Deployment
 	err := h.clientset.AppsV1().Deployments(h.namespace).Delete(ctx, serviceName, metav1.DeleteOptions{})
@@ -475,7 +509,15 @@ func (h *AEnvServiceHandler) deleteService(serviceName string, w http.ResponseWr
 		return
 	}
 
-	// Note: We keep PVC for reuse by same envName
+	// Delete PVC if requested and PVC name was found
+	if deleteStorage && pvcName != "" {
+		err = h.clientset.CoreV1().PersistentVolumeClaims(h.namespace).Delete(ctx, pvcName, metav1.DeleteOptions{})
+		if err != nil && !errors.IsNotFound(err) {
+			handleK8sAPiError(w, err, "failed to delete PVC")
+			return
+		}
+		klog.Infof("deleted PVC %s/%s successfully", h.namespace, pvcName)
+	}
 
 	klog.Infof("deleted service %s/%s successfully", h.namespace, serviceName)
 
@@ -561,8 +603,8 @@ func (h *AEnvServiceHandler) updateService(serviceName string, w http.ResponseWr
 
 	service, _ := h.clientset.CoreV1().Services(h.namespace).Get(ctx, serviceName, metav1.GetOptions{})
 	serviceURL := ""
-	if service != nil {
-		serviceURL = fmt.Sprintf("%s.%s.svc.cluster.local", service.Name, h.namespace)
+	if service != nil && len(service.Spec.Ports) > 0 {
+		serviceURL = fmt.Sprintf("%s.%s.%s:%d", service.Name, h.namespace, h.serviceDomainSuffix, service.Spec.Ports[0].Port)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -615,8 +657,8 @@ func (h *AEnvServiceHandler) listServices(w http.ResponseWriter, r *http.Request
 		// Try to get service
 		service, _ := h.clientset.CoreV1().Services(h.namespace).Get(ctx, deployment.Name, metav1.GetOptions{})
 		serviceURL := ""
-		if service != nil {
-			serviceURL = fmt.Sprintf("%s.%s.svc.cluster.local", service.Name, h.namespace)
+		if service != nil && len(service.Spec.Ports) > 0 {
+			serviceURL = fmt.Sprintf("%s.%s.%s:%d", service.Name, h.namespace, h.serviceDomainSuffix, service.Spec.Ports[0].Port)
 		}
 
 		// Extract PVC name from deployment spec
@@ -636,6 +678,21 @@ func (h *AEnvServiceHandler) listServices(w http.ResponseWriter, r *http.Request
 			}
 		}
 
+		// Get EnvName and Version from labels
+		// If labels don't exist (for old deployments), try to extract from deployment name
+		envNameFromLabel := deployment.Labels[constants.AENV_NAME]
+		versionFromLabel := deployment.Labels[constants.AENV_VERSION]
+
+		// Fallback: extract from deployment name for backward compatibility
+		// Deployment name format: {envName}-svc-{random}
+		if envNameFromLabel == "" {
+			// Try to extract from deployment name
+			// Remove "-svc-{random}" suffix to get envName
+			if idx := strings.Index(deployment.Name, "-svc-"); idx > 0 {
+				envNameFromLabel = deployment.Name[:idx]
+			}
+		}
+
 		responseData = append(responseData, HttpServiceResponseData{
 			ID:                deployment.Name,
 			Status:            status,
@@ -643,8 +700,8 @@ func (h *AEnvServiceHandler) listServices(w http.ResponseWriter, r *http.Request
 			Replicas:          *deployment.Spec.Replicas,
 			AvailableReplicas: deployment.Status.AvailableReplicas,
 			Owner:             deployment.Labels[constants.AENV_OWNER],
-			EnvName:           deployment.Labels[constants.AENV_NAME],
-			Version:           deployment.Labels[constants.AENV_VERSION],
+			EnvName:           envNameFromLabel,
+			Version:           versionFromLabel,
 			PVCName:           pvcName,
 			CreatedAt:         deployment.CreationTimestamp.Format("2006-01-02 15:04:05"),
 			UpdatedAt:         time.Now().Format("2006-01-02 15:04:05"),

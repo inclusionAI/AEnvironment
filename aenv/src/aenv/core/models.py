@@ -61,10 +61,10 @@ class Env(BaseModel):
     name: str
     description: str
     version: str
-    tags: List[str]
+    tags: Optional[List[str]] = None
     code_url: str
     status: int
-    artifacts: List[Dict[str, str]]
+    artifacts: Optional[List[Dict[str, str]]] = None
     build_config: Optional[Dict] = None
     test_config: Optional[Dict] = None
     deploy_config: Optional[Dict] = None

@@ -302,8 +302,11 @@ func (c *ScheduleClient) GetService(serviceName string) (*models.EnvService, err
 }
 
 // DeleteService deletes a Service
-func (c *ScheduleClient) DeleteService(serviceName string) (bool, error) {
+func (c *ScheduleClient) DeleteService(serviceName string, deleteStorage bool) (bool, error) {
 	url := fmt.Sprintf("%s/services/%s", c.baseURL, serviceName)
+	if deleteStorage {
+		url += "?deleteStorage=true"
+	}
 
 	httpReq, err := http.NewRequest("DELETE", url, nil)
 	if err != nil {
@@ -392,11 +395,27 @@ func (c *ScheduleClient) UpdateService(serviceName string, updateReq *UpdateServ
 	return &updateResp.Data, nil
 }
 
+// ServiceListResponseData represents a single service item from controller's list endpoint
+type ServiceListResponseData struct {
+	ID                string            `json:"id"`
+	Status            string            `json:"status"`
+	ServiceURL        string            `json:"service_url"`
+	Replicas          int32             `json:"replicas"`
+	AvailableReplicas int32             `json:"available_replicas"`
+	Owner             string            `json:"owner"`
+	EnvName           string            `json:"envname"`
+	Version           string            `json:"version"`
+	PVCName           string            `json:"pvc_name"`
+	CreatedAt         string            `json:"created_at"`
+	UpdatedAt         string            `json:"updated_at"`
+	EnvironmentVars   map[string]string `json:"environment_variables,omitempty"`
+}
+
 // ServiceListResponse represents the response structure from controller's list service endpoint
 type ServiceListResponse struct {
-	Success bool                `json:"success"`
-	Code    int                 `json:"code"`
-	Data    []models.EnvService `json:"data"`
+	Success bool                      `json:"success"`
+	Code    int                       `json:"code"`
+	Data    []ServiceListResponseData `json:"data"`
 }
 
 // ListServices lists services, optionally filtered by environment name
@@ -439,10 +458,31 @@ func (c *ScheduleClient) ListServices(envName string) ([]*models.EnvService, err
 		return nil, fmt.Errorf("list services: server returned error, code: %d", serviceListResp.Code)
 	}
 
-	// Convert to pointer slice
+	// Convert controller response to EnvService models
 	services := make([]*models.EnvService, len(serviceListResp.Data))
-	for i := range serviceListResp.Data {
-		services[i] = &serviceListResp.Data[i]
+	for i, svcData := range serviceListResp.Data {
+		// Build Env object from EnvName and Version
+		var env *backend.Env
+		if svcData.EnvName != "" || svcData.Version != "" {
+			env = &backend.Env{
+				Name:    svcData.EnvName,
+				Version: svcData.Version,
+			}
+		}
+
+		services[i] = &models.EnvService{
+			ID:                   svcData.ID,
+			Env:                  env,
+			Status:               svcData.Status,
+			CreatedAt:            svcData.CreatedAt,
+			UpdatedAt:            svcData.UpdatedAt,
+			Replicas:             svcData.Replicas,
+			AvailableReplicas:    svcData.AvailableReplicas,
+			ServiceURL:           svcData.ServiceURL,
+			Owner:                svcData.Owner,
+			EnvironmentVariables: svcData.EnvironmentVars,
+			PVCName:              svcData.PVCName,
+		}
 	}
 
 	return services, nil
