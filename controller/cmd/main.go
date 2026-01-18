@@ -49,7 +49,7 @@ var (
 func main() {
 	klog.Infof("entering main for AEnv server")
 
-	flag.StringVar(&defaultNamespace, "namespace", "aenvsandbox", "The namespace that pods are using.")
+	flag.StringVar(&defaultNamespace, "namespace", "aenv-sandbox", "The namespace that pods are using.")
 	flag.StringVar(&logDir, "logdir", "/home/admin/logs", "The dir of log output.")
 	flag.IntVar(&serverPort, "server-port", 8080, "The value for server port.")
 	klog.InitFlags(nil)

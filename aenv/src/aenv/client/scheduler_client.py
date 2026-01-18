@@ -559,12 +559,13 @@ class AEnvSchedulerClient:
                     continue
                 raise NetworkError(f"Network error: {str(e)}") from e
 
-    async def delete_env_service(self, service_id: str) -> bool:
+    async def delete_env_service(self, service_id: str, delete_storage: bool = False) -> bool:
         """
         Delete environment service.
 
         Args:
             service_id: Environment service ID
+            delete_storage: If True, also delete associated storage (PVC). Default False.
 
         Returns:
             True if deletion successful
@@ -576,9 +577,14 @@ class AEnvSchedulerClient:
         if not self._client:
             raise NetworkError("Client not connected")
 
+        # Build URL with query parameter if delete_storage is True
+        url = f"/env-service/{service_id}"
+        if delete_storage:
+            url += "?deleteStorage=true"
+
         for attempt in range(self.max_retries + 1):
             try:
-                response = await self._client.delete(f"/env-service/{service_id}")
+                response = await self._client.delete(url)
 
                 try:
                     api_response = APIResponse(**response.json())

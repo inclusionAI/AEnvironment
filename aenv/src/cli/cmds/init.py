@@ -189,9 +189,14 @@ def init(cfg: Config, name, version, template, work_dir, force, config_only):
                 scaffold = load_aenv_scaffold()
                 # Get config.json content from template
                 template_config = scaffold.get_template_config(template)
-                # Update only name and version
+                # Update name and version
                 template_config["name"] = name
                 template_config["version"] = version
+                # Update pvcName in service config to match environment name
+                if "deployConfig" in template_config:
+                    deploy_config = template_config["deployConfig"]
+                    if "service" in deploy_config and isinstance(deploy_config["service"], dict):
+                        deploy_config["service"]["pvcName"] = name
 
             with console.status("[bold green]Creating config.json..."):
                 with open(config_path, "w") as f:

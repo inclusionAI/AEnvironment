@@ -18,9 +18,9 @@ list command - List all environments with pagination
 import json
 
 import click
-from tabulate import tabulate
 
 from cli.client.aenv_hub_client import AEnvHubClient
+from cli.utils.table_formatter import print_environment_list
 
 
 @click.command("list")
@@ -69,17 +69,7 @@ def list_env(limit, offset, format):
     if format == "json":
         click.echo(json.dumps(environments, indent=2, ensure_ascii=False))
     elif format == "table":
-        # Assume environments is a list with name, version, description fields
-        # Adjust keys based on actual response structure
-        table_data = []
-        for env in environments:
-            table_data.append(
-                {
-                    "Name": env.get("name", "-"),
-                    "Version": env.get("version", "-"),
-                    "Description": env.get("description", "-"),
-                    "Created At": env.get("created_at", "-"),
-                }
-            )
-        # Use grid format for clarity
-        click.echo(tabulate(table_data, headers="keys", tablefmt="grid"))
+        # Use rich console for better display
+        from rich.console import Console
+        console = Console()
+        print_environment_list(environments, console)

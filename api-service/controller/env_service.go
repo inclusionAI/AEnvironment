@@ -184,7 +184,7 @@ func (ctrl *EnvServiceController) GetEnvService(c *gin.Context) {
 }
 
 // DeleteEnvService deletes an EnvService
-// DELETE /env-service/:id
+// DELETE /env-service/:id?deleteStorage=true
 func (ctrl *EnvServiceController) DeleteEnvService(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
@@ -192,8 +192,11 @@ func (ctrl *EnvServiceController) DeleteEnvService(c *gin.Context) {
 		return
 	}
 
+	// Check if deleteStorage query parameter is set
+	deleteStorage := c.Query("deleteStorage") == "true"
+
 	// Call ScheduleClient to delete Service
-	success, err := ctrl.scheduleClient.DeleteService(id)
+	success, err := ctrl.scheduleClient.DeleteService(id, deleteStorage)
 	if err != nil {
 		backendmodels.JSONErrorWithMessage(c, 500, "Failed to delete service: "+err.Error())
 		return

@@ -20,7 +20,8 @@ management, and environment variable parsing used across multiple CLI commands.
 """
 
 import os
-from typing import Dict, Optional
+from datetime import datetime
+from typing import Dict, Optional, Union
 from urllib.parse import urlparse, urlunparse
 
 import click
@@ -133,3 +134,49 @@ def get_api_headers() -> Dict[str, str]:
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
     return headers
+
+
+def format_time_to_local(time_value: Optional[Union[str, datetime]]) -> str:
+    """Convert UTC time to local timezone and format as string.
+
+    Args:
+        time_value: UTC time as string (ISO format) or datetime object
+
+    Returns:
+        Formatted time string in local timezone (YYYY-MM-DD HH:MM:SS)
+        Returns "-" if time_value is None or invalid
+    """
+    if not time_value:
+        return "-"
+
+    try:
+        # Parse string to datetime if needed
+        if isinstance(time_value, str):
+            # Try parsing ISO format with or without timezone info
+            if time_value.endswith('Z'):
+                dt = datetime.fromisoformat(time_value.replace('Z', '+00:00'))
+            elif '+' in time_value or time_value.count('-') > 2:
+                dt = datetime.fromisoformat(time_value)
+            else:
+                # Assume UTC if no timezone info
+                dt = datetime.fromisoformat(time_value).replace(tzinfo=None)
+                # Convert from UTC to local
+                from datetime import timezone
+                dt = dt.replace(tzinfo=timezone.utc).astimezone()
+        elif isinstance(time_value, datetime):
+            dt = time_value
+            # Convert to local timezone if it has timezone info
+            if dt.tzinfo is not None:
+                dt = dt.astimezone()
+        else:
+            return "-"
+
+        # Convert to local timezone if it has timezone info
+        if dt.tzinfo is not None:
+            dt = dt.astimezone()
+
+        # Format as local time string
+        return dt.strftime("%Y-%m-%d %H:%M:%S")
+    except (ValueError, AttributeError, TypeError):
+        # If parsing fails, return the original value as string
+        return str(time_value) if time_value else "-"
