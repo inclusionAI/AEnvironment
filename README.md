@@ -21,7 +21,7 @@
 
 ## 📰 News
 
-- **v0.1.3** (Jan 2026) - AEnv CLI now supports **instance** and **service** management! Deploy and manage your agents and applications with simple commands. See [CLI Guide](./docs/guide/cli.md) for details.
+- **v0.1.4** (Jan 2026) - AEnv CLI now supports **instance** and **service** management! Deploy and manage your agents and applications with simple commands. See [CLI Guide](./docs/guide/cli.md) for details.
 
 ---
 
