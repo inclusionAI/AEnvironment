@@ -81,6 +81,10 @@ def global_error_handler(func):
             logger.info("Operation interrupted by user")
             click.secho("\n⚠️ Operation cancelled", fg="yellow", err=True)
             sys.exit(130)
+        except click.Abort:
+            # User explicitly aborted, clean exit without error message
+            logger.info("Operation aborted by user")
+            sys.exit(1)
         except click.ClickException as e:
             _handle_click_error(e)
             sys.exit(e.exit_code)

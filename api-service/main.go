@@ -106,6 +106,7 @@ func main() {
 	}
 
 	envInstanceController := controller.NewEnvInstanceController(scheduleClient, backendClient, redisClient)
+	envServiceController := controller.NewEnvServiceController(scheduleClient, backendClient, redisClient)
 	// Main route configuration
 	mainRouter.POST("/env-instance",
 		middleware.AuthTokenMiddleware(tokenEnabled, backendClient),
@@ -115,6 +116,17 @@ func main() {
 	mainRouter.GET("/env-instance/:id/list", middleware.AuthTokenMiddleware(tokenEnabled, backendClient), envInstanceController.ListEnvInstances)
 	mainRouter.GET("/env-instance/:id", middleware.AuthTokenMiddleware(tokenEnabled, backendClient), envInstanceController.GetEnvInstance)
 	mainRouter.DELETE("/env-instance/:id", middleware.AuthTokenMiddleware(tokenEnabled, backendClient), envInstanceController.DeleteEnvInstance)
+
+	// Service routes
+	mainRouter.POST("/env-service",
+		middleware.AuthTokenMiddleware(tokenEnabled, backendClient),
+		middleware.RateLimit(qps),
+		envServiceController.CreateEnvService)
+	mainRouter.GET("/env-service/:id/list", middleware.AuthTokenMiddleware(tokenEnabled, backendClient), envServiceController.ListEnvServices)
+	mainRouter.GET("/env-service/:id", middleware.AuthTokenMiddleware(tokenEnabled, backendClient), envServiceController.GetEnvService)
+	mainRouter.DELETE("/env-service/:id", middleware.AuthTokenMiddleware(tokenEnabled, backendClient), envServiceController.DeleteEnvService)
+	mainRouter.PUT("/env-service/:id", middleware.AuthTokenMiddleware(tokenEnabled, backendClient), envServiceController.UpdateEnvService)
+
 	mainRouter.GET("/health", healthChecker)
 	mainRouter.GET("/metrics", gin.WrapH(promhttp.Handler()))
 

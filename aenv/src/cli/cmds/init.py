@@ -18,6 +18,7 @@ init command - Initialize aenv project using environmental scaffolding tools
 
 import json
 import os
+import re
 from pathlib import Path
 
 import click
@@ -29,6 +30,46 @@ from rich.text import Text
 from cli.client.aenv_hub_client import AEnvHubClient
 from cli.cmds.common import Config, pass_config
 from cli.utils.scaffold import ScaffoldParams, load_aenv_scaffold
+
+
+def validate_env_name(name: str) -> tuple[bool, str]:
+    """
+    Validate environment name according to Kubernetes pod naming rules.
+
+    Pod names must:
+    - Contain only lowercase letters, numbers, and hyphens (-)
+    - Start with a letter or number
+    - End with a letter or number
+    - Be at most 253 characters long
+
+    Returns:
+        tuple: (is_valid, error_message)
+    """
+    if not name:
+        return False, "Environment name cannot be empty"
+
+    if len(name) > 253:
+        return (
+            False,
+            f"Environment name is too long (max 253 characters, got {len(name)})",
+        )
+
+    # Check if name contains only lowercase letters, numbers, and hyphens
+    if not re.match(r"^[a-z0-9-]+$", name):
+        return (
+            False,
+            "Environment name must contain only lowercase letters, numbers, and hyphens (-)",
+        )
+
+    # Check if name starts with a letter or number
+    if not re.match(r"^[a-z0-9]", name):
+        return False, "Environment name must start with a lowercase letter or number"
+
+    # Check if name ends with a letter or number
+    if not re.search(r"[a-z0-9]$", name):
+        return False, "Environment name must end with a lowercase letter or number"
+
+    return True, ""
 
 
 @click.command()
@@ -61,6 +102,26 @@ def init(cfg: Config, name, version, template, work_dir, force, config_only):
         aenv init myproject --version 1.0.0
     """
     console = cfg.console.console()
+
+    # Validate environment name (used as pod name prefix)
+    is_valid, error_msg = validate_env_name(name)
+    if not is_valid:
+        console.print(
+            Panel(
+                f"❌ Invalid environment name: {error_msg}\n\n"
+                "[yellow]Valid names must:[/yellow]\n"
+                "  • Contain only lowercase letters, numbers, and hyphens (-)\n"
+                "  • Start with a lowercase letter or number\n"
+                "  • End with a lowercase letter or number\n"
+                "  • Be at most 253 characters long\n\n"
+                "[cyan]Examples:[/cyan] my-env, prod-env-01, test123",
+                title="Validation Error",
+                style="bold red",
+                box=box.ROUNDED,
+            )
+        )
+        raise click.Abort()
+
     # Display initialization header
     console.print(
         Panel(
@@ -134,9 +195,16 @@ def init(cfg: Config, name, version, template, work_dir, force, config_only):
                 scaffold = load_aenv_scaffold()
                 # Get config.json content from template
                 template_config = scaffold.get_template_config(template)
-                # Update only name and version
+                # Update name and version
                 template_config["name"] = name
                 template_config["version"] = version
+                # Update pvcName in service config to match environment name
+                if "deployConfig" in template_config:
+                    deploy_config = template_config["deployConfig"]
+                    if "service" in deploy_config and isinstance(
+                        deploy_config["service"], dict
+                    ):
+                        deploy_config["service"]["pvcName"] = name
 
             with console.status("[bold green]Creating config.json..."):
                 with open(config_path, "w") as f:

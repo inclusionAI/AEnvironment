@@ -49,7 +49,7 @@ var (
 func main() {
 	klog.Infof("entering main for AEnv server")
 
-	flag.StringVar(&defaultNamespace, "namespace", "aenvsandbox", "The namespace that pods are using.")
+	flag.StringVar(&defaultNamespace, "namespace", "aenv-sandbox", "The namespace that pods are using.")
 	flag.StringVar(&logDir, "logdir", "/home/admin/logs", "The dir of log output.")
 	flag.IntVar(&serverPort, "server-port", 8080, "The value for server port.")
 	klog.InitFlags(nil)
@@ -68,11 +68,19 @@ func StartHttpServer() {
 		klog.Fatalf("failed to create AENV Pod manager, err is %v", err)
 	}
 
+	// AENV Service Manager
+	aenvServiceManager, err := aenvhubserver.NewAEnvServiceHandler()
+	if err != nil {
+		klog.Fatalf("failed to create AENV Service manager, err is %v", err)
+	}
+
 	// Set up routes
 	mux := http.NewServeMux()
 
 	mux.Handle("/pods", aenvPodManager)
 	mux.Handle("/pods/", aenvPodManager)
+	mux.Handle("/services", aenvServiceManager)
+	mux.Handle("/services/", aenvServiceManager)
 
 	// Start server
 	poolserver := &http.Server{
