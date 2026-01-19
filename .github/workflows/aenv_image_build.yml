@@ -1,6 +1,9 @@
 name: AEnv Images Build and Push
 
 on:
+  push:
+    branches:
+      - add_base_image
   workflow_dispatch:
 
 env:
@@ -24,6 +27,13 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_HUB_USER }}
           password: ${{ secrets.DOCKER_HUB_PASSWORD }}
+
+      - name: Extract metadata for base
+        id: meta_base
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/base
+          tags: type=raw,value=latest
 
       - name: Extract metadata for api-service
         id: meta_api_service
@@ -54,10 +64,10 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./api-service/Dockerfile
+          file: ./aenv/builtin-envs/base/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta_api_service.outputs.tags }}
+          tags: ${{ steps.meta_base.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
