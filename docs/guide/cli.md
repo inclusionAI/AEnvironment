@@ -19,10 +19,12 @@ Commands:
   config     Manage CLI configuration.
   get        Get specified environment details
   init       Initialize aenv project using environmental scaffolding tools
-  instances  List running environment instances
+  instance   Manage environment instances (create, list, get, delete)
+  instances  List running environment instances (legacy command)
   list       List all environments with pagination
   push       Push current aenv project to remote backend aenv hub
   release    Release current aenv project
+  service    Manage environment services (create, list, get, delete, update)
   test       Test current aenv project by running local directly
   version    Display version number and corresponding build/commit information
 ```
@@ -35,7 +37,9 @@ Commands:
 | | `push` | Push environment to repository |
 | **Environment Management** | `list` | List all environments |
 | | `get` | Get environment details |
-| | `instances` | List running environment instances |
+| **Instance Management** | `instance` | Manage environment instances |
+| | `instances` | List running instances (legacy) |
+| **Service Management** | `service` | Manage environment services |
 | **Configuration Management** | `config` | Manage CLI configuration |
 | **System Information** | `version` | Display version information |
 
@@ -116,27 +120,37 @@ my-project/
 
 ```json
 {
-  "name": "r2egym-couple-env",
+  "name": "aenv",
   "version": "1.0.0",
-  "tags": ["swe", "python", "linux"],
+  "tags": ["linux"],
   "status": "Ready",
-  "codeUrl": "oss://xxx",
+  "codeUrl": "",
   "artifacts": [],
   "buildConfig": {
     "dockerfile": "./Dockerfile"
   },
   "testConfig": {
-    "script": "pytest xxx"
+    "script": ""
   },
   "deployConfig": {
-    "cpu": "1C",
-    "memory": "2G",
+    "cpu": "1",
+    "memory": "2Gi",
     "os": "linux",
-    "imagePrefix": "reg.example.com/areal_agent/image",
-    "podTemplate": ""
+    "ephemeralStorage": "5Gi",
+    "environmentVariables": {},
+    "service": {
+      "replicas": 1,
+      "port": 8081,
+      "enableStorage": false,
+      "storageName": "aenv",
+      "storageSize": "10Gi",
+      "mountPath": "/home/admin/data"
+    }
   }
 }
 ```
+
+> **Note**: This is the default template structure. Additional fields like `imagePrefix` and `podTemplate` can be added as needed for specific deployment scenarios.
 
 </details>
 
@@ -448,6 +462,278 @@ aenv instances
 - **Authentication**: If token authentication is enabled, set the `AENV_API_KEY` environment variable
 - **Instance ID Format**: Instance IDs typically follow the pattern `environment-name-randomid` (e.g., `test01-tb9gp8`)
 - **Filtering**: Use `--name` to filter by environment name, optionally combined with `--version` for more specific filtering
+
+### `aenv instance` - Manage Environment Instances
+
+Unified interface for managing environment instances with full lifecycle control.
+
+> **Note**: `aenv instance` is the new command group that replaces and extends the legacy `aenv instances` command with additional capabilities like creating and deleting instances.
+
+#### Instance Subcommands
+
+| Subcommand | Description |
+|---|---|
+| `instance create` | Create new environment instance |
+| `instance list` | List running instances |
+| `instance get` | Get instance details by ID |
+| `instance delete` | Delete an instance |
+| `instance info` | Get instance information (requires active instance) |
+
+#### `instance create` - Create Instance
+
+Create and deploy a new environment instance.
+
+**Basic Usage:**
+
+```bash
+# Create using config.json in current directory
+aenv instance create
+
+# Create with explicit environment name
+aenv instance create flowise-xxx@1.0.2
+
+# Create with custom TTL and environment variables
+aenv instance create flowise-xxx@1.0.2 --ttl 1h -e DB_HOST=localhost -e DB_PORT=5432
+
+# Create with arguments and skip health check
+aenv instance create flowise-xxx@1.0.2 --arg --debug --arg --verbose --skip-health
+
+# Create and keep alive (doesn't auto-release)
+aenv instance create flowise-xxx@1.0.2 --keep-alive
+```
+
+**Options:**
+
+| Option | Short | Description | Default |
+|---|---|---|---|
+| `--datasource` | `-d` | Data source for mounting | - |
+| `--ttl` | `-t` | Time to live (e.g., 30m, 1h) | 30m |
+| `--env` | `-e` | Environment variables (KEY=VALUE) | - |
+| `--arg` | `-a` | Command line arguments | - |
+| `--system-url` | | AEnv system URL | from env/config |
+| `--timeout` | | Request timeout in seconds | 60.0 |
+| `--startup-timeout` | | Startup timeout in seconds | 500.0 |
+| `--max-retries` | | Maximum retry attempts | 10 |
+| `--api-key` | | API key for authentication | from env |
+| `--skip-health` | | Skip health check | false |
+| `--output` | `-o` | Output format (table/json) | table |
+| `--keep-alive` | | Keep instance running | false |
+| `--owner` | | Owner of the instance | from config |
+
+**Important Notes:**
+
+- By default, instances are automatically released when the command exits
+- Use `--keep-alive` to keep the instance running after deployment
+- Without `--keep-alive`, the instance lifecycle is tied to the command execution
+
+#### `instance list` - List Instances
+
+List running environment instances with filtering options.
+
+```bash
+# List all running instances
+aenv instance list
+
+# List instances for a specific environment
+aenv instance list --name my-env
+
+# List instances for a specific environment and version
+aenv instance list --name my-env --version 1.0.0
+
+# Output as JSON
+aenv instance list --output json
+```
+
+#### `instance get` - Get Instance Details
+
+Retrieve detailed information about a specific instance by its ID.
+
+```bash
+# Get instance information
+aenv instance get flowise-xxx-abc123
+
+# Get in JSON format
+aenv instance get flowise-xxx-abc123 --output json
+```
+
+#### `instance delete` - Delete Instance
+
+Delete a running environment instance.
+
+```bash
+# Delete an instance (with confirmation)
+aenv instance delete flowise-xxx-abc123
+
+# Delete without confirmation
+aenv instance delete flowise-xxx-abc123 --yes
+```
+
+### `aenv service` - Manage Environment Services
+
+Manage long-running environment services with persistent deployments, multiple replicas, and storage support.
+
+> **Service vs Instance**: Services are persistent deployments without TTL, supporting multiple replicas, persistent storage, and cluster DNS service URLs. Instances are temporary with TTL and auto-cleanup.
+
+#### Service Subcommands
+
+| Subcommand | Description |
+|---|---|
+| `service create` | Create new service deployment |
+| `service list` | List running services |
+| `service get` | Get service details by ID |
+| `service delete` | Delete a service |
+| `service update` | Update service configuration |
+
+#### `service create` - Create Service
+
+Create a long-running service with Deployment, Service, and optionally persistent storage.
+
+**Basic Usage:**
+
+```bash
+# Create using config.json in current directory
+aenv service create
+
+# Create with explicit environment name
+aenv service create myapp@1.0.0
+
+# Create with 3 replicas and custom port (no storage)
+aenv service create myapp@1.0.0 --replicas 3 --port 8000
+
+# Create with storage enabled (storageSize must be in config.json)
+aenv service create myapp@1.0.0 --enable-storage
+
+# Create with environment variables
+aenv service create myapp@1.0.0 -e DB_HOST=postgres -e CACHE_SIZE=1024
+```
+
+**Options:**
+
+| Option | Short | Description | Default |
+|---|---|---|---|
+| `--replicas` | `-r` | Number of replicas | 1 or from config |
+| `--port` | `-p` | Service port | 8080 or from config |
+| `--env` | `-e` | Environment variables (KEY=VALUE) | - |
+| `--enable-storage` | | Enable persistent storage | false |
+| `--output` | `-o` | Output format (table/json) | table |
+
+**Configuration Priority:**
+
+1. CLI parameters (`--replicas`, `--port`, `--enable-storage`)
+2. `config.json`'s `deployConfig.service` (new structure)
+3. `config.json`'s `deployConfig` (legacy flat structure)
+4. System defaults
+
+**Storage Configuration:**
+
+Storage settings are read from `config.json`'s `deployConfig.service`:
+
+- `storageSize`: Storage size like "10Gi", "20Gi" (required when `--enable-storage` is used)
+- `storageName`: Storage name (default: environment name)
+- `mountPath`: Mount path (default: /home/admin/data)
+
+**Important Notes:**
+
+- When storage is enabled, replicas must be 1 (enforced by backend)
+- Services run indefinitely without TTL
+- Services get cluster DNS service URLs for internal access
+
+#### `service list` - List Services
+
+List running environment services.
+
+```bash
+# List all services
+aenv service list
+
+# List services for specific environment
+aenv service list --name myapp
+
+# Output as JSON
+aenv service list --output json
+```
+
+**Output Example:**
+
+```bash
+$ aenv service list
++------------------+-------------+---------+--------+----------+----------+--------------+----------------------+
+| Service ID       | Environment | Owner   | Status | Replicas | Storage  | Service URL  | Created At           |
++==================+=============+=========+========+==========+==========+==============+======================+
+| myapp-svc-abc123 | myapp@1.0.0 | user1   | Ready  | 3/3      | myapp-pvc| myapp-svc... | 2026-01-19T10:30:00Z |
++------------------+-------------+---------+--------+----------+----------+--------------+----------------------+
+```
+
+#### `service get` - Get Service Details
+
+Retrieve detailed information about a specific service.
+
+```bash
+# Get service information
+aenv service get myapp-svc-abc123
+
+# Get in JSON format
+aenv service get myapp-svc-abc123 --output json
+```
+
+#### `service delete` - Delete Service
+
+Delete a running service. By default, keeps storage for reuse.
+
+```bash
+# Delete a service (with confirmation), keep storage
+aenv service delete myapp-svc-abc123
+
+# Delete without confirmation
+aenv service delete myapp-svc-abc123 --yes
+
+# Delete service and storage
+aenv service delete myapp-svc-abc123 --delete-storage
+```
+
+**Options:**
+
+| Option | Description |
+|---|---|
+| `--yes`, `-y` | Skip confirmation prompt |
+| `--delete-storage` | Also delete associated storage (WARNING: permanent data loss) |
+
+**Important Notes:**
+
+- By default, storage is kept for reuse when deleting a service
+- Use `--delete-storage` to permanently delete storage and all data
+
+#### `service update` - Update Service
+
+Update a running service's configuration.
+
+```bash
+# Scale to 5 replicas
+aenv service update myapp-svc-abc123 --replicas 5
+
+# Update image
+aenv service update myapp-svc-abc123 --image myapp:2.0.0
+
+# Update environment variables
+aenv service update myapp-svc-abc123 -e DB_HOST=newhost -e DB_PORT=3306
+
+# Update multiple things at once
+aenv service update myapp-svc-abc123 --replicas 3 --image myapp:2.0.0
+```
+
+**Options:**
+
+| Option | Short | Description |
+|---|---|---|
+| `--replicas` | `-r` | Update number of replicas |
+| `--image` | | Update container image |
+| `--env` | `-e` | Environment variables (KEY=VALUE) |
+| `--output` | `-o` | Output format (table/json) |
+
+**Important Notes:**
+
+- At least one of `--replicas`, `--image`, or `--env` must be provided
+- Environment variable updates merge with existing variables
 
 ### `aenv get` - Get Environment Details
 

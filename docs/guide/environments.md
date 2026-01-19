@@ -14,28 +14,38 @@ Each environment project contains a core configuration file: `config.json`
 
 ```json
 {
-  "name": "my-env",
+  "name": "aenv",
   "version": "1.0.0",
-  "description": "My custom environment",
-  "tags": ["custom", "python", "ml"],
+  "tags": ["linux"],
   "status": "Ready",
+  "codeUrl": "",
   "artifacts": [],
   "buildConfig": {
     "dockerfile": "./Dockerfile",
     "context": "."
   },
   "testConfig": {
-    "script": "pytest tests/"
+    "script": ""
   },
   "deployConfig": {
-    "cpu": "2C",
-    "memory": "4G",
+    "cpu": "1",
+    "memory": "2Gi",
     "os": "linux",
-    "imagePrefix": "registry.example.com/envs",
-    "podTemplate": "Default"
+    "ephemeralStorage": "5Gi",
+    "environmentVariables": {},
+    "service": {
+      "replicas": 1,
+      "port": 8081,
+      "enableStorage": false,
+      "storageName": "aenv",
+      "storageSize": "10Gi",
+      "mountPath": "/home/admin/data"
+    }
   }
 }
 ```
+
+> **Note**: This is the default template from `aenv init`. Optional fields like `imagePrefix` and `podTemplate` can be added in `deployConfig` for advanced deployment scenarios.
 
 ### Configuration Fields
 
@@ -46,6 +56,7 @@ Each environment project contains a core configuration file: `config.json`
 | `description` | string | No | Human-readable environment description |
 | `tags` | string[] | No | Searchable tag collection |
 | `status` | string | No | Environment status identifier |
+| `codeUrl` | string | No | URL or path to the environment source code (e.g., OSS path, Git URL) |
 | `artifacts` | object[] | No | Build artifacts list |
 | `buildConfig` | object | Yes | Build configuration |
 | `testConfig` | object | No | Test configuration |
@@ -84,29 +95,102 @@ Supports custom build parameters including image name, tags, etc. These paramete
 
 #### Deployment Configuration (DeployConfig)
 
+**Default Configuration (from official template):**
+
 ```json
 {
   "deployConfig": {
-    "cpu": "2",
-    "memory": "4G",
+    "cpu": "1",
+    "memory": "2Gi",
     "os": "linux",
-    "imagePrefix": "registry.example.com/envs",
-    "podTemplate": "",
-    "env": {
-      "MODEL_PATH": "/models/llm"
+    "ephemeralStorage": "5Gi",
+    "environmentVariables": {},
+    "service": {
+      "replicas": 1,
+      "port": 8081,
+      "enableStorage": false,
+      "storageName": "aenv",
+      "storageSize": "10Gi",
+      "mountPath": "/home/admin/data"
     }
   }
 }
 ```
 
-**Deployment Parameters:**
+**Extended Configuration (with optional fields):**
 
-- **cpu**: CPU specification, defaults to 2 cores
-- **memory**: Memory specification, defaults to 4GB
-- **os**: Operating system, currently only supports Linux
-- **imagePrefix**: Image prefix used to constrain common prefixes for multiple images associated with the current environment
-- **podTemplate**: Pod template, defaults to "singleContainer" (single container mode)
-- **env**: Environment variable configuration
+```json
+{
+  "deployConfig": {
+    "cpu": "2",
+    "memory": "4Gi",
+    "os": "linux",
+    "ephemeralStorage": "5Gi",
+    "imagePrefix": "registry.example.com/envs",
+    "podTemplate": "Default",
+    "environmentVariables": {
+      "MODEL_PATH": "/models/llm"
+    },
+    "service": {
+      "replicas": 1,
+      "port": 8081,
+      "enableStorage": false,
+      "storageName": "my-env",
+      "storageSize": "10Gi",
+      "mountPath": "/home/admin/data"
+    }
+  }
+}
+```
+
+**Core Deployment Parameters:**
+
+- **cpu**: CPU resource specification (used as both request and limit), defaults to "1"
+  - Example: "1", "2", "4"
+- **memory**: Memory specification (used as both request and limit), defaults to "2Gi"
+  - Example: "2Gi", "4Gi", "8Gi"
+- **ephemeralStorage**: Ephemeral storage specification (used as both request and limit), defaults to "5Gi"
+  - Example: "5Gi", "10Gi", "20Gi"
+- **os**: Operating system, currently only supports "linux"
+- **environmentVariables**: Environment variable configuration as key-value pairs, defaults to `{}`
+
+**Optional Deployment Parameters:**
+
+- **imagePrefix**: (Optional) Image prefix used to constrain common prefixes for multiple images associated with the current environment
+  - Not included in default template
+  - Add this when you need to specify a custom image registry prefix
+- **podTemplate**: (Optional) Pod template, defaults to "singleContainer" (single container mode)
+  - Not included in default template
+  - Add this when using custom pod templates like "DualContainer"
+
+**Service Configuration (service):**
+
+The `service` block contains configuration for long-running service deployments:
+
+- **replicas**: Number of replicas, defaults to 1
+  - Used by `aenv service create` command
+  - Must be 1 when storage is enabled
+- **port**: Service port, defaults to 8081
+  - The port exposed by the service for external access
+- **enableStorage**: Enable persistent storage by default, defaults to false
+  - Can be overridden by `--enable-storage` CLI flag
+- **storageName**: Storage name, defaults to environment name
+  - Used as PVC (PersistentVolumeClaim) name
+- **storageSize**: Storage size like "10Gi", "20Gi"
+  - Required when storage is enabled
+  - Cannot be changed after creation
+- **mountPath**: Mount path for persistent storage, defaults to "/home/admin/data"
+  - Where the persistent volume is mounted in the container
+
+**Legacy Support:**
+
+For backward compatibility, the following legacy parameters are still supported:
+
+- **cpuRequest** / **cpuLimit**: If not set, both use `cpu` value
+- **memoryRequest** / **memoryLimit**: If not set, both use `memory` value
+- **ephemeralStorageRequest** / **ephemeralStorageLimit**: If not set, both use `ephemeralStorage` value
+
+> **Recommended**: Use the simplified parameters (`cpu`, `memory`, `ephemeralStorage`) instead of the legacy separate request/limit parameters.
 
 ## Environment Architecture Types
 
