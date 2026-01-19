@@ -98,6 +98,12 @@ def service(cfg: Config):
 @service.command("create")
 @click.argument("env_name", required=False)
 @click.option(
+    "--service-name",
+    "-s",
+    type=str,
+    help="Custom service name (default: auto-generated as envName-svc-random). Must follow Kubernetes DNS naming conventions (lowercase alphanumeric and hyphens).",
+)
+@click.option(
     "--replicas",
     "-r",
     type=int,
@@ -133,6 +139,7 @@ def service(cfg: Config):
 def create(
     cfg: Config,
     env_name: Optional[str],
+    service_name: Optional[str],
     replicas: Optional[int],
     port: Optional[int],
     environment_variables: tuple,
@@ -217,6 +224,21 @@ def create(
             )
             raise click.Abort()
 
+    # Validate service_name if provided (must follow Kubernetes DNS naming conventions)
+    if service_name:
+        import re
+        # Kubernetes DNS-1123 subdomain: lowercase alphanumeric, hyphens, dots; max 253 chars; must start/end with alphanumeric
+        dns_pattern = r'^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$'
+        if not re.match(dns_pattern, service_name) or len(service_name) > 253:
+            console.print(
+                "[red]Error:[/red] Invalid service name. Service name must:\n"
+                "  - Use only lowercase letters, numbers, hyphens, and dots\n"
+                "  - Start and end with an alphanumeric character\n"
+                "  - Be no longer than 253 characters\n"
+                f"  - Example: 'my-service', 'app-v1', 'web-frontend-prod'"
+            )
+            raise click.Abort()
+
     # Merge parameters: CLI > config.json > defaults
     final_replicas = (
         replicas if replicas is not None else service_config.get("replicas", 1)
@@ -297,6 +319,10 @@ def create(
 
     # Display configuration summary
     console.print(f"[cyan]🚀 Creating environment service:[/cyan] {env_name}")
+    if service_name:
+        console.print(f"   Service Name: {service_name} (custom)")
+    else:
+        console.print(f"   Service Name: auto-generated")
     console.print(f"   Replicas: {final_replicas}")
     if final_port:
         console.print(f"   Port: {final_port}")
@@ -331,6 +357,7 @@ def create(
         ) as client:
             return await client.create_env_service(
                 name=env_name,
+                service_name=service_name,
                 replicas=final_replicas,
                 environment_variables=env_vars,
                 owner=owner,

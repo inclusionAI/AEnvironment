@@ -53,6 +53,7 @@ func NewEnvServiceController(
 // CreateEnvServiceRequest represents the request body for creating an EnvService
 type CreateEnvServiceRequest struct {
 	EnvName              string            `json:"envName" binding:"required"`
+	ServiceName          string            `json:"service_name"` // Optional custom service name
 	Replicas             int32             `json:"replicas"`
 	EnvironmentVariables map[string]string `json:"environment_variables"`
 	Owner                string            `json:"owner"`
@@ -110,11 +111,15 @@ func (ctrl *EnvServiceController) CreateEnvService(c *gin.Context) {
 		backendEnv.DeployConfig = make(map[string]interface{})
 	}
 	if req.EnvironmentVariables != nil {
-		backendEnv.DeployConfig["environmentVariables"] = req.EnvironmentVariables
+		backendEnv.DeployConfig["environment_variables"] = req.EnvironmentVariables
 	}
 	backendEnv.DeployConfig["replicas"] = req.Replicas
 	if req.Owner != "" {
 		backendEnv.DeployConfig["owner"] = req.Owner
+	}
+	// Pass custom serviceName to DeployConfig if provided
+	if req.ServiceName != "" {
+		backendEnv.DeployConfig["serviceName"] = req.ServiceName
 	}
 
 	// Storage configuration

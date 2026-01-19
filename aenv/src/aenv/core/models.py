@@ -124,6 +124,10 @@ class EnvServiceCreateRequest(BaseModel):
     """Request to create an environment service."""
 
     envName: str = Field(description="Environment name")
+    service_name: Optional[str] = Field(
+        None,
+        description="Custom service name. If not specified, will be auto-generated as '{envName}-svc-{random}'. Must follow Kubernetes DNS naming conventions.",
+    )
     replicas: int = Field(default=1, description="Number of replicas")
     environment_variables: Optional[Dict[str, str]] = Field(
         None, description="Environment variables"

@@ -357,6 +357,7 @@ class AEnvSchedulerClient:
     async def create_env_service(
         self,
         name: str,
+        service_name: Optional[str] = None,
         replicas: int = 1,
         environment_variables: Optional[Dict[str, str]] = None,
         owner: Optional[str] = None,
@@ -379,6 +380,8 @@ class AEnvSchedulerClient:
 
         Args:
             name: Service name (envName format: name@version)
+            service_name: Optional custom service name. If not specified, will be auto-generated as "{envName}-svc-{random}".
+                         Must follow Kubernetes DNS naming conventions.
             replicas: Number of replicas (default: 1, must be 1 if storage_size is specified)
             environment_variables: Optional environment variables
             owner: Optional owner of the service
@@ -407,10 +410,11 @@ class AEnvSchedulerClient:
         from aenv.core.models import EnvServiceCreateRequest
 
         logger.info(
-            f"Creating environment service: {name}, replicas: {replicas}, owner: {owner}"
+            f"Creating environment service: {name}, service_name: {service_name}, replicas: {replicas}, owner: {owner}"
         )
         request = EnvServiceCreateRequest(
             envName=name,
+            service_name=service_name,
             replicas=replicas,
             environment_variables=environment_variables,
             owner=owner,
