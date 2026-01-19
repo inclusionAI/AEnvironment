@@ -18,6 +18,7 @@ Each environment project contains a core configuration file: `config.json`
   "version": "1.0.0",
   "tags": ["linux"],
   "status": "Ready",
+  "codeUrl": "",
   "artifacts": [],
   "buildConfig": {
     "dockerfile": "./Dockerfile",
@@ -55,6 +56,7 @@ Each environment project contains a core configuration file: `config.json`
 | `description` | string | No | Human-readable environment description |
 | `tags` | string[] | No | Searchable tag collection |
 | `status` | string | No | Environment status identifier |
+| `codeUrl` | string | No | URL or path to the environment source code (e.g., OSS path, Git URL) |
 | `artifacts` | object[] | No | Build artifacts list |
 | `buildConfig` | object | Yes | Build configuration |
 | `testConfig` | object | No | Test configuration |
