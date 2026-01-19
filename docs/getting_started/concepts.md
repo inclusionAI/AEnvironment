@@ -178,7 +178,7 @@ An environment is a **static definition** that contains all metadata, configurat
 - **Immutability**: Once published, the environment definition content is typically immutable, with evolution managed through versioning.
 - **Reusability**: The same environment definition can be shared and referenced by multiple environment instances.
 
-### Environment Instance
+### Environment Instance (Detailed)
 
 An environment instance is the **concrete runtime entity** of an environment template. When an environment is actually used, the system dynamically creates corresponding instances based on its definition.
 

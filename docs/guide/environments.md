@@ -14,10 +14,9 @@ Each environment project contains a core configuration file: `config.json`
 
 ```json
 {
-  "name": "my-env",
+  "name": "aenv",
   "version": "1.0.0",
-  "description": "My custom environment",
-  "tags": ["custom", "python", "ml"],
+  "tags": ["linux"],
   "status": "Ready",
   "artifacts": [],
   "buildConfig": {
@@ -25,29 +24,27 @@ Each environment project contains a core configuration file: `config.json`
     "context": "."
   },
   "testConfig": {
-    "script": "pytest tests/"
+    "script": ""
   },
   "deployConfig": {
-    "cpu": "2",
-    "memory": "4Gi",
+    "cpu": "1",
+    "memory": "2Gi",
     "os": "linux",
     "ephemeralStorage": "5Gi",
-    "imagePrefix": "registry.example.com/envs",
-    "podTemplate": "Default",
-    "environmentVariables": {
-      "MODEL_PATH": "/models/llm"
-    },
+    "environmentVariables": {},
     "service": {
       "replicas": 1,
       "port": 8081,
       "enableStorage": false,
-      "storageName": "my-env",
+      "storageName": "aenv",
       "storageSize": "10Gi",
       "mountPath": "/home/admin/data"
     }
   }
 }
 ```
+
+> **Note**: This is the default template from `aenv init`. Optional fields like `imagePrefix` and `podTemplate` can be added in `deployConfig` for advanced deployment scenarios.
 
 ### Configuration Fields
 
@@ -96,6 +93,30 @@ Supports custom build parameters including image name, tags, etc. These paramete
 
 #### Deployment Configuration (DeployConfig)
 
+**Default Configuration (from official template):**
+
+```json
+{
+  "deployConfig": {
+    "cpu": "1",
+    "memory": "2Gi",
+    "os": "linux",
+    "ephemeralStorage": "5Gi",
+    "environmentVariables": {},
+    "service": {
+      "replicas": 1,
+      "port": 8081,
+      "enableStorage": false,
+      "storageName": "aenv",
+      "storageSize": "10Gi",
+      "mountPath": "/home/admin/data"
+    }
+  }
+}
+```
+
+**Extended Configuration (with optional fields):**
+
 ```json
 {
   "deployConfig": {
@@ -104,7 +125,7 @@ Supports custom build parameters including image name, tags, etc. These paramete
     "os": "linux",
     "ephemeralStorage": "5Gi",
     "imagePrefix": "registry.example.com/envs",
-    "podTemplate": "",
+    "podTemplate": "Default",
     "environmentVariables": {
       "MODEL_PATH": "/models/llm"
     },
@@ -129,9 +150,16 @@ Supports custom build parameters including image name, tags, etc. These paramete
 - **ephemeralStorage**: Ephemeral storage specification (used as both request and limit), defaults to "5Gi"
   - Example: "5Gi", "10Gi", "20Gi"
 - **os**: Operating system, currently only supports "linux"
-- **imagePrefix**: Image prefix used to constrain common prefixes for multiple images associated with the current environment
-- **podTemplate**: Pod template, defaults to "singleContainer" (single container mode)
-- **environmentVariables**: Environment variable configuration as key-value pairs
+- **environmentVariables**: Environment variable configuration as key-value pairs, defaults to `{}`
+
+**Optional Deployment Parameters:**
+
+- **imagePrefix**: (Optional) Image prefix used to constrain common prefixes for multiple images associated with the current environment
+  - Not included in default template
+  - Add this when you need to specify a custom image registry prefix
+- **podTemplate**: (Optional) Pod template, defaults to "singleContainer" (single container mode)
+  - Not included in default template
+  - Add this when using custom pod templates like "DualContainer"
 
 **Service Configuration (service):**
 

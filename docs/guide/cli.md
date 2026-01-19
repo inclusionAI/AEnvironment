@@ -120,27 +120,37 @@ my-project/
 
 ```json
 {
-  "name": "r2egym-couple-env",
+  "name": "aenv",
   "version": "1.0.0",
-  "tags": ["swe", "python", "linux"],
+  "tags": ["linux"],
   "status": "Ready",
-  "codeUrl": "oss://xxx",
+  "codeUrl": "",
   "artifacts": [],
   "buildConfig": {
     "dockerfile": "./Dockerfile"
   },
   "testConfig": {
-    "script": "pytest xxx"
+    "script": ""
   },
   "deployConfig": {
-    "cpu": "1C",
-    "memory": "2G",
+    "cpu": "1",
+    "memory": "2Gi",
     "os": "linux",
-    "imagePrefix": "reg.example.com/areal_agent/image",
-    "podTemplate": ""
+    "ephemeralStorage": "5Gi",
+    "environmentVariables": {},
+    "service": {
+      "replicas": 1,
+      "port": 8081,
+      "enableStorage": false,
+      "storageName": "aenv",
+      "storageSize": "10Gi",
+      "mountPath": "/home/admin/data"
+    }
   }
 }
 ```
+
+> **Note**: This is the default template structure. Additional fields like `imagePrefix` and `podTemplate` can be added as needed for specific deployment scenarios.
 
 </details>
 
