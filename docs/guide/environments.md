@@ -28,11 +28,23 @@ Each environment project contains a core configuration file: `config.json`
     "script": "pytest tests/"
   },
   "deployConfig": {
-    "cpu": "2C",
-    "memory": "4G",
+    "cpu": "2",
+    "memory": "4Gi",
     "os": "linux",
+    "ephemeralStorage": "5Gi",
     "imagePrefix": "registry.example.com/envs",
-    "podTemplate": "Default"
+    "podTemplate": "Default",
+    "environmentVariables": {
+      "MODEL_PATH": "/models/llm"
+    },
+    "service": {
+      "replicas": 1,
+      "port": 8081,
+      "enableStorage": false,
+      "storageName": "my-env",
+      "storageSize": "10Gi",
+      "mountPath": "/home/admin/data"
+    }
   }
 }
 ```
@@ -88,25 +100,67 @@ Supports custom build parameters including image name, tags, etc. These paramete
 {
   "deployConfig": {
     "cpu": "2",
-    "memory": "4G",
+    "memory": "4Gi",
     "os": "linux",
+    "ephemeralStorage": "5Gi",
     "imagePrefix": "registry.example.com/envs",
     "podTemplate": "",
-    "env": {
+    "environmentVariables": {
       "MODEL_PATH": "/models/llm"
+    },
+    "service": {
+      "replicas": 1,
+      "port": 8081,
+      "enableStorage": false,
+      "storageName": "my-env",
+      "storageSize": "10Gi",
+      "mountPath": "/home/admin/data"
     }
   }
 }
 ```
 
-**Deployment Parameters:**
+**Core Deployment Parameters:**
 
-- **cpu**: CPU specification, defaults to 2 cores
-- **memory**: Memory specification, defaults to 4GB
-- **os**: Operating system, currently only supports Linux
+- **cpu**: CPU resource specification (used as both request and limit), defaults to "1"
+  - Example: "1", "2", "4"
+- **memory**: Memory specification (used as both request and limit), defaults to "2Gi"
+  - Example: "2Gi", "4Gi", "8Gi"
+- **ephemeralStorage**: Ephemeral storage specification (used as both request and limit), defaults to "5Gi"
+  - Example: "5Gi", "10Gi", "20Gi"
+- **os**: Operating system, currently only supports "linux"
 - **imagePrefix**: Image prefix used to constrain common prefixes for multiple images associated with the current environment
 - **podTemplate**: Pod template, defaults to "singleContainer" (single container mode)
-- **env**: Environment variable configuration
+- **environmentVariables**: Environment variable configuration as key-value pairs
+
+**Service Configuration (service):**
+
+The `service` block contains configuration for long-running service deployments:
+
+- **replicas**: Number of replicas, defaults to 1
+  - Used by `aenv service create` command
+  - Must be 1 when storage is enabled
+- **port**: Service port, defaults to 8081
+  - The port exposed by the service for external access
+- **enableStorage**: Enable persistent storage by default, defaults to false
+  - Can be overridden by `--enable-storage` CLI flag
+- **storageName**: Storage name, defaults to environment name
+  - Used as PVC (PersistentVolumeClaim) name
+- **storageSize**: Storage size like "10Gi", "20Gi"
+  - Required when storage is enabled
+  - Cannot be changed after creation
+- **mountPath**: Mount path for persistent storage, defaults to "/home/admin/data"
+  - Where the persistent volume is mounted in the container
+
+**Legacy Support:**
+
+For backward compatibility, the following legacy parameters are still supported:
+
+- **cpuRequest** / **cpuLimit**: If not set, both use `cpu` value
+- **memoryRequest** / **memoryLimit**: If not set, both use `memory` value
+- **ephemeralStorageRequest** / **ephemeralStorageLimit**: If not set, both use `ephemeralStorage` value
+
+> **Recommended**: Use the simplified parameters (`cpu`, `memory`, `ephemeralStorage`) instead of the legacy separate request/limit parameters.
 
 ## Environment Architecture Types
 
