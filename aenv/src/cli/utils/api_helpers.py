@@ -153,15 +153,16 @@ def format_time_to_local(time_value: Optional[Union[str, datetime]]) -> str:
         # Parse string to datetime if needed
         if isinstance(time_value, str):
             # Try parsing ISO format with or without timezone info
-            if time_value.endswith('Z'):
-                dt = datetime.fromisoformat(time_value.replace('Z', '+00:00'))
-            elif '+' in time_value or time_value.count('-') > 2:
+            if time_value.endswith("Z"):
+                dt = datetime.fromisoformat(time_value.replace("Z", "+00:00"))
+            elif "+" in time_value or time_value.count("-") > 2:
                 dt = datetime.fromisoformat(time_value)
             else:
                 # Assume UTC if no timezone info
                 dt = datetime.fromisoformat(time_value).replace(tzinfo=None)
                 # Convert from UTC to local
                 from datetime import timezone
+
                 dt = dt.replace(tzinfo=timezone.utc).astimezone()
         elif isinstance(time_value, datetime):
             dt = time_value

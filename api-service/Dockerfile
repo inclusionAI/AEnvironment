@@ -51,4 +51,3 @@ COPY --from=builder /workspace/api-service/api-service /usr/bin/api-service
 EXPOSE 8080
 
 ENTRYPOINT ["/usr/bin/api-service"]
-

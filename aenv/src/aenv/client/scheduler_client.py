@@ -29,6 +29,7 @@ from aenv.core.models import (
     EnvInstance,
     EnvInstanceCreateRequest,
     EnvInstanceListResponse,
+    EnvService,
     EnvStatus,
 )
 
@@ -442,9 +443,7 @@ class AEnvSchedulerClient:
                         return service
                     else:
                         error_msg = api_response.get_error_message()
-                        raise EnvironmentError(
-                            f"Failed to create service: {error_msg}"
-                        )
+                        raise EnvironmentError(f"Failed to create service: {error_msg}")
                 except ValueError as e:
                     raise EnvironmentError(
                         f"Invalid server response: {response.status_code} - {response.text[:200]}"
@@ -547,7 +546,8 @@ class AEnvSchedulerClient:
                             return [EnvService(**item) for item in api_response.data]
                         return []
                     else:
-                        return []
+                        error_msg = api_response.get_error_message()
+                        raise EnvironmentError(f"Failed to list services: {error_msg}")
                 except ValueError as e:
                     raise EnvironmentError(
                         f"Invalid server response: {response.status_code} - {response.text[:200]}"
@@ -559,7 +559,9 @@ class AEnvSchedulerClient:
                     continue
                 raise NetworkError(f"Network error: {str(e)}") from e
 
-    async def delete_env_service(self, service_id: str, delete_storage: bool = False) -> bool:
+    async def delete_env_service(
+        self, service_id: str, delete_storage: bool = False
+    ) -> bool:
         """
         Delete environment service.
 

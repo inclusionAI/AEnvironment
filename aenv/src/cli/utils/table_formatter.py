@@ -108,7 +108,7 @@ def truncate_text(text: str, max_length: int = 50) -> str:
     """
     if len(text) <= max_length:
         return text
-    return text[:max_length - 3] + "..."
+    return text[: max_length - 3] + "..."
 
 
 def print_instance_list(instances: List[Dict[str, Any]], console: Console) -> None:
@@ -190,7 +190,11 @@ def print_service_list(services: List[Dict[str, Any]], console: Console) -> None
         env_info = svc.get("env") or {}
         env_name = env_info.get("name") or "-"
         env_version = env_info.get("version") or "-"
-        env_display = f"{env_name}@{env_version}" if env_name != "-" and env_version != "-" else "-"
+        env_display = (
+            f"{env_name}@{env_version}"
+            if env_name != "-" and env_version != "-"
+            else "-"
+        )
 
         # Get other fields
         owner = svc.get("owner") or "-"
@@ -220,7 +224,9 @@ def print_service_list(services: List[Dict[str, Any]], console: Console) -> None
     console.print(table)
 
 
-def print_environment_list(environments: List[Dict[str, Any]], console: Console) -> None:
+def print_environment_list(
+    environments: List[Dict[str, Any]], console: Console
+) -> None:
     """Print a formatted list of environments.
 
     Args:

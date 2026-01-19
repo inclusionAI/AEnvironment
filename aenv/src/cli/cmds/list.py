@@ -71,5 +71,6 @@ def list_env(limit, offset, format):
     elif format == "table":
         # Use rich console for better display
         from rich.console import Console
+
         console = Console()
         print_environment_list(environments, console)

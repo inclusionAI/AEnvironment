@@ -49,18 +49,24 @@ def validate_env_name(name: str) -> tuple[bool, str]:
         return False, "Environment name cannot be empty"
 
     if len(name) > 253:
-        return False, f"Environment name is too long (max 253 characters, got {len(name)})"
+        return (
+            False,
+            f"Environment name is too long (max 253 characters, got {len(name)})",
+        )
 
     # Check if name contains only lowercase letters, numbers, and hyphens
-    if not re.match(r'^[a-z0-9-]+$', name):
-        return False, "Environment name must contain only lowercase letters, numbers, and hyphens (-)"
+    if not re.match(r"^[a-z0-9-]+$", name):
+        return (
+            False,
+            "Environment name must contain only lowercase letters, numbers, and hyphens (-)",
+        )
 
     # Check if name starts with a letter or number
-    if not re.match(r'^[a-z0-9]', name):
+    if not re.match(r"^[a-z0-9]", name):
         return False, "Environment name must start with a lowercase letter or number"
 
     # Check if name ends with a letter or number
-    if not re.search(r'[a-z0-9]$', name):
+    if not re.search(r"[a-z0-9]$", name):
         return False, "Environment name must end with a lowercase letter or number"
 
     return True, ""
@@ -195,7 +201,9 @@ def init(cfg: Config, name, version, template, work_dir, force, config_only):
                 # Update pvcName in service config to match environment name
                 if "deployConfig" in template_config:
                     deploy_config = template_config["deployConfig"]
-                    if "service" in deploy_config and isinstance(deploy_config["service"], dict):
+                    if "service" in deploy_config and isinstance(
+                        deploy_config["service"], dict
+                    ):
                         deploy_config["service"]["pvcName"] = name
 
             with console.status("[bold green]Creating config.json..."):

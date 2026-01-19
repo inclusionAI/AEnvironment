@@ -40,8 +40,8 @@ from cli.utils.api_helpers import (
     get_api_headers,
     get_system_url_raw,
     make_api_url,
-    parse_env_vars as _parse_env_vars,
 )
+from cli.utils.api_helpers import parse_env_vars as _parse_env_vars
 from cli.utils.cli_config import get_config_manager
 from cli.utils.table_formatter import print_detail_table, print_instance_list
 
@@ -644,9 +644,7 @@ def create(
         config = _load_env_config()
         if config and "name" in config and "version" in config:
             env_name = f"{config['name']}@{config['version']}"
-            console.print(
-                f"[dim]📄 Reading from config.json: {env_name}[/dim]\n"
-            )
+            console.print(f"[dim]📄 Reading from config.json: {env_name}[/dim]\n")
         else:
             console.print(
                 "[red]Error:[/red] env_name not provided and config.json not found or invalid.\n"
@@ -724,7 +722,10 @@ def create(
                 {"Property": "Environment", "Value": info.get("name", "-")},
                 {"Property": "Status", "Value": info.get("status", "-")},
                 {"Property": "IP Address", "Value": info.get("ip", "-")},
-                {"Property": "Created At", "Value": format_time_to_local(info.get("created_at"))},
+                {
+                    "Property": "Created At",
+                    "Value": format_time_to_local(info.get("created_at")),
+                },
             ]
             print_detail_table(table_data, console, title="Instance Deployed")
 
@@ -836,8 +837,14 @@ def info(
                 {"Property": "Environment", "Value": info.get("name", "-")},
                 {"Property": "Status", "Value": info.get("status", "-")},
                 {"Property": "IP Address", "Value": info.get("ip", "-")},
-                {"Property": "Created At", "Value": format_time_to_local(info.get("created_at"))},
-                {"Property": "Updated At", "Value": format_time_to_local(info.get("updated_at"))},
+                {
+                    "Property": "Created At",
+                    "Value": format_time_to_local(info.get("created_at")),
+                },
+                {
+                    "Property": "Updated At",
+                    "Value": format_time_to_local(info.get("updated_at")),
+                },
             ]
             print_detail_table(table_data, console, title="Instance Information")
 
@@ -911,7 +918,7 @@ def list_instances(cfg: Config, name, version, output, system_url):
     if not system_url:
         system_url = _get_system_url()
     else:
-        system_url = _make_api_url(system_url, port=8080)
+        system_url = make_api_url(system_url, port=8080)
 
     # Use config-level verbose
     is_verbose = cfg.verbose
@@ -944,20 +951,27 @@ def list_instances(cfg: Config, name, version, output, system_url):
 
         # Parse and simplify error messages
         if "403" in error_msg or "401" in error_msg:
-            console.print(f"[red]❌ Authentication failed[/red]")
+            console.print("[red]❌ Authentication failed[/red]")
             console.print("\n[dim]Please check your API key configuration.[/dim]")
-            console.print("[dim]You can set it with: [cyan]aenv config set hub_config.api_key <your-key>[/cyan][/dim]")
+            console.print(
+                "[dim]You can set it with: [cyan]aenv config set hub_config.api_key <your-key>[/cyan][/dim]"
+            )
         elif "connection" in error_msg.lower() or "timeout" in error_msg.lower():
-            console.print(f"[red]❌ Connection failed[/red]")
-            console.print(f"\n[dim]Cannot connect to the API service at: [cyan]{system_url}[/cyan][/dim]")
-            console.print("[dim]Please check your network connection and system_url configuration.[/dim]")
+            console.print("[red]❌ Connection failed[/red]")
+            console.print(
+                f"\n[dim]Cannot connect to the API service at: [cyan]{system_url}[/cyan][/dim]"
+            )
+            console.print(
+                "[dim]Please check your network connection and system_url configuration.[/dim]"
+            )
         else:
-            console.print(f"[red]❌ Failed to list instances[/red]")
+            console.print("[red]❌ Failed to list instances[/red]")
             console.print(f"\n[yellow]Error:[/yellow] {error_msg}")
 
         if is_verbose:
             console.print("\n[dim]--- Full error trace ---[/dim]")
             import traceback
+
             console.print(traceback.format_exc())
 
         raise click.Abort()
@@ -983,14 +997,16 @@ def list_instances(cfg: Config, name, version, output, system_url):
                 continue
 
             # Format the data for display
-            instances_data.append({
-                "id": instance_id,
-                "env": instance.get("env"),
-                "owner": instance.get("owner"),
-                "status": instance.get("status"),
-                "ip": instance.get("ip"),
-                "created_at": format_time_to_local(instance.get("created_at")),
-            })
+            instances_data.append(
+                {
+                    "id": instance_id,
+                    "env": instance.get("env"),
+                    "owner": instance.get("owner"),
+                    "status": instance.get("status"),
+                    "ip": instance.get("ip"),
+                    "created_at": format_time_to_local(instance.get("created_at")),
+                }
+            )
 
         if instances_data:
             print_instance_list(instances_data, console)
@@ -1034,7 +1050,7 @@ def get_instance(cfg: Config, instance_id, output, system_url):
     if not system_url:
         system_url = _get_system_url()
     else:
-        system_url = _make_api_url(system_url, port=8080)
+        system_url = make_api_url(system_url, port=8080)
 
     # Use config-level verbose
     is_verbose = cfg.verbose
@@ -1062,9 +1078,15 @@ def get_instance(cfg: Config, instance_id, output, system_url):
         )
 
         if not instance_info:
-            console.print(f"[red]❌ Instance not found:[/red] [yellow]{instance_id}[/yellow]")
-            console.print("\n[dim]The instance does not exist or has been deleted.[/dim]")
-            console.print("[dim]Use [cyan]aenv instance list[/cyan] to see available instances.[/dim]")
+            console.print(
+                f"[red]❌ Instance not found:[/red] [yellow]{instance_id}[/yellow]"
+            )
+            console.print(
+                "\n[dim]The instance does not exist or has been deleted.[/dim]"
+            )
+            console.print(
+                "[dim]Use [cyan]aenv instance list[/cyan] to see available instances.[/dim]"
+            )
             raise click.Abort()
 
         console.print("[green]✅ Instance information retrieved![/green]\n")
@@ -1100,30 +1122,51 @@ def get_instance(cfg: Config, instance_id, output, system_url):
         error_msg = str(e).lower()
 
         # Parse and simplify error messages - focus on user-friendly messages
-        if ("404" in error_msg and "not found" in error_msg) or "pods" in error_msg or ("500" in error_msg and "not found" in error_msg):
-            console.print(f"[red]❌ Instance not found:[/red] [yellow]{instance_id}[/yellow]")
-            console.print("\n[dim]The instance does not exist or has been deleted.[/dim]")
-            console.print("[dim]Use [cyan]aenv instance list[/cyan] to see available instances.[/dim]")
+        if (
+            ("404" in error_msg and "not found" in error_msg)
+            or "pods" in error_msg
+            or ("500" in error_msg and "not found" in error_msg)
+        ):
+            console.print(
+                f"[red]❌ Instance not found:[/red] [yellow]{instance_id}[/yellow]"
+            )
+            console.print(
+                "\n[dim]The instance does not exist or has been deleted.[/dim]"
+            )
+            console.print(
+                "[dim]Use [cyan]aenv instance list[/cyan] to see available instances.[/dim]"
+            )
         elif "403" in error_msg or "401" in error_msg:
-            console.print(f"[red]❌ Authentication failed[/red]")
+            console.print("[red]❌ Authentication failed[/red]")
             console.print("\n[dim]Please check your API key configuration.[/dim]")
-            console.print("[dim]You can set it with: [cyan]aenv config set hub_config.api_key <your-key>[/cyan][/dim]")
+            console.print(
+                "[dim]You can set it with: [cyan]aenv config set hub_config.api_key <your-key>[/cyan][/dim]"
+            )
         elif "500" in error_msg and "internal server error" in error_msg:
-            console.print(f"[red]❌ Server error occurred[/red]")
+            console.print("[red]❌ Server error occurred[/red]")
             console.print("\n[dim]The API service encountered an internal error.[/dim]")
-            console.print("[dim]Please try again or contact support if the issue persists.[/dim]")
+            console.print(
+                "[dim]Please try again or contact support if the issue persists.[/dim]"
+            )
         elif "connection" in error_msg or "timeout" in error_msg:
-            console.print(f"[red]❌ Connection failed[/red]")
-            console.print(f"\n[dim]Cannot connect to the API service at: [cyan]{system_url}[/cyan][/dim]")
-            console.print("[dim]Please check your network connection and system_url configuration.[/dim]")
+            console.print("[red]❌ Connection failed[/red]")
+            console.print(
+                f"\n[dim]Cannot connect to the API service at: [cyan]{system_url}[/cyan][/dim]"
+            )
+            console.print(
+                "[dim]Please check your network connection and system_url configuration.[/dim]"
+            )
         else:
-            console.print(f"[red]❌ Failed to get instance information[/red]")
-            console.print(f"\n[dim]The instance [yellow]{instance_id}[/yellow] could not be retrieved.[/dim]")
+            console.print("[red]❌ Failed to get instance information[/red]")
+            console.print(
+                f"\n[dim]The instance [yellow]{instance_id}[/yellow] could not be retrieved.[/dim]"
+            )
             console.print("[dim]It may have been deleted or never existed.[/dim]")
 
         if cfg.verbose:
             console.print(f"\n[dim]Technical details: {str(e)}[/dim]")
             import traceback
+
             console.print(f"[dim]{traceback.format_exc()}[/dim]")
 
         raise click.Abort()
@@ -1161,7 +1204,7 @@ def delete_instance(cfg: Config, instance_id, yes, system_url):
     if not system_url:
         system_url = _get_system_url()
     else:
-        system_url = _make_api_url(system_url, port=8080)
+        system_url = make_api_url(system_url, port=8080)
 
     # Confirm deletion unless --yes flag is provided
     if not yes:

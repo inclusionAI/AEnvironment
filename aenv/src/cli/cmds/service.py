@@ -34,7 +34,6 @@ from aenv.client.scheduler_client import AEnvSchedulerClient
 from cli.cmds.common import Config, pass_config
 from cli.utils.api_helpers import (
     format_time_to_local,
-    get_api_headers,
     get_system_url_raw,
     make_api_url,
     parse_env_vars,
@@ -210,9 +209,7 @@ def create(
     if not env_name:
         if config and "name" in config and "version" in config:
             env_name = f"{config['name']}@{config['version']}"
-            console.print(
-                f"[dim]📄 Reading from config.json: {env_name}[/dim]\n"
-            )
+            console.print(f"[dim]📄 Reading from config.json: {env_name}[/dim]\n")
         else:
             console.print(
                 "[red]Error:[/red] env_name not provided and config.json not found or invalid.\n"
@@ -221,7 +218,9 @@ def create(
             raise click.Abort()
 
     # Merge parameters: CLI > config.json > defaults
-    final_replicas = replicas if replicas is not None else service_config.get("replicas", 1)
+    final_replicas = (
+        replicas if replicas is not None else service_config.get("replicas", 1)
+    )
     final_port = port if port is not None else service_config.get("port")
 
     # Storage configuration - enabled by --enable-storage flag OR config.json enableStorage
@@ -262,12 +261,18 @@ def create(
     cpu_limit = deploy_config.get("cpuLimit") or cpu
     memory_request = deploy_config.get("memoryRequest") or memory
     memory_limit = deploy_config.get("memoryLimit") or memory
-    ephemeral_storage_request = deploy_config.get("ephemeralStorageRequest") or ephemeral_storage
-    ephemeral_storage_limit = deploy_config.get("ephemeralStorageLimit") or ephemeral_storage
+    ephemeral_storage_request = (
+        deploy_config.get("ephemeralStorageRequest") or ephemeral_storage
+    )
+    ephemeral_storage_limit = (
+        deploy_config.get("ephemeralStorageLimit") or ephemeral_storage
+    )
 
     # Parse environment variables from CLI
     try:
-        env_vars = parse_env_vars(environment_variables) if environment_variables else None
+        env_vars = (
+            parse_env_vars(environment_variables) if environment_variables else None
+        )
     except click.BadParameter as e:
         console.print(f"[red]Error:[/red] {str(e)}")
         raise click.Abort()
@@ -311,10 +316,12 @@ def create(
         if final_mount_path:
             console.print(f"     - Mount Path: {final_mount_path}")
         else:
-            console.print(f"     - Mount Path: /home/admin/data (default)")
-        console.print(f"   [yellow]⚠️  With storage enabled, replicas must be 1[/yellow]")
+            console.print("     - Mount Path: /home/admin/data (default)")
+        console.print("   [yellow]⚠️  With storage enabled, replicas must be 1[/yellow]")
     else:
-        console.print(f"[dim]   Storage: Disabled (use --enable-storage to enable storage)[/dim]")
+        console.print(
+            "[dim]   Storage: Disabled (use --enable-storage to enable storage)[/dim]"
+        )
     console.print()
 
     async def _create():
@@ -352,9 +359,15 @@ def create(
                 {"Property": "Service ID", "Value": svc.id},
                 {"Property": "Status", "Value": svc.status},
                 {"Property": "Service URL", "Value": svc.service_url or "-"},
-                {"Property": "Replicas", "Value": f"{svc.available_replicas}/{svc.replicas}"},
+                {
+                    "Property": "Replicas",
+                    "Value": f"{svc.available_replicas}/{svc.replicas}",
+                },
                 {"Property": "Storage Name", "Value": svc.pvc_name or "-"},
-                {"Property": "Created At", "Value": format_time_to_local(svc.created_at)},
+                {
+                    "Property": "Created At",
+                    "Value": format_time_to_local(svc.created_at),
+                },
             ]
             print_detail_table(table_data, console, title="Service Created")
 
@@ -362,6 +375,7 @@ def create(
         console.print(f"[red]❌ Creation failed:[/red] {str(e)}")
         if cfg.verbose:
             import traceback
+
             console.print(traceback.format_exc())
         raise click.Abort()
 
@@ -383,31 +397,31 @@ def create(
 @pass_config
 def list_services(cfg: Config, name, output):
     """List running environment services
-    
+
     Examples:
         # List all services
         aenv service list
-        
+
         # List services for specific environment
         aenv service list --name myapp
-        
+
         # Output as JSON
         aenv service list --output json
     """
     console = cfg.console.console()
-    
+
     system_url = _get_system_url()
     config_manager = get_config_manager()
     hub_config = config_manager.get_hub_config()
     api_key = hub_config.get("api_key") or os.getenv("AENV_API_KEY")
-    
+
     async def _list():
         async with AEnvSchedulerClient(
             base_url=system_url,
             api_key=api_key,
         ) as client:
             return await client.list_env_services(env_name=name)
-    
+
     try:
         services_list = asyncio.run(_list())
     except Exception as e:
@@ -415,24 +429,29 @@ def list_services(cfg: Config, name, output):
 
         # Parse and simplify error messages
         if "403" in error_msg or "401" in error_msg:
-            console.print(f"[red]❌ Authentication failed[/red]")
+            console.print("[red]❌ Authentication failed[/red]")
             console.print("\n[dim]Please check your API key configuration.[/dim]")
-            console.print("[dim]You can set it with: [cyan]aenv config set hub_config.api_key <your-key>[/cyan][/dim]")
+            console.print(
+                "[dim]You can set it with: [cyan]aenv config set hub_config.api_key <your-key>[/cyan][/dim]"
+            )
         elif "connection" in error_msg.lower() or "timeout" in error_msg.lower():
-            console.print(f"[red]❌ Connection failed[/red]")
-            console.print(f"\n[dim]Cannot connect to the API service.[/dim]")
-            console.print("[dim]Please check your network connection and system_url configuration.[/dim]")
+            console.print("[red]❌ Connection failed[/red]")
+            console.print("\n[dim]Cannot connect to the API service.[/dim]")
+            console.print(
+                "[dim]Please check your network connection and system_url configuration.[/dim]"
+            )
         else:
-            console.print(f"[red]❌ Failed to list services[/red]")
+            console.print("[red]❌ Failed to list services[/red]")
             console.print(f"\n[yellow]Error:[/yellow] {error_msg}")
 
         if cfg.verbose:
             console.print("\n[dim]--- Full error trace ---[/dim]")
             import traceback
+
             console.print(traceback.format_exc())
 
         raise click.Abort()
-    
+
     if not services_list:
         if name:
             console.print(f"📭 No running services found for {name}")
@@ -441,7 +460,9 @@ def list_services(cfg: Config, name, output):
         return
 
     if output == "json":
-        console.print(json.dumps([s.model_dump() for s in services_list], indent=2, default=str))
+        console.print(
+            json.dumps([s.model_dump() for s in services_list], indent=2, default=str)
+        )
     else:
         # Convert service objects to dictionaries for the formatter
         services_data = []
@@ -451,16 +472,18 @@ def list_services(cfg: Config, name, output):
                 env_info["name"] = svc.env.name
                 env_info["version"] = svc.env.version
 
-            services_data.append({
-                "id": svc.id,
-                "env": env_info if env_info else None,
-                "owner": svc.owner,
-                "status": svc.status,
-                "available_replicas": svc.available_replicas,
-                "replicas": svc.replicas,
-                "storage_name": svc.pvc_name,
-                "created_at": format_time_to_local(svc.created_at),
-            })
+            services_data.append(
+                {
+                    "id": svc.id,
+                    "env": env_info if env_info else None,
+                    "owner": svc.owner,
+                    "status": svc.status,
+                    "available_replicas": svc.available_replicas,
+                    "replicas": svc.replicas,
+                    "storage_name": svc.pvc_name,
+                    "created_at": format_time_to_local(svc.created_at),
+                }
+            )
 
         print_service_list(services_data, console)
 
@@ -477,30 +500,30 @@ def list_services(cfg: Config, name, output):
 @pass_config
 def get_service(cfg: Config, service_id, output):
     """Get detailed information for a specific service
-    
+
     Examples:
         # Get service information
         aenv service get myapp-svc-abc123
-        
+
         # Get in JSON format
         aenv service get myapp-svc-abc123 --output json
     """
     console = cfg.console.console()
-    
+
     system_url = _get_system_url()
     config_manager = get_config_manager()
     hub_config = config_manager.get_hub_config()
     api_key = hub_config.get("api_key") or os.getenv("AENV_API_KEY")
-    
+
     console.print(f"[cyan]ℹ️  Retrieving service information:[/cyan] {service_id}\n")
-    
+
     async def _get():
         async with AEnvSchedulerClient(
             base_url=system_url,
             api_key=api_key,
         ) as client:
             return await client.get_env_service(service_id)
-    
+
     try:
         svc = asyncio.run(_get())
 
@@ -518,11 +541,20 @@ def get_service(cfg: Config, service_id, output):
                 {"Property": "Version", "Value": env_version},
                 {"Property": "Owner", "Value": svc.owner or "-"},
                 {"Property": "Status", "Value": svc.status},
-                {"Property": "Replicas", "Value": f"{svc.available_replicas}/{svc.replicas}"},
+                {
+                    "Property": "Replicas",
+                    "Value": f"{svc.available_replicas}/{svc.replicas}",
+                },
                 {"Property": "Service URL", "Value": svc.service_url or "-"},
                 {"Property": "Storage Name", "Value": svc.pvc_name or "-"},
-                {"Property": "Created At", "Value": format_time_to_local(svc.created_at)},
-                {"Property": "Updated At", "Value": format_time_to_local(svc.updated_at)},
+                {
+                    "Property": "Created At",
+                    "Value": format_time_to_local(svc.created_at),
+                },
+                {
+                    "Property": "Updated At",
+                    "Value": format_time_to_local(svc.updated_at),
+                },
             ]
             print_detail_table(table_data, console, title="Service Details")
 
@@ -530,26 +562,43 @@ def get_service(cfg: Config, service_id, output):
         error_msg = str(e).lower()
 
         # Parse and simplify error messages
-        if ("404" in error_msg and "not found" in error_msg) or "deployment" in error_msg:
-            console.print(f"[red]❌ Service not found:[/red] [yellow]{service_id}[/yellow]")
-            console.print("\n[dim]The service does not exist or has been deleted.[/dim]")
-            console.print("[dim]Use [cyan]aenv service list[/cyan] to see available services.[/dim]")
+        if (
+            "404" in error_msg and "not found" in error_msg
+        ) or "deployment" in error_msg:
+            console.print(
+                f"[red]❌ Service not found:[/red] [yellow]{service_id}[/yellow]"
+            )
+            console.print(
+                "\n[dim]The service does not exist or has been deleted.[/dim]"
+            )
+            console.print(
+                "[dim]Use [cyan]aenv service list[/cyan] to see available services.[/dim]"
+            )
         elif "403" in error_msg or "401" in error_msg:
-            console.print(f"[red]❌ Authentication failed[/red]")
+            console.print("[red]❌ Authentication failed[/red]")
             console.print("\n[dim]Please check your API key configuration.[/dim]")
-            console.print("[dim]You can set it with: [cyan]aenv config set hub_config.api_key <your-key>[/cyan][/dim]")
+            console.print(
+                "[dim]You can set it with: [cyan]aenv config set hub_config.api_key <your-key>[/cyan][/dim]"
+            )
         elif "connection" in error_msg or "timeout" in error_msg:
-            console.print(f"[red]❌ Connection failed[/red]")
-            console.print(f"\n[dim]Cannot connect to the API service at: [cyan]{system_url}[/cyan][/dim]")
-            console.print("[dim]Please check your network connection and system_url configuration.[/dim]")
+            console.print("[red]❌ Connection failed[/red]")
+            console.print(
+                f"\n[dim]Cannot connect to the API service at: [cyan]{system_url}[/cyan][/dim]"
+            )
+            console.print(
+                "[dim]Please check your network connection and system_url configuration.[/dim]"
+            )
         else:
-            console.print(f"[red]❌ Failed to get service information[/red]")
-            console.print(f"\n[dim]The service [yellow]{service_id}[/yellow] could not be retrieved.[/dim]")
+            console.print("[red]❌ Failed to get service information[/red]")
+            console.print(
+                f"\n[dim]The service [yellow]{service_id}[/yellow] could not be retrieved.[/dim]"
+            )
             console.print("[dim]It may have been deleted or never existed.[/dim]")
 
         if cfg.verbose:
             console.print(f"\n[dim]Technical details: {str(e)}[/dim]")
             import traceback
+
             console.print(f"[dim]{traceback.format_exc()}[/dim]")
 
         raise click.Abort()
@@ -588,9 +637,13 @@ def delete_service(cfg: Config, service_id, yes, delete_storage):
     console = cfg.console.console()
 
     if not yes:
-        console.print(f"[yellow]⚠️  You are about to delete service:[/yellow] {service_id}")
+        console.print(
+            f"[yellow]⚠️  You are about to delete service:[/yellow] {service_id}"
+        )
         if delete_storage:
-            console.print("[red]⚠️  WARNING: Storage will be PERMANENTLY deleted (all data will be lost)[/red]")
+            console.print(
+                "[red]⚠️  WARNING: Storage will be PERMANENTLY deleted (all data will be lost)[/red]"
+            )
         else:
             console.print("[yellow]Note: Storage will be kept for reuse[/yellow]")
         if not click.confirm("Are you sure you want to continue?"):
@@ -612,7 +665,9 @@ def delete_service(cfg: Config, service_id, yes, delete_storage):
             base_url=system_url,
             api_key=api_key,
         ) as client:
-            return await client.delete_env_service(service_id, delete_storage=delete_storage)
+            return await client.delete_env_service(
+                service_id, delete_storage=delete_storage
+            )
 
     try:
         with console.status("[bold green]Deleting service..."):
@@ -632,6 +687,7 @@ def delete_service(cfg: Config, service_id, yes, delete_storage):
         console.print(f"[red]❌ Failed to delete service:[/red] {str(e)}")
         if cfg.verbose:
             import traceback
+
             console.print(traceback.format_exc())
         raise click.Abort()
 
@@ -673,28 +729,30 @@ def update_service(
     output: str,
 ):
     """Update a running service
-    
+
     Can update replicas, image, and environment variables.
-    
+
     Examples:
         # Scale to 5 replicas
         aenv service update myapp-svc-abc123 --replicas 5
-        
+
         # Update image
         aenv service update myapp-svc-abc123 --image myapp:2.0.0
-        
+
         # Update environment variables
         aenv service update myapp-svc-abc123 -e DB_HOST=newhost -e DB_PORT=3306
-        
+
         # Update multiple things at once
         aenv service update myapp-svc-abc123 --replicas 3 --image myapp:2.0.0
     """
     console = cfg.console.console()
-    
+
     if not replicas and not image and not environment_variables:
-        console.print("[red]Error:[/red] At least one of --replicas, --image, or --env must be provided")
+        console.print(
+            "[red]Error:[/red] At least one of --replicas, --image, or --env must be provided"
+        )
         raise click.Abort()
-    
+
     # Parse environment variables
     env_vars = None
     if environment_variables:
@@ -703,12 +761,12 @@ def update_service(
         except click.BadParameter as e:
             console.print(f"[red]Error:[/red] {str(e)}")
             raise click.Abort()
-    
+
     system_url = _get_system_url()
     config_manager = get_config_manager()
     hub_config = config_manager.get_hub_config()
     api_key = hub_config.get("api_key") or os.getenv("AENV_API_KEY")
-    
+
     console.print(f"[cyan]🔄 Updating service:[/cyan] {service_id}")
     if replicas is not None:
         console.print(f"   Replicas: {replicas}")
@@ -717,7 +775,7 @@ def update_service(
     if env_vars:
         console.print(f"   Environment Variables: {len(env_vars)} variables")
     console.print()
-    
+
     async def _update():
         async with AEnvSchedulerClient(
             base_url=system_url,
@@ -729,11 +787,11 @@ def update_service(
                 image=image,
                 environment_variables=env_vars,
             )
-    
+
     try:
         with console.status("[bold green]Updating service..."):
             svc = asyncio.run(_update())
-        
+
         console.print("[green]✅ Service updated successfully![/green]\n")
 
         if output == "json":
@@ -742,15 +800,22 @@ def update_service(
             table_data = [
                 {"Property": "Service ID", "Value": svc.id},
                 {"Property": "Status", "Value": svc.status},
-                {"Property": "Replicas", "Value": f"{svc.available_replicas}/{svc.replicas}"},
+                {
+                    "Property": "Replicas",
+                    "Value": f"{svc.available_replicas}/{svc.replicas}",
+                },
                 {"Property": "Service URL", "Value": svc.service_url or "-"},
-                {"Property": "Updated At", "Value": format_time_to_local(svc.updated_at)},
+                {
+                    "Property": "Updated At",
+                    "Value": format_time_to_local(svc.updated_at),
+                },
             ]
             print_detail_table(table_data, console, title="Service Updated")
-    
+
     except Exception as e:
         console.print(f"[red]❌ Update failed:[/red] {str(e)}")
         if cfg.verbose:
             import traceback
+
             console.print(traceback.format_exc())
         raise click.Abort()

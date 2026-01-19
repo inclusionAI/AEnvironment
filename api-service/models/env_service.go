@@ -55,17 +55,17 @@ func (s EnvServiceStatus) String() string {
 
 // EnvService environment service object (Deployment + Service + PVC)
 type EnvService struct {
-	ID                   string            `json:"id"`                     // Service id, corresponds to deployment name
-	Env                  *backend.Env      `json:"env"`                    // Env object
-	Status               string            `json:"status"`                 // Service status
-	CreatedAt            string            `json:"created_at"`             // Creation time
-	UpdatedAt            string            `json:"updated_at"`             // Update time
-	Replicas             int32             `json:"replicas"`               // Number of replicas
-	AvailableReplicas    int32             `json:"available_replicas"`     // Number of available replicas
-	ServiceURL           string            `json:"service_url"`            // Service URL (internal cluster DNS)
-	Owner                string            `json:"owner"`                  // Service owner (user who created it)
-	EnvironmentVariables map[string]string `json:"environment_variables"`  // Environment variables
-	PVCName              string            `json:"pvc_name"`               // PVC name (shared by same envName)
+	ID                   string            `json:"id"`                    // Service id, corresponds to deployment name
+	Env                  *backend.Env      `json:"env"`                   // Env object
+	Status               string            `json:"status"`                // Service status
+	CreatedAt            string            `json:"created_at"`            // Creation time
+	UpdatedAt            string            `json:"updated_at"`            // Update time
+	Replicas             int32             `json:"replicas"`              // Number of replicas
+	AvailableReplicas    int32             `json:"available_replicas"`    // Number of available replicas
+	ServiceURL           string            `json:"service_url"`           // Service URL (internal cluster DNS)
+	Owner                string            `json:"owner"`                 // Service owner (user who created it)
+	EnvironmentVariables map[string]string `json:"environment_variables"` // Environment variables
+	PVCName              string            `json:"pvc_name"`              // PVC name (shared by same envName)
 }
 
 // NewEnvService creates a new environment service object

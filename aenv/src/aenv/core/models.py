@@ -136,25 +136,20 @@ class EnvServiceCreateRequest(BaseModel):
         None, description="Mount path (default: /home/admin/data)"
     )
     storage_size: Optional[str] = Field(
-        None, description="Storage size (e.g., 10Gi). If specified, PVC will be created and replicas must be 1. storageClass is configured in helm deployment."
+        None,
+        description="Storage size (e.g., 10Gi). If specified, PVC will be created and replicas must be 1. storageClass is configured in helm deployment.",
     )
 
     # Service configuration
     port: Optional[int] = Field(None, description="Service port (default: 8080)")
 
     # Resource limits
-    cpu_request: Optional[str] = Field(
-        None, description="CPU request (default: 1)"
-    )
-    cpu_limit: Optional[str] = Field(
-        None, description="CPU limit (default: 2)"
-    )
+    cpu_request: Optional[str] = Field(None, description="CPU request (default: 1)")
+    cpu_limit: Optional[str] = Field(None, description="CPU limit (default: 2)")
     memory_request: Optional[str] = Field(
         None, description="Memory request (default: 2Gi)"
     )
-    memory_limit: Optional[str] = Field(
-        None, description="Memory limit (default: 4Gi)"
-    )
+    memory_limit: Optional[str] = Field(None, description="Memory limit (default: 4Gi)")
     ephemeral_storage_request: Optional[str] = Field(
         None, description="Ephemeral storage request (default: 5Gi)"
     )
