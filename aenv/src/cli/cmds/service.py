@@ -227,15 +227,18 @@ def create(
     # Validate service_name if provided (must follow Kubernetes DNS naming conventions)
     if service_name:
         import re
+
         # Kubernetes DNS-1123 subdomain: lowercase alphanumeric, hyphens, dots; max 253 chars; must start/end with alphanumeric
-        dns_pattern = r'^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$'
+        dns_pattern = (
+            r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$"
+        )
         if not re.match(dns_pattern, service_name) or len(service_name) > 253:
             console.print(
                 "[red]Error:[/red] Invalid service name. Service name must:\n"
                 "  - Use only lowercase letters, numbers, hyphens, and dots\n"
                 "  - Start and end with an alphanumeric character\n"
                 "  - Be no longer than 253 characters\n"
-                f"  - Example: 'my-service', 'app-v1', 'web-frontend-prod'"
+                "  - Example: 'my-service', 'app-v1', 'web-frontend-prod'"
             )
             raise click.Abort()
 
@@ -322,7 +325,7 @@ def create(
     if service_name:
         console.print(f"   Service Name: {service_name} (custom)")
     else:
-        console.print(f"   Service Name: auto-generated")
+        console.print("   Service Name: auto-generated")
     console.print(f"   Replicas: {final_replicas}")
     if final_port:
         console.print(f"   Port: {final_port}")
