@@ -372,11 +372,9 @@ func MergeDeployment(deployment *appsv1.Deployment, name string, replicas int32,
 	if deployment.Labels == nil {
 		deployment.Labels = make(map[string]string)
 	}
-	if labels != nil {
-		for k, v := range labels {
-			deployment.Labels[k] = v
-			deployment.Spec.Template.Labels[k] = v
-		}
+	for k, v := range labels {
+		deployment.Labels[k] = v
+		deployment.Spec.Template.Labels[k] = v
 	}
 
 	// Update container image, env vars, and resources
@@ -389,22 +387,20 @@ func MergeDeployment(deployment *appsv1.Deployment, name string, replicas int32,
 		}
 
 		// Merge environment variables
-		if environs != nil {
-			for k, v := range environs {
-				found := false
-				for j := range container.Env {
-					if container.Env[j].Name == k {
-						container.Env[j].Value = v
-						found = true
-						break
-					}
+		for k, v := range environs {
+			found := false
+			for j := range container.Env {
+				if container.Env[j].Name == k {
+					container.Env[j].Value = v
+					found = true
+					break
 				}
-				if !found {
-					container.Env = append(container.Env, corev1.EnvVar{
-						Name:  k,
-						Value: v,
-					})
-				}
+			}
+			if !found {
+				container.Env = append(container.Env, corev1.EnvVar{
+					Name:  k,
+					Value: v,
+				})
 			}
 		}
 
