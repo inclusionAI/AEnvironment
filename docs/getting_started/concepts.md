@@ -62,6 +62,110 @@ This design achieves effective separation between **declarative definition** and
         └──────────────────────────┴───────────────────────────────┘
 ```
 
+## Environment Instance vs Environment Service
+
+AEnvironment supports two deployment modes for different use cases:
+
+### Environment Instance
+
+**Purpose**: Temporary, on-demand compute resources for short-lived tasks.
+
+**Key Characteristics:**
+
+- **Time-to-Live (TTL)**: Automatic cleanup after specified duration (default: 30 minutes)
+- **Ephemeral**: Designed for temporary workloads
+- **Single Pod**: Runs as a single Kubernetes Pod
+- **No Persistence**: No built-in persistent storage support
+- **Auto-cleanup**: Automatically released when TTL expires or task completes
+- **Use Cases**:
+  - Development and testing
+  - CI/CD pipeline jobs
+  - One-time data processing tasks
+  - Temporary agent interactions
+
+**Management Commands:**
+
+```bash
+# Create temporary instance (auto-releases after TTL or command exit)
+aenv instance create myenv@1.0.0 --ttl 1h
+
+# List running instances
+aenv instance list
+
+# Delete instance
+aenv instance delete instance-id
+```
+
+### Environment Service
+
+**Purpose**: Long-running, production-grade deployments for persistent services.
+
+**Key Characteristics:**
+
+- **No TTL**: Runs indefinitely until explicitly deleted
+- **Multiple Replicas**: Support for horizontal scaling (1-N replicas)
+- **Persistent Storage**: Built-in PVC (PersistentVolumeClaim) support
+- **Kubernetes Service**: Cluster DNS service URL for load balancing
+- **High Availability**: Replica management for fault tolerance
+- **Production-Ready**: Designed for production workloads
+- **Use Cases**:
+  - Production agent services
+  - Long-running API servers
+  - Stateful applications requiring persistent data
+  - Multi-tenant service deployments
+
+**Management Commands:**
+
+```bash
+# Create persistent service with 3 replicas
+aenv service create myapp@1.0.0 --replicas 3
+
+# Create service with persistent storage
+aenv service create myapp@1.0.0 --enable-storage
+
+# List running services
+aenv service list
+
+# Update service (scale, image, env vars)
+aenv service update service-id --replicas 5
+
+# Delete service (keeps storage by default)
+aenv service delete service-id
+```
+
+### Comparison Matrix
+
+| Feature | Environment Instance | Environment Service |
+|---------|---------------------|---------------------|
+| **Lifetime** | Temporary (TTL-based) | Persistent (no TTL) |
+| **Replicas** | Single Pod | Multiple Replicas (1-N) |
+| **Storage** | No persistent storage | PVC support (optional) |
+| **Service URL** | Direct Pod IP | Cluster DNS service URL |
+| **Scaling** | Not supported | Horizontal scaling supported |
+| **Use Case** | Development, testing, short tasks | Production, long-running services |
+| **Auto-cleanup** | Yes (TTL or manual) | No (manual deletion only) |
+| **Resource Isolation** | Pod-level | Deployment + Service |
+| **Cost Model** | Pay per use (TTL-based) | Continuous running |
+
+### When to Use Which?
+
+**Choose Environment Instance when:**
+
+- Running temporary development or test workloads
+- Executing one-time data processing jobs
+- Testing environment configurations
+- Running CI/CD pipeline steps
+- Need automatic resource cleanup
+
+**Choose Environment Service when:**
+
+- Deploying production applications
+- Need high availability and load balancing
+- Require persistent data storage
+- Running long-term agent services
+- Need to scale horizontally
+- Require predictable service endpoints
+
 ### Environment
 
 An environment is a **static definition** that contains all metadata, configuration items, and component declarations required for agent operation. It describes what capabilities the environment "possesses" and what resources it "needs", but contains no runtime state.
