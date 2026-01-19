@@ -505,9 +505,9 @@ func MergePodImage(pod *corev1.Pod, aenv *model.AEnvHubEnv) {
 
 func applyConfig(configs map[string]interface{}, container *corev1.Container) {
 
-	klog.Infof("config environment variables: %v", configs["environmentVariables"])
+	klog.Infof("config environment variables: %v", configs["environment_variables"])
 
-	if environmentVariables, ok := configs["environmentVariables"].(map[string]interface{}); ok {
+	if environmentVariables, ok := configs["environment_variables"].(map[string]interface{}); ok {
 		if len(environmentVariables) > 0 {
 			for k, v := range environmentVariables {
 				container.Env = append(container.Env, corev1.EnvVar{

@@ -597,6 +597,9 @@ aenv service create
 # Create with explicit environment name
 aenv service create myapp@1.0.0
 
+# Create with custom service name
+aenv service create myapp@1.0.0 --service-name my-custom-service
+
 # Create with 3 replicas and custom port (no storage)
 aenv service create myapp@1.0.0 --replicas 3 --port 8000
 
@@ -611,6 +614,7 @@ aenv service create myapp@1.0.0 -e DB_HOST=postgres -e CACHE_SIZE=1024
 
 | Option | Short | Description | Default |
 |---|---|---|---|
+| `--service-name` | `-s` | Custom service name (must follow Kubernetes DNS naming conventions) | auto-generated as `{envName}-svc-{random}` |
 | `--replicas` | `-r` | Number of replicas | 1 or from config |
 | `--port` | `-p` | Service port | 8080 or from config |
 | `--env` | `-e` | Environment variables (KEY=VALUE) | - |
@@ -637,6 +641,17 @@ Storage settings are read from `config.json`'s `deployConfig.service`:
 - When storage is enabled, replicas must be 1 (enforced by backend)
 - Services run indefinitely without TTL
 - Services get cluster DNS service URLs for internal access
+- **Service Name**: Custom service names must follow Kubernetes DNS naming conventions:
+  - Use only lowercase letters, numbers, hyphens, and dots
+  - Start and end with an alphanumeric character
+  - Be no longer than 253 characters
+  - Example: `my-service`, `app-v1`, `web-frontend-prod`
+  - If not specified, auto-generated as `{envName}-svc-{random}` (e.g., `myapp-svc-abc123`)
+- The service name becomes:
+  - Kubernetes Deployment name
+  - Kubernetes Service name
+  - Service URL prefix: `{serviceName}.{namespace}.{domain}:{port}`
+  - Unique identifier for all operations (get, update, delete)
 
 #### `service list` - List Services
 

@@ -96,7 +96,7 @@ func (ctrl *EnvInstanceController) CreateEnvInstance(c *gin.Context) {
 		backendEnv.DeployConfig["secondImageName"] = secondImageName
 	}
 	if req.EnvironmentVariables != nil {
-		backendEnv.DeployConfig["environmentVariables"] = req.EnvironmentVariables
+		backendEnv.DeployConfig["environment_variables"] = req.EnvironmentVariables
 	}
 	if req.Arguments != nil {
 		backendEnv.DeployConfig["arguments"] = req.Arguments

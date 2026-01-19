@@ -166,8 +166,20 @@ func (h *AEnvServiceHandler) createService(w http.ResponseWriter, r *http.Reques
 
 	ctx := r.Context()
 
-	// Generate service name
-	serviceName := fmt.Sprintf("%s-svc-%s", aenvHubEnv.Name, RandString(6))
+	// Generate service name: use custom serviceName from DeployConfig if provided, otherwise auto-generate
+	var serviceName string
+	if customServiceName, ok := aenvHubEnv.DeployConfig["serviceName"]; ok {
+		if customServiceNameStr, ok := customServiceName.(string); ok && customServiceNameStr != "" {
+			serviceName = customServiceNameStr
+			klog.Infof("Using custom service name: %s", serviceName)
+		}
+	}
+
+	// If no custom serviceName provided, auto-generate using envName and random suffix
+	if serviceName == "" {
+		serviceName = fmt.Sprintf("%s-svc-%s", aenvHubEnv.Name, RandString(6))
+		klog.Infof("Auto-generated service name: %s", serviceName)
+	}
 
 	// Get PVC name from deploy config, default to envName
 	pvcName := aenvHubEnv.Name // Default PVC name equals envName
