@@ -33,7 +33,7 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/base
-          tags: type=raw,value=latest
+          tags: type=raw,value=0.1.0
 
       - name: Build and push base image
         uses: docker/build-push-action@v5
