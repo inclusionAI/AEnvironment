@@ -524,12 +524,6 @@ func applyConfig(configs map[string]interface{}, container *corev1.Container) {
 		}
 	}
 
-	// merge deploy config
-	if configs["resource"] != "autoscale" {
-		klog.Infof("resource not autoscale for container %s", container.Name)
-		return
-	}
-
 	// Validate and parse CPU
 	cfgCpu, ok := configs["cpu"]
 	if !ok {
