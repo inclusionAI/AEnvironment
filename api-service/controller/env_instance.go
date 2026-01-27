@@ -81,10 +81,10 @@ func (ctrl *EnvInstanceController) CreateEnvInstance(c *gin.Context) {
 		backendmodels.JSONErrorWithMessage(c, 404, "Environment not found: "+req.EnvName)
 		return
 	}
+	if backendEnv.DeployConfig == nil {
+		backendEnv.DeployConfig = make(map[string]interface{})
+	}
 	if req.Datasource != "" {
-		if backendEnv.DeployConfig == nil {
-			backendEnv.DeployConfig = make(map[string]interface{})
-		}
 		// Prefer imagePrefix from DeployConfig, default to empty string
 		imagePrefix := "docker.io/library/aenv"
 		if value, ok := backendEnv.DeployConfig["imagePrefix"]; ok {
@@ -102,7 +102,9 @@ func (ctrl *EnvInstanceController) CreateEnvInstance(c *gin.Context) {
 		backendEnv.DeployConfig["arguments"] = req.Arguments
 	}
 	// Set TTL for environment
-	backendEnv.DeployConfig["ttl"] = req.TTL
+	if req.TTL != "" {
+		backendEnv.DeployConfig["ttl"] = req.TTL
+	}
 	// Set owner for controller to store in pod label
 	if req.Owner != "" {
 		backendEnv.DeployConfig["owner"] = req.Owner
