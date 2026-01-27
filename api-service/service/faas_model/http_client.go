@@ -216,7 +216,7 @@ func (r *HTTPReq) Into(obj interface{}, e ...interface{}) error {
 		return fmt.Errorf("failed to read response body: %v", err)
 	}
 
-	// 如果执行成功，则把 body 的内容解析到对象中；否则返回报错
+	// If execution is successful, parse the body content into the object; otherwise return an error
 	if r.resp.StatusCode >= http.StatusOK && r.resp.StatusCode < 300 {
 		if err := json.Unmarshal(data, obj); err != nil {
 			return fmt.Errorf("failed to unmarshal response data: %s. err: %v", data, err)

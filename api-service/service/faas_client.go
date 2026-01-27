@@ -30,7 +30,11 @@ func (c *FaaSClient) CreateEnvInstance(req *backend.Env) (*models.EnvInstance, e
 	// use datasource as runtime name
 	dynamicRuntimeName := ""
 	if name, ok := req.DeployConfig["dataSource"]; ok {
-		dynamicRuntimeName = name.(string)
+		s, ok := name.(string)
+		if !ok {
+			return nil, fmt.Errorf("value for 'dataSource' in DeployConfig must be a string, but got %T", name)
+		}
+		dynamicRuntimeName = s
 	}
 	//if err := c.PrepareFunction(functionName, req); err != nil {
 	//	return nil, fmt.Errorf("prepare function failed: %v", err.Error())
@@ -82,7 +86,7 @@ func (c *FaaSClient) PrepareFunction(functionName string, req *backend.Env) erro
 			Labels: map[string]string{
 				faas_model.LabelStatefulFunction: "true",
 				//faas-api-service receiver uses strconv.Atoi, using int here to prevent overflow
-				"custom.hcsfaas.hcs.io/idle-timeout": strconv.FormatInt(math.MaxInt, 10),
+				"custom.hcsfaas.hcs.io/idle-timeout": strconv.FormatInt(math.MaxInt32, 10),
 			},
 			Description: req.Description,
 			Memory:      memoryQuntity.ScaledValue(resource.Mega),
