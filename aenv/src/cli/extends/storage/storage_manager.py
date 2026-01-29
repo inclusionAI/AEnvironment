@@ -18,6 +18,7 @@ import tarfile
 import tempfile
 import zipfile
 from abc import ABC, abstractmethod
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Optional
@@ -27,6 +28,8 @@ import requests
 from cli.client.aenv_hub_client import AEnvHubClient
 from cli.utils.archive_tool import TempArchive
 from cli.utils.cli_config import get_config_manager
+from cli.utils.compression import pack_directory_parallel
+from cli.utils.parallel import is_parallel_disabled
 
 
 @dataclass
@@ -403,24 +406,80 @@ class AEnvHubStorage(Storage):
 
         work_dir = context.src_url
         infos = context.infos
-        if infos:
-            name = infos.get("name")
-            version = infos.get("version")
+        name = infos.get("name")
+        version = infos.get("version")
 
-        with TempArchive(str(work_dir)) as archive:
+        hub_client = AEnvHubClient.load_client()
+
+        if is_parallel_disabled():
+            return self._upload_sequential(
+                work_dir, name, version, prefix, hub_client
+            )
+
+        return self._upload_concurrent(
+            work_dir, name, version, prefix, hub_client
+        )
+
+    def _upload_sequential(
+        self,
+        work_dir: str,
+        name: str,
+        version: str,
+        prefix: str,
+        hub_client: AEnvHubClient,
+    ) -> StorageStatus:
+        """Sequential upload: compress first, then get URL and upload."""
+        with TempArchive(str(work_dir), use_parallel=True) as archive:
             print(f"🔄 Archive: {archive}")
-            infos = context.infos
-            name = infos.get("name")
-            version = infos.get("version")
+            oss_url = hub_client.apply_sign_url(name, version)
             with open(archive, "rb") as tar:
-                hub_client = AEnvHubClient.load_client()
-                oss_url = hub_client.apply_sign_url(name, version)
                 headers = {"x-oss-object-acl": "public-read-write"}
                 response = requests.put(oss_url, data=tar, headers=headers)
                 response.raise_for_status()
 
         dest = f"{prefix}/{name}-{version}.tar"
         return StorageStatus(state=True, dest_url=dest)
+
+    def _upload_concurrent(
+        self,
+        work_dir: str,
+        name: str,
+        version: str,
+        prefix: str,
+        hub_client: AEnvHubClient,
+    ) -> StorageStatus:
+        """Concurrent upload: compress and fetch URL in parallel."""
+        archive_path = None
+        oss_url = None
+
+        try:
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                compress_future = executor.submit(
+                    pack_directory_parallel,
+                    work_dir,
+                    None,
+                    ["__pycache__"],
+                    True,
+                )
+                url_future = executor.submit(
+                    hub_client.apply_sign_url, name, version
+                )
+
+                archive_path = compress_future.result()
+                print(f"🔄 Archive: {archive_path}")
+                oss_url = url_future.result()
+
+            with open(archive_path, "rb") as tar:
+                headers = {"x-oss-object-acl": "public-read-write"}
+                response = requests.put(oss_url, data=tar, headers=headers)
+                response.raise_for_status()
+
+            dest = f"{prefix}/{name}-{version}.tar"
+            return StorageStatus(state=True, dest_url=dest)
+
+        finally:
+            if archive_path and os.path.exists(archive_path):
+                os.unlink(archive_path)
 
 
 def load_storage():
