@@ -3,7 +3,7 @@
 
 metadata:
   namespace: aenv
-sandboxNamespace: aenvsandbox
+sandboxNamespace: aenv-sandbox
 storageAddr: ""
 leaderElect: true
 

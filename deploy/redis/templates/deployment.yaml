@@ -21,8 +21,8 @@ spec:
       {{- end }}
       containers:
         - name: {{ include "redis.name" . }}
-          image: "{{ .Values.image }}"
-          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: redis
               containerPort: 6379
@@ -43,11 +43,45 @@ spec:
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
-            - name: redis-data
+            - name: data
               mountPath: /data
             - name: redis-config
               mountPath: /etc/redis/
               readOnly: true
+        - name: backup-agent
+          image: alpine:3.18
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              apk add --no-cache redis curl busybox-suid bash
+              mkdir -p /data /data-bk /backup-scripts /var/log
+              /backup-scripts/restore.sh
+              echo "*/10 * * * * /backup-scripts/backup.sh" | crontab -
+              crond -f -d 8
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: data-bk
+              mountPath: /data-bk
+            - name: backup-scripts
+              mountPath: /backup-scripts
+          env:
+            {{- if .Values.backup.oss.endpoint }}
+            - name: OSS_ENDPOINT
+              value: {{ .Values.backup.oss.endpoint | quote }}
+            {{- end }}
+            {{- if .Values.backup.oss.bucket }}
+            - name: OSS_BUCKET
+              value: {{ .Values.backup.oss.bucket | quote }}
+            {{- end }}
+            {{- if .Values.backup.oss.accessKey }}
+            - name: OSS_ACCESS_KEY
+              value: {{ .Values.backup.oss.accessKey | quote }}
+            {{- end }}
+            {{- if .Values.backup.oss.secretKey }}
+            - name: OSS_SECRET_KEY
+              value: {{ .Values.backup.oss.secretKey | quote }}
+            {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -57,15 +91,26 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       volumes:
-        - name: redis-data
+        - name: data-bk
           persistentVolumeClaim:
             claimName: {{ include "redis.fullname" . }}
+        - name: data
+          emptyDir: {}
         - name: redis-config
           configMap:
             name: {{ include "redis.fullname" . }}
             items:
               - key: redis.conf
                 path: redis.conf
+        - name: backup-scripts
+          configMap:
+            name: {{ include "redis.fullname" . }}
+            defaultMode: 0755
+            items:
+              - key: restore.sh
+                path: restore.sh
+              - key: backup.sh
+                path: backup.sh
       {{ with .Values.global.tolerations }}
       tolerations:
         {{ toYaml . | nindent 8 }}

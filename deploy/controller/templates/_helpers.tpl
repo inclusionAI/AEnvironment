@@ -76,5 +76,5 @@ Create the name of the service account to use
 Sandbox namespace
 */}}
 {{- define "controller.sandboxNamespace" -}}
-{{- .Values.sandboxNamespace | default "aenvsandbox" }}
+{{- .Values.sandboxNamespace | default "aenv-sandbox" }}
 {{- end }}

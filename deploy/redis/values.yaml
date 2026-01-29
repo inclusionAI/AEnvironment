@@ -19,6 +19,14 @@ image:
   tag: "7.2.4"
   pullPolicy: IfNotPresent
 
+backup:
+  # OSS配置（可选）
+  oss:
+    endpoint: ""
+    bucket: ""
+    accessKey: ""
+    secretKey: ""
+
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
@@ -49,20 +57,7 @@ persistence:
   storageClassName: ""
   accessModes:
     - ReadWriteOnce
-  size: 10Gi
-
-# Redis 配置（无密码模式）
-redis:
-  # 不设置密码，直接空字符串
-  password: ""
-  # AOF 持久化
-  appendonly: "yes"
-
-# ConfigMap configuration
-configmap:
-  enabled: false
-  clusterEnabled: "no"
-  password: ""
+  size: 5Gi
 
 # Redis port
 port: 6379

@@ -7,6 +7,7 @@ global:
   createNamespace: true
   selectorLabels:
     app.kubernetes.io/name: "{{ .Values.name }}"
+  sandboxNamespace: aenv-sandbox
 
 # Controller component
 controller:
@@ -57,24 +58,22 @@ redis:
       cpu: "0.5"
       memory: "1Gi"
       ephemeral-storage: 10Gi
-  configmap:
-    # Redis persistence configuration
-    persistence:
-      # RDB+AOF hybrid persistence
-      # Save rules for RDB snapshots: 
-      # - 900 seconds (15 minutes) if at least 1 key changed
-      # - 300 seconds (5 minutes) if at least 10 keys changed
-      # - 60 seconds (1 minute) if at least 10000 keys changed
-      save: "900 1 300 10 60 10000"
-      appendonly: "yes"
-      appendfilename: "appendonly.aof"
-      appendfsync: "everysec"
-      no-appendfsync-on-rewrite: "no"
-      auto-aof-rewrite-percentage: 100
-      auto-aof-rewrite-min-size: "64mb"
-      aof-load-truncated: "yes"
-      aof-use-rdb-preamble: "yes"
-  port: 6379
+  # Redis persistence configuration
+  persistence:
+    # RDB+AOF hybrid persistence
+    # Save rules for RDB snapshots:
+    # - 900 seconds (15 minutes) if at least 1 key changed
+    # - 300 seconds (5 minutes) if at least 10 keys changed
+    # - 60 seconds (1 minute) if at least 10000 keys changed
+    save: "900 1 300 10 60 10000"
+    appendonly: "yes"
+    appendfilename: "appendonly.aof"
+    appendfsync: "everysec"
+    no-appendfsync-on-rewrite: "no"
+    auto-aof-rewrite-percentage: 100
+    auto-aof-rewrite-min-size: "64mb"
+    aof-load-truncated: "yes"
+    aof-use-rdb-preamble: "yes"
 
 # EnvHub component
 envhub:
@@ -103,9 +102,12 @@ envhub:
 
 # API Service component
 api-service:
+  enabled: false
+
+api-service-k8s:
   enabled: true
   replicaCount: 1
-  name: api-service
+  name: api-service-k8s
   metadata:
     namespace: aenv
   namespace:

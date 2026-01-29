@@ -8,7 +8,7 @@ name: controller
 
 metadata:
   namespace: aenv
-sandboxNamespace: aenvsandbox
+sandboxNamespace: aenv-sandbox
 
 # Namespace configuration
 namespace:

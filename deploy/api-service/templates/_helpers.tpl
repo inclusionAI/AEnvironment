@@ -50,3 +50,17 @@ Selector labels
         {{- printf "http://controller.%s.svc.cluster.local:8080" .Values.metadata.namespace -}}
     {{ end }}
 {{ end }}
+
+{{- define "api-service.scheduleType" -}}
+    {{ if .Values.scheduleType }}
+        {{- .Values.scheduleType -}}
+    {{ else }}
+        {{- printf "k8s" .Values.metadata.namespace -}}
+    {{ end }}
+{{ end }}
+
+{{- define "api-service.qps" -}}
+{{- if .Values.qps }}{{ printf "%v" .Values.qps }}{{ else }}{{ "10" }}{{ end }}
+{{- end }}
+
+

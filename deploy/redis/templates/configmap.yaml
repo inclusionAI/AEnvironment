@@ -1,24 +1,156 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  {{ include "aenv-redis.metadata" . | nindent 2 }}
+  name: {{ include "redis.fullname" . }}
+  namespace: {{ .Values.metadata.namespace }}
 data:
   redis.conf: |
-    port {{ default 6379 .Values.port }}
-    
+    port {{ default 6379 .Values.service.port }}
+
     # RDB persistence configuration
-    save {{ get .Values.configmap.persistence "save" | default "900 1 300 10 60 10000" }}
+    save {{ get .Values.persistence "save" | default "900 1 300 10 60 10000" }}
     dbfilename dump.rdb
     dir /data
-    
+
     # AOF persistence configuration
-    appendonly {{ get .Values.configmap.persistence "appendonly" | default "yes" }}
-    appendfilename {{ get .Values.configmap.persistence "appendfilename" | default "appendonly.aof" }}
-    appendfsync {{ get .Values.configmap.persistence "appendfsync" | default "everysec" }}
-    no-appendfsync-on-rewrite {{ get .Values.configmap.persistence "no-appendfsync-on-rewrite" | default "no" }}
-    auto-aof-rewrite-percentage {{ get .Values.configmap.persistence "auto-aof-rewrite-percentage" | default 100 }}
-    auto-aof-rewrite-min-size {{ get .Values.configmap.persistence "auto-aof-rewrite-min-size" | default "64mb" }}
-    aof-load-truncated {{ get .Values.configmap.persistence "aof-load-truncated" | default "yes" }}
-    
+    appendonly {{ get .Values.persistence "appendonly" | default "yes" }}
+    appendfilename {{ get .Values.persistence "appendfilename" | default "appendonly.aof" }}
+    appendfsync {{ get .Values.persistence "appendfsync" | default "everysec" }}
+    no-appendfsync-on-rewrite {{ get .Values.persistence "no-appendfsync-on-rewrite" | default "no" }}
+    auto-aof-rewrite-percentage {{ get .Values.persistence "auto-aof-rewrite-percentage" | default 100 }}
+    auto-aof-rewrite-min-size {{ get .Values.persistence "auto-aof-rewrite-min-size" | default "64mb" }}
+    aof-load-truncated {{ get .Values.persistence "aof-load-truncated" | default "yes" }}
+
     # RDB+AOF hybrid persistence
-    aof-use-rdb-preamble {{ get .Values.configmap.persistence "aof-use-rdb-preamble" | default "yes" }}
+    aof-use-rdb-preamble {{ get .Values.persistence "aof-use-rdb-preamble" | default "yes" }}
+
+  backup.sh: |
+    #!/bin/bash
+    set -e
+
+    # Redis备份脚本
+    BACKUP_DIR="/data-bk"
+    REDIS_HOST="localhost"
+    REDIS_PORT={{ default 6379 .Values.service.port | quote }}
+    SHARED_DATA_DIR="/data"
+    LOG_FILE="/var/log/redis-backup.log"
+
+    mkdir -p "$(dirname "$LOG_FILE")"
+
+    log() {
+        echo "$(date '+%Y-%m-%d %H:%M:%S'): $1" | tee -a "$LOG_FILE"
+    }
+
+    check_redis() {
+        redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" ping > /dev/null 2>&1
+    }
+
+    create_backup() {
+        local timestamp=$(date +%Y%m%d_%H%M%S)
+        local backup_file="dump_${timestamp}.rdb"
+
+        log "Starting backup process..."
+
+        if redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" bgsave > /dev/null 2>&1; then
+            log "BGSAVE triggered successfully"
+
+            sleep 10
+
+            if [ -f "$SHARED_DATA_DIR/dump.rdb" ]; then
+                cp "$SHARED_DATA_DIR/dump.rdb" "$BACKUP_DIR/$backup_file"
+                log "Backup completed: $backup_file"
+
+                find "$BACKUP_DIR" -name "dump_*.rdb" -mtime +7 -delete
+
+                if [ -n "$OSS_ENDPOINT" ] && [ -n "$OSS_BUCKET" ] && [ -n "$OSS_ACCESS_KEY" ] && [ -n "$OSS_SECRET_KEY" ]; then
+                    log "Uploading to OSS..."
+                fi
+            else
+                log "ERROR: dump.rdb not found"
+            fi
+        else
+            log "ERROR: Failed to trigger BGSAVE"
+        fi
+    }
+
+    main() {
+        log "Redis backup script started"
+
+        sleep 30
+
+        if check_redis; then
+            create_backup
+        else
+            log "WARNING: Redis is not running"
+        fi
+
+        log "Redis backup script completed"
+    }
+
+    main
+
+  restore.sh: |
+    #!/bin/bash
+    set -e
+
+    # Redis还原脚本
+    BACKUP_DIR="/data-bk"
+    REDIS_DATA_DIR="/data"
+    LOG_FILE="/var/log/redis-restore.log"
+
+    mkdir -p "$(dirname "$LOG_FILE")"
+
+    log() {
+        echo "$(date '+%Y-%m-%d %H:%M:%S'): $1" | tee -a "$LOG_FILE"
+    }
+
+    check_backup() {
+        if [ -f "$BACKUP_DIR/dump.rdb" ]; then
+            echo "$BACKUP_DIR/dump.rdb"
+        else
+            local latest_backup=$(ls -t "$BACKUP_DIR"/dump_*.rdb 2>/dev/null | head -n1)
+            if [ -n "$latest_backup" ]; then
+                echo "$latest_backup"
+            else
+                echo "none"
+            fi
+        fi
+    }
+
+    restore_data() {
+        local backup_file="$1"
+
+        log "Starting restore process from $backup_file..."
+
+        mkdir -p "$REDIS_DATA_DIR"
+
+        if [ -f "$REDIS_DATA_DIR/dump.rdb" ]; then
+            local current_backup="$REDIS_DATA_DIR/dump.rdb.backup.$(date +%Y%m%d_%H%M%S)"
+            cp "$REDIS_DATA_DIR/dump.rdb" "$current_backup"
+            log "Current data backed up to: $current_backup"
+        fi
+
+        cp "$backup_file" "$REDIS_DATA_DIR/dump.rdb"
+        chmod 644 "$REDIS_DATA_DIR/dump.rdb"
+
+        log "Restore completed successfully"
+    }
+
+    main() {
+        log "Redis restore script started"
+
+        mkdir -p "$BACKUP_DIR"
+
+        local backup_file=$(check_backup)
+
+        if [ "$backup_file" != "none" ]; then
+            log "Found backup file: $backup_file"
+            restore_data "$backup_file"
+        else
+            log "No backup files found, skipping restore"
+        fi
+
+        log "Redis restore script completed"
+    }
+
+    main
