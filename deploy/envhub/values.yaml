@@ -33,6 +33,10 @@ podSecurityContext: {}
 
 securityContext: {}
 
+deploy:
+  templateId: ""
+  callbackURL: ""
+
 service:
   type: LoadBalancer
   port: 8083
@@ -67,5 +71,5 @@ oss:
   bucket: ""    # OSS bucket name, e.g., "your-bucket-name"
   keyPrefix: ""  # Key prefix for OSS objects
   region: ""  # OSS region， e.g. "cn-hangzhou"
-  # Access credentials are loaded from secret (OSS_ACCESS_KEY_ID and OSS_ACCESS_KEY_SECRET)
-  # or from environment variables
+  accessKeyId: ""  # OSS Access Key ID (will be base64 encoded in secret)
+  accessKeySecret: ""  # OSS Access Key Secret (will be base64 encoded in secret)

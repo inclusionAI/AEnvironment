@@ -48,8 +48,11 @@ spec:
           args:
             - --namespace
             - {{ include "controller.sandboxNamespace" . }}
-            - --leader-elect
-            - {{ .Values.leaderElect | quote }}
+            {{- if .Values.leaderElect }}
+            - --leader-elect=true
+            {{- else }}
+            - --leader-elect=false
+            {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
@@ -67,6 +70,9 @@ spec:
             periodSeconds: 5
             successThreshold: 1
             timeoutSeconds: 1
+          env:
+            - name: SERVICE_DOMAIN_SUFFIX
+              value: {{ .Values.serviceDomainSuffix | quote }}
           resources:
             {{ toYaml .Values.resources | nindent 12 }}
           {{- if .Values.podTemplates }}

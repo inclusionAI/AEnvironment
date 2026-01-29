@@ -49,7 +49,7 @@ persistence:
   storageClassName: ""
   accessModes:
     - ReadWriteOnce
-  size: 10Gi
+  size: 5Gi
 
 # Redis 配置（无密码模式）
 redis:
