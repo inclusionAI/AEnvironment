@@ -20,7 +20,7 @@ This command provides interface for managing long-running services:
 - service list: List running services
 - service get: Get detailed service information
 - service delete: Delete a service
-- service update: Update service (replicas, image, env vars)
+- service update: Update service (replicas, env vars)
 """
 import asyncio
 import json
@@ -157,11 +157,13 @@ def create(
     1. CLI parameters (--replicas, --port, --enable-storage)
     2. config.json's deployConfig.service (new structure)
     3. config.json's deployConfig (legacy flat structure, for backward compatibility)
-    4. System defaults
+    4. API Service will fetch missing parameters from envhub if not provided in CLI/config
+    5. System defaults
 
     Storage creation behavior:
     - Use --enable-storage flag to enable persistent storage
-    - Storage configuration (storageSize, storageName, mountPath) is read from config.json's deployConfig.service
+    - Storage configuration (storageSize, storageName, mountPath) can be provided in CLI options or config.json
+    - If not provided, API Service will use values from envhub's deployConfig.service
     - When storage is created, replicas must be 1 (enforced by backend)
     - storageClass is configured in helm values.yaml deployment, not in config.json
 
@@ -169,7 +171,7 @@ def create(
     - replicas: Number of replicas (default: 1)
     - port: Service port (default: 8080)
     - enableStorage: Enable storage by default (default: false, CLI --enable-storage overrides)
-    - storageSize: Storage size like "10Gi", "20Gi" (required when --enable-storage is used)
+    - storageSize: Storage size like "10Gi", "20Gi" (used when --enable-storage is set)
     - storageName: Storage name (default: environment name)
     - mountPath: Mount path (default: /home/admin/data)
 
@@ -188,13 +190,13 @@ def create(
         # Create using config.json in current directory
         aenv service create
 
-        # Create with explicit environment name
+        # Create with explicit environment name (API Service will fetch config from envhub)
         aenv service create myapp@1.0.0
 
         # Create with 3 replicas and custom port (no storage)
         aenv service create myapp@1.0.0 --replicas 3 --port 8000
 
-        # Create with storage enabled (storageSize must be in config.json)
+        # Create with storage enabled (storageSize from config.json or envhub)
         aenv service create myapp@1.0.0 --enable-storage
 
         # Create with environment variables
@@ -259,10 +261,11 @@ def create(
         final_storage_size = service_config.get("storageSize")
         if not final_storage_size:
             console.print(
-                "[red]Error:[/red] Storage is enabled but 'storageSize' is not found in config.json's deployConfig.service.\n"
-                "Please add 'storageSize' (e.g., '10Gi', '20Gi') to deployConfig.service in config.json."
+                "[yellow]⚠️  Warning:[/yellow] Storage is enabled but 'storageSize' is not found in local config.json.\n"
+                "   API Service will attempt to fetch storageSize from envhub.\n"
+                "   If not found in envhub either, the service creation will fail."
             )
-            raise click.Abort()
+            # Note: Don't abort here, let API Service try to fetch from envhub
         final_storage_name = service_config.get("storageName")
         final_mount_path = service_config.get("mountPath")
 
@@ -731,11 +734,6 @@ def delete_service(cfg: Config, service_id, yes, delete_storage):
     help="Update number of replicas",
 )
 @click.option(
-    "--image",
-    type=str,
-    help="Update container image",
-)
-@click.option(
     "--env",
     "-e",
     "environment_variables",
@@ -754,32 +752,28 @@ def update_service(
     cfg: Config,
     service_id: str,
     replicas: Optional[int],
-    image: Optional[str],
     environment_variables: tuple,
     output: str,
 ):
     """Update a running service
 
-    Can update replicas, image, and environment variables.
+    Can update replicas and environment variables.
 
     Examples:
         # Scale to 5 replicas
         aenv service update myapp-svc-abc123 --replicas 5
 
-        # Update image
-        aenv service update myapp-svc-abc123 --image myapp:2.0.0
-
         # Update environment variables
         aenv service update myapp-svc-abc123 -e DB_HOST=newhost -e DB_PORT=3306
 
         # Update multiple things at once
-        aenv service update myapp-svc-abc123 --replicas 3 --image myapp:2.0.0
+        aenv service update myapp-svc-abc123 --replicas 3 -e DB_HOST=newhost
     """
     console = cfg.console.console()
 
-    if not replicas and not image and not environment_variables:
+    if not replicas and not environment_variables:
         console.print(
-            "[red]Error:[/red] At least one of --replicas, --image, or --env must be provided"
+            "[red]Error:[/red] At least one of --replicas or --env must be provided"
         )
         raise click.Abort()
 
@@ -800,8 +794,6 @@ def update_service(
     console.print(f"[cyan]🔄 Updating service:[/cyan] {service_id}")
     if replicas is not None:
         console.print(f"   Replicas: {replicas}")
-    if image:
-        console.print(f"   Image: {image}")
     if env_vars:
         console.print(f"   Environment Variables: {len(env_vars)} variables")
     console.print()
@@ -814,7 +806,6 @@ def update_service(
             return await client.update_env_service(
                 service_id=service_id,
                 replicas=replicas,
-                image=image,
                 environment_variables=env_vars,
             )
 

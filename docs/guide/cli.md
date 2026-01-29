@@ -726,14 +726,11 @@ Update a running service's configuration.
 # Scale to 5 replicas
 aenv service update myapp-svc-abc123 --replicas 5
 
-# Update image
-aenv service update myapp-svc-abc123 --image myapp:2.0.0
-
 # Update environment variables
 aenv service update myapp-svc-abc123 -e DB_HOST=newhost -e DB_PORT=3306
 
 # Update multiple things at once
-aenv service update myapp-svc-abc123 --replicas 3 --image myapp:2.0.0
+aenv service update myapp-svc-abc123 --replicas 3 -e DB_HOST=newhost
 ```
 
 **Options:**
@@ -741,13 +738,12 @@ aenv service update myapp-svc-abc123 --replicas 3 --image myapp:2.0.0
 | Option | Short | Description |
 |---|---|---|
 | `--replicas` | `-r` | Update number of replicas |
-| `--image` | | Update container image |
 | `--env` | `-e` | Environment variables (KEY=VALUE) |
 | `--output` | `-o` | Output format (table/json) |
 
 **Important Notes:**
 
-- At least one of `--replicas`, `--image`, or `--env` must be provided
+- At least one of `--replicas` or `--env` must be provided
 - Environment variable updates merge with existing variables
 
 ### `aenv get` - Get Environment Details

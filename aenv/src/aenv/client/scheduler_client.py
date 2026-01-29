@@ -612,7 +612,6 @@ class AEnvSchedulerClient:
         self,
         service_id: str,
         replicas: Optional[int] = None,
-        image: Optional[str] = None,
         environment_variables: Optional[Dict[str, str]] = None,
     ) -> "EnvService":
         """
@@ -621,7 +620,6 @@ class AEnvSchedulerClient:
         Args:
             service_id: Environment service ID
             replicas: Optional number of replicas
-            image: Optional container image
             environment_variables: Optional environment variables
 
         Returns:
@@ -638,7 +636,6 @@ class AEnvSchedulerClient:
 
         request = EnvServiceUpdateRequest(
             replicas=replicas,
-            image=image,
             environment_variables=environment_variables,
         )
 

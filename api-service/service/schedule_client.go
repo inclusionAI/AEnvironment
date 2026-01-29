@@ -346,7 +346,6 @@ func (c *ScheduleClient) DeleteService(serviceName string, deleteStorage bool) (
 // UpdateServiceRequest represents the request body for updating a service
 type UpdateServiceRequest struct {
 	Replicas             *int32             `json:"replicas,omitempty"`
-	Image                *string            `json:"image,omitempty"`
 	EnvironmentVariables *map[string]string `json:"environment_variables,omitempty"`
 }
 
