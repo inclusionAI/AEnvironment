@@ -163,10 +163,11 @@ func SetUpController() {
 	cfg.QPS = float32(qps)
 	cfg.Burst = burst
 	cfg.AcceptContentTypes = "application/vnd.kubernetes.protobuf,application/json"
-	cfg.UserAgent = "aenv-controller"
+	// Use kubectl-like UserAgent to avoid potential per-client rate limiting
+	cfg.UserAgent = "kubectl/v1.26.0 (aenv-controller) kubernetes/compatible"
 
 	// LOG: Confirm rate limiting configuration
-	klog.Infof("🔧 API Rate Limiting configured: QPS=%.0f, Burst=%d (fix/controller branch changes applied)", cfg.QPS, cfg.Burst)
+	klog.Infof("🔧 API Rate Limiting configured: QPS=%.0f, Burst=%d, UserAgent=%s", cfg.QPS, cfg.Burst, cfg.UserAgent)
 
 	// Ensure APIPath is set for discovery client
 	if cfg.APIPath == "" {

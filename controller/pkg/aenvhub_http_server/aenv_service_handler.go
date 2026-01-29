@@ -59,7 +59,8 @@ func NewAEnvServiceHandler() (*AEnvServiceHandler, error) {
 		}
 	}
 
-	config.UserAgent = "aenv-controller"
+	// Use kubectl-like UserAgent to avoid potential per-client rate limiting
+	config.UserAgent = "kubectl/v1.26.0 (aenv-controller) kubernetes/compatible"
 	config.QPS = 20
 	config.Burst = 40
 

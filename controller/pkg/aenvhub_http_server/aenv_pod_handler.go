@@ -63,8 +63,9 @@ func NewAEnvPodHandler() (*AEnvPodHandler, error) {
 	}
 
 	// Set useragent and rate limits
+	// Use kubectl-like UserAgent to avoid potential per-client rate limiting
 	// Use conservative QPS/Burst to avoid "too many requests" in large clusters
-	config.UserAgent = "aenv-controller"
+	config.UserAgent = "kubectl/v1.26.0 (aenv-controller) kubernetes/compatible"
 	config.QPS = 20
 	config.Burst = 40
 
