@@ -543,11 +543,13 @@ class AEnvSchedulerClient:
 
                 try:
                     api_response = APIResponse(**response.json())
-                    if api_response.success and api_response.data:
+                    # Fix: Check success explicitly, allow empty list as valid data
+                    if api_response.success:
                         if isinstance(api_response.data, list):
                             from aenv.core.models import EnvService
 
                             return [EnvService(**item) for item in api_response.data]
+                        # Return empty list if data is None or not a list
                         return []
                     else:
                         error_msg = api_response.get_error_message()
