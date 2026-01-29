@@ -28,8 +28,8 @@ import (
 	aenvhubserver "controller/pkg/aenvhub_http_server"
 
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	"k8s.io/klog"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 )
@@ -143,7 +143,7 @@ func SetUpController() {
 
 	// Get a config to talk to the apiserver
 	klog.Infof("setting up client for manager")
-	cfg, err := config.GetConfig()
+	cfg, err := rest.InClusterConfig()
 	if err != nil {
 		klog.Errorf("unable to set up client config, err is %v", err)
 		os.Exit(1)
