@@ -477,8 +477,8 @@ class Environment:
         if ensure_initialized:
             await self._ensure_initialized()
 
-        logger.info(
-            f"{self._log_prefix()} Executing function in environment {self.env_name} with url={function_url} proxy_headers={self.proxy_headers}, timeout={timeout}"
+        logger.debug(
+            f"{self._log_prefix()} Executing function in environment {self.env_name} with url={function_url}"
         )
 
         try:
@@ -514,8 +514,8 @@ class Environment:
                 if not result.get("success", False):
                     raise EnvironmentError(result.get("error", "Unknown error"))
 
-                logger.info(
-                    f"{self._log_prefix()} Function '{function_url}' executed successfully with result={result}"
+                logger.debug(
+                    f"{self._log_prefix()} Function '{function_url}' executed successfully"
                 )
                 return result.get("data", {})
 
@@ -724,8 +724,8 @@ class Environment:
             result = ""
 
             while True:
-                logger.info(
-                    f"{self._log_prefix()} check {self.env_name} health at round {times} with url: {self.aenv_health_url}, last_check_result={result}"
+                logger.debug(
+                    f"{self._log_prefix()} check {self.env_name} health at round {times} with url: {self.aenv_health_url}"
                 )
 
                 try:
@@ -745,13 +745,13 @@ class Environment:
                         or result.get("status") == "healthy"
                     ):
                         logger.info(
-                            f"{self._log_prefix()} Environment {self.env_name} is healthy"
+                            f"{self._log_prefix()} Environment {self.env_name} is healthy after {times + 1} attempts"
                         )
                         return
 
                 except Exception as e:
                     logger.debug(
-                        f"{self._log_prefix()} Health check failed: {str(e)}, retrying..."
+                        f"{self._log_prefix()} Health check attempt {times + 1} failed: {str(e)}, retrying..."
                     )
 
                 if asyncio.get_event_loop().time() - start_time > timeout:
