@@ -27,9 +27,12 @@ import (
 
 	aenvhubserver "controller/pkg/aenvhub_http_server"
 
+	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 )
@@ -39,9 +42,10 @@ const (
 )
 
 var (
-	defaultNamespace string
-	logDir           string
-	serverPort       int
+	defaultNamespace     string
+	logDir               string
+	serverPort           int
+	enableLeaderElection bool
 
 	controllerManager manager.Manager
 )
@@ -62,14 +66,23 @@ func StartHttpServer() {
 
 	klog.Infof("starting AENV http server...")
 
-	// AENV Pod Manager
-	aenvPodManager, err := aenvhubserver.NewAEnvPodHandler()
+	// Create a shared clientset from manager's config
+	// All handlers will share the same clientset and rate limiter
+	klog.Infof("🔗 Creating shared Kubernetes clientset for all handlers...")
+	sharedClientset, err := kubernetes.NewForConfig(controllerManager.GetConfig())
+	if err != nil {
+		klog.Fatalf("failed to create shared Kubernetes clientset, err is %v", err)
+	}
+	klog.Infof("✅ Shared clientset created with QPS=%.0f Burst=%d (shared rate limiter active)", controllerManager.GetConfig().QPS, controllerManager.GetConfig().Burst)
+
+	// AENV Pod Manager - use shared clientset
+	aenvPodManager, err := aenvhubserver.NewAEnvPodHandlerWithClientset(sharedClientset)
 	if err != nil {
 		klog.Fatalf("failed to create AENV Pod manager, err is %v", err)
 	}
 
-	// AENV Service Manager
-	aenvServiceManager, err := aenvhubserver.NewAEnvServiceHandler()
+	// AENV Service Manager - use shared clientset
+	aenvServiceManager, err := aenvhubserver.NewAEnvServiceHandlerWithClientset(sharedClientset)
 	if err != nil {
 		klog.Fatalf("failed to create AENV Service manager, err is %v", err)
 	}
@@ -104,7 +117,6 @@ func SetUpController() {
 		qps         int
 		burst       int
 
-		enableLeaderElection                                          bool
 		leaderDuration, leaderRenewDuration, leaderRetryPeriodDuation string
 	)
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8088", "The address the metric endpoint binds to.")
@@ -113,8 +125,8 @@ func SetUpController() {
 	flag.StringVar(&leaderDuration, "leader-elect-lease-duration", "65s", "leader election lease duration")
 	flag.StringVar(&leaderRenewDuration, "leader-elect-renew-deadline", "60s", "leader election renew deadline")
 	flag.StringVar(&leaderRetryPeriodDuation, "leader-elect-retry-period", "2s", "leader election retry period")
-	flag.IntVar(&qps, "qps", 50, "QPS for kubernetes clientset config.")
-	flag.IntVar(&burst, "burst", 100, "Burst for kubernetes clienset config.")
+	flag.IntVar(&qps, "qps", 5, "QPS for kubernetes clientset config.")
+	flag.IntVar(&burst, "burst", 10, "Burst for kubernetes clienset config.")
 
 	flag.Parse()
 
@@ -153,6 +165,24 @@ func SetUpController() {
 	cfg.AcceptContentTypes = "application/vnd.kubernetes.protobuf,application/json"
 	cfg.UserAgent = "aenv-controller"
 
+	// LOG: Confirm rate limiting configuration
+	klog.Infof("🔧 API Rate Limiting configured: QPS=%.0f, Burst=%d (fix/controller branch changes applied)", cfg.QPS, cfg.Burst)
+
+	// Ensure APIPath is set for discovery client
+	if cfg.APIPath == "" {
+		cfg.APIPath = "/api"
+	}
+
+	// Create a lazy REST mapper to avoid expensive discovery on startup
+	// Critical for clusters with 300+ CRDs to prevent "too many requests" errors
+	klog.Infof("🚀 Creating lazy REST mapper to avoid expensive CRD discovery...")
+	lazyMapper, err := apiutil.NewDynamicRESTMapper(cfg, apiutil.WithLazyDiscovery)
+	if err != nil {
+		klog.Errorf("unable to create lazy REST mapper, err is %v", err)
+		os.Exit(1)
+	}
+	klog.Infof("✅ Lazy REST mapper created successfully")
+
 	// Create a new Cmd to provide shared dependencies and start components
 	klog.Infof("setting up manager")
 	controllerManager, err = manager.New(cfg, manager.Options{
@@ -163,6 +193,12 @@ func SetUpController() {
 		LeaseDuration:           &leaseTime,
 		RenewDeadline:           &leaseRenewTime,
 		RetryPeriod:             &leaderRetryPeriodTIme,
+		// Use lazy mapper to avoid upfront discovery of all 300+ CRDs
+		MapperProvider: func(c *rest.Config) (meta.RESTMapper, error) {
+			return lazyMapper, nil
+		},
+		// Limit manager to watch only specific namespace
+		Namespace: defaultNamespace,
 	})
 
 	if err != nil {
@@ -206,7 +242,11 @@ func AddReadiness(mgr manager.Manager) {
 		<-mgr.Elected() // When closed, it means leader has been acquired
 		isLeader.Store(true)
 
-		klog.Infof("This controller is now the leader")
+		if enableLeaderElection {
+			klog.Infof("This controller is now the leader")
+		} else {
+			klog.Infof("Leader election disabled, starting HTTP server")
+		}
 
 		StartHttpServer()
 	}()

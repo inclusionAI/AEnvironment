@@ -60,14 +60,23 @@ func NewAEnvServiceHandler() (*AEnvServiceHandler, error) {
 	}
 
 	config.UserAgent = "aenv-controller"
-	config.QPS = 1000
-	config.Burst = 1000
+	config.QPS = 5
+	config.Burst = 10
 
+	return NewAEnvServiceHandlerWithConfig(config)
+}
+
+// NewAEnvServiceHandlerWithConfig creates new ServiceHandler with provided config
+func NewAEnvServiceHandlerWithConfig(config *rest.Config) (*AEnvServiceHandler, error) {
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create k8s clientset, err is %v", err)
 	}
+	return NewAEnvServiceHandlerWithClientset(clientset)
+}
 
+// NewAEnvServiceHandlerWithClientset creates new ServiceHandler with provided clientset
+func NewAEnvServiceHandlerWithClientset(clientset kubernetes.Interface) (*AEnvServiceHandler, error) {
 	serviceHandler := &AEnvServiceHandler{
 		clientset: clientset,
 	}

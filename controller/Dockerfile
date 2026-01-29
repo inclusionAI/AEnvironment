@@ -37,7 +37,10 @@ COPY api-service ./api-service
 
 # Build
 WORKDIR /workspace/controller
-RUN go build -v -a -o controller ./cmd
+# Set build args for cross-compilation
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -v -a -ldflags="-w -s" -o controller ./cmd
 
 WORKDIR /workspace
 

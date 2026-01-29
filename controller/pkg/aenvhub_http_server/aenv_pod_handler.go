@@ -62,16 +62,26 @@ func NewAEnvPodHandler() (*AEnvPodHandler, error) {
 		}
 	}
 
-	// Set useragent
+	// Set useragent and rate limits
+	// Use conservative QPS/Burst to avoid "too many requests" in large clusters
 	config.UserAgent = "aenv-controller"
-	config.QPS = 1000
-	config.Burst = 1000
+	config.QPS = 5
+	config.Burst = 10
 
+	return NewAEnvPodHandlerWithConfig(config)
+}
+
+// NewAEnvPodHandlerWithConfig creates new PodHandler with provided config
+func NewAEnvPodHandlerWithConfig(config *rest.Config) (*AEnvPodHandler, error) {
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create k8s clientset, err is %v", err)
 	}
+	return NewAEnvPodHandlerWithClientset(clientset)
+}
 
+// NewAEnvPodHandlerWithClientset creates new PodHandler with provided clientset
+func NewAEnvPodHandlerWithClientset(clientset kubernetes.Interface) (*AEnvPodHandler, error) {
 	podHandler := &AEnvPodHandler{
 		clientset: clientset,
 	}
