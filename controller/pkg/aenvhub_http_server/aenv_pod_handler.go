@@ -65,8 +65,8 @@ func NewAEnvPodHandler() (*AEnvPodHandler, error) {
 	// Set useragent and rate limits
 	// Use conservative QPS/Burst to avoid "too many requests" in large clusters
 	config.UserAgent = "aenv-controller"
-	config.QPS = 5
-	config.Burst = 10
+	config.QPS = 20
+	config.Burst = 40
 
 	return NewAEnvPodHandlerWithConfig(config)
 }

@@ -60,8 +60,8 @@ func NewAEnvServiceHandler() (*AEnvServiceHandler, error) {
 	}
 
 	config.UserAgent = "aenv-controller"
-	config.QPS = 5
-	config.Burst = 10
+	config.QPS = 20
+	config.Burst = 40
 
 	return NewAEnvServiceHandlerWithConfig(config)
 }

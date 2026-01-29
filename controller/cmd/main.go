@@ -125,8 +125,8 @@ func SetUpController() {
 	flag.StringVar(&leaderDuration, "leader-elect-lease-duration", "65s", "leader election lease duration")
 	flag.StringVar(&leaderRenewDuration, "leader-elect-renew-deadline", "60s", "leader election renew deadline")
 	flag.StringVar(&leaderRetryPeriodDuation, "leader-elect-retry-period", "2s", "leader election retry period")
-	flag.IntVar(&qps, "qps", 5, "QPS for kubernetes clientset config.")
-	flag.IntVar(&burst, "burst", 10, "Burst for kubernetes clienset config.")
+	flag.IntVar(&qps, "qps", 20, "QPS for kubernetes clientset config.")
+	flag.IntVar(&burst, "burst", 40, "Burst for kubernetes clienset config.")
 
 	flag.Parse()
 
