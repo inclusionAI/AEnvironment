@@ -1,4 +1,3 @@
-{{- if and (hasKey .Values "configmap") (get .Values.configmap "enabled") }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -6,12 +5,20 @@ metadata:
 data:
   redis.conf: |
     port {{ default 6379 .Values.port }}
-    cluster-enabled {{ default "no" (get .Values.configmap "clusterEnabled") }}
-    cluster-config-file /data/nodes.conf
-    cluster-node-timeout 5000
-    appendonly yes
-{{- if get .Values.configmap "password" }}
-    requirepass {{ get .Values.configmap "password" }}
-    masterauth {{ get .Values.configmap "password" }}
-{{- end }}
-{{- end }}
+    
+    # RDB persistence configuration
+    save {{ get .Values.configmap.persistence "save" | default "900 1 300 10 60 10000" }}
+    dbfilename dump.rdb
+    dir /data
+    
+    # AOF persistence configuration
+    appendonly {{ get .Values.configmap.persistence "appendonly" | default "yes" }}
+    appendfilename {{ get .Values.configmap.persistence "appendfilename" | default "appendonly.aof" }}
+    appendfsync {{ get .Values.configmap.persistence "appendfsync" | default "everysec" }}
+    no-appendfsync-on-rewrite {{ get .Values.configmap.persistence "no-appendfsync-on-rewrite" | default "no" }}
+    auto-aof-rewrite-percentage {{ get .Values.configmap.persistence "auto-aof-rewrite-percentage" | default 100 }}
+    auto-aof-rewrite-min-size {{ get .Values.configmap.persistence "auto-aof-rewrite-min-size" | default "64mb" }}
+    aof-load-truncated {{ get .Values.configmap.persistence "aof-load-truncated" | default "yes" }}
+    
+    # RDB+AOF hybrid persistence
+    aof-use-rdb-preamble {{ get .Values.configmap.persistence "aof-use-rdb-preamble" | default "yes" }}

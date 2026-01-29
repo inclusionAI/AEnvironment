@@ -27,12 +27,9 @@ spec:
             - name: redis
               containerPort: 6379
               protocol: TCP
-          {{- if .Values.redis.appendonly }}
           args:
             - "redis-server"
-            - "--appendonly"
-            - "{{ .Values.redis.appendonly }}"
-          {{- end }}
+            - "/etc/redis/redis.conf"
           livenessProbe:
             tcpSocket:
               port: redis
@@ -45,11 +42,12 @@ spec:
             periodSeconds: 5
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-          {{- if .Values.persistence.enabled }}
           volumeMounts:
             - name: redis-data
               mountPath: /data
-          {{- end }}
+            - name: redis-config
+              mountPath: /etc/redis/
+              readOnly: true
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -58,12 +56,16 @@ spec:
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- if .Values.persistence.enabled }}
       volumes:
         - name: redis-data
           persistentVolumeClaim:
             claimName: {{ include "redis.fullname" . }}
-      {{- end }}
+        - name: redis-config
+          configMap:
+            name: {{ include "redis.fullname" . }}
+            items:
+              - key: redis.conf
+                path: redis.conf
       {{ with .Values.global.tolerations }}
       tolerations:
         {{ toYaml . | nindent 8 }}
