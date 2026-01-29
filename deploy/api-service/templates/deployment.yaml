@@ -39,6 +39,10 @@ spec:
             - {{ include "api-service.backendAddr" . }}
             - --schedule-addr
             - {{ include "api-service.scheduleAddr" . }}
+            - --schedule-type
+            - {{ include "api-service.scheduleType" . }}
+            - --qps
+            - {{ include "api-service.qps" . | quote }}
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
