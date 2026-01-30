@@ -58,7 +58,7 @@ repos:
         name: golangci-lint (api-service)
         files: ^api-service/
         args: [--timeout=5m]
-        entry: bash -c 'cd api-service && golangci-lint run --timeout=5m'
+        entry: bash -c 'cd api-service && golangci-lint run -v --timeout=5m'
         pass_filenames: false
       - id: golangci-lint
         name: golangci-lint (controller)

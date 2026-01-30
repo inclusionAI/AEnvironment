@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import sys
-import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -207,16 +206,10 @@ class DockerArtifactBuilder(ArtifactBuilder):
                 )
                 # Process streaming build logs
                 current_step = 0
-                last_output_time = time.time()
-                heartbeat_interval = 30  # Show heartbeat every 30 seconds if no output
-                last_heartbeat_time = time.time()
 
                 for log_line in response:
                     if not log_line:
                         continue
-
-                    current_time = time.time()
-                    last_output_time = current_time
 
                     # Handle different types of log messages
                     if "stream" in log_line:
@@ -317,18 +310,24 @@ class DockerArtifactBuilder(ArtifactBuilder):
                         print(f"   ❌ Error: {error_msg}")
                         sys.stdout.flush()
                         raise docker.errors.BuildError(error_msg, [log_line])
-                    
+
                     # Show heartbeat if no output for a while (handled in a separate check)
                     # Note: This is a simple approach. For better UX, consider using threading
                     # to show periodic heartbeats during long-running steps
-                    
+
                     # Handle any other log line types that might be present
                     else:
                         # Log unknown log line types for debugging
                         if log_line:
                             # Only print if it's not empty and might be useful
-                            if any(key in log_line for key in ["message", "log", "output"]):
-                                message = log_line.get("message") or log_line.get("log") or log_line.get("output", "")
+                            if any(
+                                key in log_line for key in ["message", "log", "output"]
+                            ):
+                                message = (
+                                    log_line.get("message")
+                                    or log_line.get("log")
+                                    or log_line.get("output", "")
+                                )
                                 if message:
                                     print(f"   {message}")
                                     sys.stdout.flush()
