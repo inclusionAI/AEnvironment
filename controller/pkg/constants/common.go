@@ -17,5 +17,8 @@ limitations under the License.
 package constants
 
 const (
-	AENV_TTL = "business/aenv-ttl"
+	AENV_TTL     = "business/aenv-ttl"
+	AENV_NAME    = "business/aenv-name"
+	AENV_VERSION = "business/aenv-version"
+	AENV_OWNER   = "business/aenv-owner"
 )

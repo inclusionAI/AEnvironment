@@ -14,8 +14,20 @@
 
 import click
 
-from cli.cmds import build, config, get, init, list, push, run, version
+from cli.cmds import (
+    build,
+    config,
+    get,
+    init,
+    instance,
+    list,
+    push,
+    run,
+    service,
+    version,
+)
 from cli.cmds.common import Config, global_error_handler, pass_config
+from cli.utils.common.aenv_logger import configure_logging
 
 
 class CLI(click.Group):
@@ -32,6 +44,8 @@ def cli(cfg: Config, debug: bool, verbose: bool):
     """Aenv cli helps build your custom aenv"""
     cfg.debug = debug
     cfg.verbose = verbose
+    # Configure logging based on verbose flag
+    configure_logging(verbose)
 
 
 # add subcommand
@@ -43,6 +57,8 @@ cli.add_command(list)
 cli.add_command(version)
 cli.add_command(build)
 cli.add_command(config)
+cli.add_command(instance)
+cli.add_command(service)
 
 if __name__ == "__main__":
     cli()

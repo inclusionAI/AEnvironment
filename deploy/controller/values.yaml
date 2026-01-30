@@ -8,7 +8,7 @@ name: controller
 
 metadata:
   namespace: aenv
-sandboxNamespace: aenvsandbox
+sandboxNamespace: aenv-sandbox
 
 # Namespace configuration
 namespace:
@@ -20,6 +20,8 @@ namespace:
   annotations: {}
 storageAddr: ""
 leaderElect: false
+
+serviceAccountName: aenv-serviceaccount
 
 image: docker.io/library/controller:latest
 

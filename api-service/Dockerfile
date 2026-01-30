@@ -42,7 +42,7 @@ RUN go build -o api-service .
 WORKDIR /workspace
 
 # Runtime stage
-FROM alpine:3.19
+FROM alpine:3.20
 
 RUN apk add --no-cache ca-certificates tzdata
 

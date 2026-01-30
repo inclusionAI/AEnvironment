@@ -37,6 +37,12 @@ class CLIConfig:
     # AEnv hub backend configuration
     hub_config: Dict[str, Any] = None
 
+    # System URL for traffic plane (can be overridden by AENV_SYSTEM_URL env var)
+    system_url: Optional[str] = None
+
+    # Owner information for instance queries
+    owner: Optional[str] = None
+
     def __post_init__(self):
         """Initialize default configurations."""
         if self.build_config is None:

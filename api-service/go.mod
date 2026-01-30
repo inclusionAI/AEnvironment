@@ -15,7 +15,9 @@ require (
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
 
-replace envhub => ../envhub
+replace (
+	envhub => ../envhub
+)
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect

@@ -33,12 +33,16 @@ spec:
           securityContext:
             {{ toYaml .Values.securityContext | nindent 12 }}
           image: {{ .Values.image }}
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
           args:
             - --backend-addr
             - {{ include "api-service.backendAddr" . }}
             - --schedule-addr
             - {{ include "api-service.scheduleAddr" . }}
+            - --schedule-type
+            - {{ include "api-service.scheduleType" . }}
+            - --qps
+            - {{ include "api-service.qps" . | quote }}
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
@@ -64,7 +68,10 @@ spec:
       affinity:
         {{ toYaml . | nindent 8 }}
       {{ end }}
-      {{ with .Values.tolerations }}
+      {{ with .Values.global.tolerations }}
       tolerations:
         {{ toYaml . | nindent 8 }}
+      {{ end }}
+      {{ with .Values.global.dns }}
+      {{ toYaml . | nindent 6 }}
       {{ end }}

@@ -17,6 +17,7 @@ limitations under the License.
 package controller
 
 import (
+	"api-service/constants"
 	"io"
 	"log"
 	"net/http"
@@ -29,7 +30,7 @@ import (
 // MCP gateway constant definitions
 const (
 	// Request header constants
-	HeaderMCPServerURL = "AEnvCore-MCPProxy-URL"
+
 	HeaderContentType  = "Content-Type"
 	HeaderCacheControl = "Cache-Control"
 	HeaderConnection   = "Connection"
@@ -95,11 +96,11 @@ func (g *MCPGateway) healthCheck(c *gin.Context) {
 
 // getMCPSeverURL gets MCP server URL from request header
 func (g *MCPGateway) getMCPSeverURL(c *gin.Context) (string, error) {
-	mcpServerURL := c.GetHeader(HeaderMCPServerURL)
+	mcpServerURL := c.GetHeader(constants.HeaderMCPServerURL)
 	if mcpServerURL == "" {
 		return "", &MCPError{
 			Code:    http.StatusBadRequest,
-			Message: HeaderMCPServerURL + " header is required",
+			Message: constants.HeaderMCPServerURL + " header is required",
 		}
 	}
 	return mcpServerURL, nil
@@ -191,7 +192,7 @@ func (g *MCPGateway) handleMCPSSEWithHeader(c *gin.Context) {
 	req.Header.Set(HeaderCacheControl, "no-cache")
 
 	// Copy other request headers (except headers used internally by gateway)
-	g.copyHeadersExcept(c.Request.Header, req.Header, HeaderMCPServerURL)
+	g.copyHeadersExcept(c.Request.Header, req.Header, constants.HeaderMCPServerURL)
 
 	// Send to MCP server
 	client := &http.Client{}
@@ -202,7 +203,9 @@ func (g *MCPGateway) handleMCPSSEWithHeader(c *gin.Context) {
 		return
 	}
 	defer func() {
-		resp.Body.Close()
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Printf("failed to close response body: %v", closeErr)
+		}
 	}()
 
 	// Check response status
@@ -297,7 +300,7 @@ func (g *MCPGateway) handleMCPHTTPWithHeader(c *gin.Context) {
 		originalDirector(req)
 
 		// Remove headers used internally by gateway
-		req.Header.Del(HeaderMCPServerURL)
+		req.Header.Del(constants.HeaderMCPServerURL)
 	}
 
 	// Execute reverse proxy

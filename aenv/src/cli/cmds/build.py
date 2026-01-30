@@ -162,9 +162,9 @@ def build(
     docker_sock_idx = Path(docker_sock_path)
     if not docker_sock_idx.exists():
         console.print(
-            f"[red]Error: Docker sock:{docker_sock_idx} your provided in config:{config_path} is not exist[/red]"
+            f"[red]Error: Docker socket {docker_sock_idx} specified in config {config_path} does not exist[/red]"
         )
-        return
+        raise click.Abort()
 
     # Initialize build context
     work_path = Path(work_dir).resolve()
@@ -182,8 +182,8 @@ def build(
         if not image_tag:
             image_tag = env_build_config.get("version")
     if not image_name or not image_tag:
-        console.print("[red]Error: image name/tag is not config[/red]")
-        return
+        console.print("[red]Error: Image name or tag is not configured[/red]")
+        raise click.Abort()
 
     registry_settings = build_config.get("registry", {})
     if registry is None:

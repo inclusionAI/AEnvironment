@@ -403,7 +403,7 @@ func (ctrl *EnvController) AciCallback(c *gin.Context) {
 		artifacts = make([]models.Artifact, 0)
 	}
 	exist := false
-	for idx, _ := range artifacts {
+	for idx := range artifacts {
 		if artifacts[idx].Type == "image" {
 			exist = true
 			if artifacts[idx].Content != imageUrl {

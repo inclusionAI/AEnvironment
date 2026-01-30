@@ -18,6 +18,7 @@ package models
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -208,4 +209,37 @@ func (e *Env) FromJSON(data []byte) error {
 		}
 	}
 	return nil
+}
+
+// GetImage finds the artifact of type "docker-image" from Artifacts and returns its Content (the image address)
+func (e *Env) GetImage() string {
+	for _, artifact := range e.Artifacts {
+		if strings.EqualFold(artifact.Type, "image") {
+			return artifact.Content
+		}
+	}
+	return ""
+}
+
+// GetMemory retrieves the memory configuration from DeployConfig, such as "2G"
+func (e *Env) GetMemory() string {
+	if val, exists := e.DeployConfig["memory"]; exists {
+		if s, ok := val.(string); ok {
+			return s
+		}
+		// If it's another type (such as float64), try to convert to string
+		return fmt.Sprintf("%v", val)
+	}
+	return ""
+}
+
+// GetCPU retrieves the cpu configuration from DeployConfig, such as "1C"
+func (e *Env) GetCPU() string {
+	if val, exists := e.DeployConfig["cpu"]; exists {
+		if s, ok := val.(string); ok {
+			return s
+		}
+		return fmt.Sprintf("%v", val)
+	}
+	return ""
 }

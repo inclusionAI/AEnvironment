@@ -34,6 +34,17 @@ class EnvStatus(str, Enum):
     TERMINATED = "Terminated"
 
 
+class ServiceStatus(str, Enum):
+    """Environment service status."""
+
+    PENDING = "Pending"
+    CREATING = "Creating"
+    RUNNING = "Running"
+    UPDATING = "Updating"
+    FAILED = "Failed"
+    TERMINATED = "Terminated"
+
+
 class Address(BaseModel):
     """Network address information."""
 
@@ -50,10 +61,10 @@ class Env(BaseModel):
     name: str
     description: str
     version: str
-    tags: List[str]
+    tags: Optional[List[str]] = None
     code_url: str
     status: int
-    artifacts: List[Dict[str, str]]
+    artifacts: Optional[List[Dict[str, str]]] = None
     build_config: Optional[Dict] = None
     test_config: Optional[Dict] = None
     deploy_config: Optional[Dict] = None
@@ -82,6 +93,7 @@ class EnvInstanceCreateRequest(BaseModel):
         Field(None, description="Environment variables"),
     )
     arguments: Optional[List[str]] = (Field(None, description="Startup arguments"),)
+    owner: Optional[str] = Field(None, description="Instance owner")
 
 
 class EnvInstanceListResponse(BaseModel):
@@ -90,13 +102,97 @@ class EnvInstanceListResponse(BaseModel):
     items: List[EnvInstance]
 
 
+class EnvService(BaseModel):
+    """Environment service model (Deployment + Service + PVC)."""
+
+    id: str = Field(description="Service id, corresponds to deployment name")
+    env: Optional[Env] = Field(None, description="Environment object")
+    status: str = Field(description="Service status")
+    created_at: str = Field(description="Creation time")
+    updated_at: str = Field(description="Update time")
+    replicas: int = Field(description="Number of replicas")
+    available_replicas: int = Field(description="Number of available replicas")
+    service_url: Optional[str] = Field(None, description="Service URL")
+    owner: Optional[str] = Field(None, description="Service owner")
+    environment_variables: Optional[Dict[str, str]] = Field(
+        None, description="Environment variables"
+    )
+    pvc_name: Optional[str] = Field(None, description="PVC name")
+
+
+class EnvServiceCreateRequest(BaseModel):
+    """Request to create an environment service."""
+
+    envName: str = Field(description="Environment name")
+    service_name: Optional[str] = Field(
+        None,
+        description="Custom service name. If not specified, will be auto-generated as '{envName}-svc-{random}'. Must follow Kubernetes DNS naming conventions.",
+    )
+    replicas: int = Field(default=1, description="Number of replicas")
+    environment_variables: Optional[Dict[str, str]] = Field(
+        None, description="Environment variables"
+    )
+    owner: Optional[str] = Field(None, description="Service owner")
+
+    # Storage configuration
+    pvc_name: Optional[str] = Field(None, description="PVC name (default: envName)")
+    mount_path: Optional[str] = Field(
+        None, description="Mount path (default: /home/admin/data)"
+    )
+    storage_size: Optional[str] = Field(
+        None,
+        description="Storage size (e.g., 10Gi). If specified, PVC will be created and replicas must be 1. storageClass is configured in helm deployment.",
+    )
+
+    # Service configuration
+    port: Optional[int] = Field(None, description="Service port (default: 8080)")
+
+    # Resource limits
+    cpu_request: Optional[str] = Field(None, description="CPU request (default: 1)")
+    cpu_limit: Optional[str] = Field(None, description="CPU limit (default: 2)")
+    memory_request: Optional[str] = Field(
+        None, description="Memory request (default: 2Gi)"
+    )
+    memory_limit: Optional[str] = Field(None, description="Memory limit (default: 4Gi)")
+    ephemeral_storage_request: Optional[str] = Field(
+        None, description="Ephemeral storage request (default: 5Gi)"
+    )
+    ephemeral_storage_limit: Optional[str] = Field(
+        None, description="Ephemeral storage limit (default: 10Gi)"
+    )
+
+
+class EnvServiceUpdateRequest(BaseModel):
+    """Request to update an environment service."""
+
+    replicas: Optional[int] = Field(None, description="Number of replicas")
+    image: Optional[str] = Field(None, description="Container image")
+    environment_variables: Optional[Dict[str, str]] = Field(
+        None, description="Environment variables"
+    )
+
+
+class EnvServiceListResponse(BaseModel):
+    """Response for listing environment services."""
+
+    items: List[EnvService]
+
+
 class APIResponse(BaseModel):
     """Standard API response format."""
 
-    error_code: int = Field(0, alias="errorCode")
-    error_message: str = Field("", alias="errorMessage")
     success: bool = True
+    code: Optional[int] = Field(None, description="Response code")
+    message: Optional[str] = Field(None, description="Response message")
     data: Optional[Any] = None
+
+    # Legacy fields for backwards compatibility
+    error_code: Optional[int] = Field(None, alias="errorCode")
+    error_message: Optional[str] = Field(None, alias="errorMessage")
+
+    def get_error_message(self) -> str:
+        """Get error message from either message or error_message field."""
+        return self.message or self.error_message or "Unknown error"
 
 
 class APIError(BaseModel):

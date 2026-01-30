@@ -2,8 +2,6 @@
   "name": "aenv",
   "version": "1.0.0",
   "tags": [
-    "swe",
-    "python",
     "linux"
   ],
   "status": "Ready",
@@ -14,11 +12,21 @@
     "dockerfile": "./Dockerfile"
   },
   "testConfig": {
-    "script": "pytest xxx"
+    "script": ""
   },
   "deployConfig": {
     "cpu": "1",
-    "memory": "2G",
-    "os": "linux"
+    "memory": "2Gi",
+    "os": "linux",
+    "ephemeralStorage": "5Gi",
+    "environmentVariables": {},
+    "service": {
+      "replicas": 1,
+      "port": 8081,
+      "enableStorage": false,
+      "storageName": "aenv",
+      "storageSize": "10Gi",
+      "mountPath": "/home/admin/data"
+    }
   }
 }

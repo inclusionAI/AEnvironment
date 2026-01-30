@@ -33,26 +33,18 @@ spec:
           securityContext:
             {{ toYaml .Values.securityContext | nindent 12 }}
           image: {{ .Values.image }}
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: {{.Values.imagePullPolicy }}
           env:
-            - name: ACI_ACCESS
-              valueFrom:
-                secretKeyRef:
-                  name: envhub-secret
-                  key: ACI_ACCESS
-            - name: ACI_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: envhub-secret
-                  key: ACI_SECRET
-            {{- if .Values.oss.endpoint }}
             - name: OSS_ENDPOINT
-              value: {{ .Values.oss.endpoint | quote }}
-            {{- end }}
-            {{- if .Values.oss.bucket }}
+              valueFrom:
+                secretKeyRef:
+                  name: oss-secret
+                  key: oss-endpoint
             - name: OSS_BUCKET
-              value: {{ .Values.oss.bucket | quote }}
-            {{- end }}
+              valueFrom:
+                secretKeyRef:
+                  name: oss-secret
+                  key: oss-bucket
             - name: OSS_KEY_PREFIX
               value: {{ .Values.oss.keyPrefix | quote }}
             - name: OSS_REGION
@@ -60,25 +52,31 @@ spec:
             - name: OSS_ACCESS_KEY_ID
               valueFrom:
                 secretKeyRef:
-                  name: envhub-secret
-                  key: OSS_ACCESS_KEY_ID
+                  name: oss-secret
+                  key: oss-ak
             - name: OSS_ACCESS_KEY_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: envhub-secret
-                  key: OSS_ACCESS_KEY_SECRET
+                  name: oss-secret
+                  key: oss-sk
 
           args:
             - --storage-backend
             - redis
             - --redis-addr
-            - redis.aenv.svc.cluster.local:6379
+            - {{ include "envhub.redisAddr" . }}
             - --redis-key-prefix
             - env
             - --port
             - {{ .Values.service.port | quote }}
             - --metrics-port
             - {{ .Values.service.metricsPort | quote }}
+            {{if .Values.deploy.templateId}}
+            - --template-id={{ .Values.deploy.templateId }}
+            {{end}}
+            {{if .Values.deploy.callbackURL}}
+            - --callback-url={{ .Values.deploy.callbackURL }}
+            {{end}}
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
@@ -104,7 +102,10 @@ spec:
       affinity:
         {{ toYaml . | nindent 8 }}
       {{ end }}
-      {{ with .Values.tolerations }}
+      {{ with .Values.global.tolerations }}
       tolerations:
         {{ toYaml . | nindent 8 }}
+      {{ end }}
+      {{ with .Values.global.dns }}
+      {{ toYaml . | nindent 6 }}
       {{ end }}

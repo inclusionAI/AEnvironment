@@ -21,13 +21,18 @@ helm.sh/chart: {{ include "api-service.chart" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
+{{- with .Values.global.labels }}
+{{ toYaml . }}
+{{- end }}
 {{- end }}
 
 {{/*
 Selector labels
 */}}
 {{- define "api-service.selectorLabels" -}}
-app.kubernetes.io/name: {{ .Values.name }}
+{{- if .Values.global.selectorLabels }}
+{{ tpl (toYaml .Values.global.selectorLabels) . }}
+{{- end }}
 {{- end }}
 
 {{- define "api-service.backendAddr" -}}
@@ -45,3 +50,17 @@ app.kubernetes.io/name: {{ .Values.name }}
         {{- printf "http://controller.%s.svc.cluster.local:8080" .Values.metadata.namespace -}}
     {{ end }}
 {{ end }}
+
+{{- define "api-service.scheduleType" -}}
+    {{ if .Values.scheduleType }}
+        {{- .Values.scheduleType -}}
+    {{ else }}
+        {{- printf "k8s" .Values.metadata.namespace -}}
+    {{ end }}
+{{ end }}
+
+{{- define "api-service.qps" -}}
+{{- if .Values.qps }}{{ printf "%v" .Values.qps }}{{ else }}{{ "10" }}{{ end }}
+{{- end }}
+
+

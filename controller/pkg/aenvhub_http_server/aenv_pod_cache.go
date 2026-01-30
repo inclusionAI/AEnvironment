@@ -22,9 +22,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog"
@@ -42,34 +40,59 @@ func NewAEnvPodCache(clientset kubernetes.Interface, namespace string) *AEnvPodC
 
 	klog.Infof("Pod cache initialization starts (namespace: %s)", namespace)
 
-	factory := informers.NewFilteredSharedInformerFactory(
-		clientset,
-		5*time.Minute,
+	// Create a specific pod lister/watcher instead of SharedInformerFactory
+	// to avoid creating informers for all resource types
+	klog.Infof("🎯 Using optimized ListWatcher (avoiding SharedInformerFactory for all resource types)")
+	listWatcher := cache.NewListWatchFromClient(
+		clientset.CoreV1().RESTClient(),
+		"pods",
 		namespace,
-		func(options *metav1.ListOptions) {
-			options.FieldSelector = fields.Everything().String()
-		},
+		fields.Everything(),
 	)
 
-	podInformer := factory.Core().V1().Pods().Informer()
+	// Create indexer and informer manually
+	indexer, informer := cache.NewIndexerInformer(
+		listWatcher,
+		&corev1.Pod{},
+		30*time.Minute, // Resync period
+		cache.ResourceEventHandlerFuncs{
+			AddFunc: func(obj interface{}) {
+				pod := obj.(*corev1.Pod)
+				klog.V(4).Infof("Pod added: %s/%s", pod.Namespace, pod.Name)
+			},
+			UpdateFunc: func(oldObj, newObj interface{}) {
+				pod := newObj.(*corev1.Pod)
+				klog.V(4).Infof("Pod updated: %s/%s", pod.Namespace, pod.Name)
+			},
+			DeleteFunc: func(obj interface{}) {
+				pod := obj.(*corev1.Pod)
+				klog.V(4).Infof("Pod deleted: %s/%s", pod.Namespace, pod.Name)
+			},
+		},
+		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
+	)
 
 	stopCh := make(chan struct{})
 
 	podCache := &AEnvPodCache{
-		cache:    podInformer.GetIndexer(),
-		informer: podInformer,
+		cache:    indexer,
+		informer: informer,
 		stopCh:   stopCh,
 	}
 
-	// Start cache synchronization
-	go podInformer.Run(stopCh)
+	// Start cache synchronization in background
+	go informer.Run(stopCh)
 
-	// Wait for cache synchronization to complete
-	if !cache.WaitForCacheSync(stopCh, podInformer.HasSynced) {
-		klog.Fatalf("failed to wait for cache sync!")
-	}
+	// Start async sync watcher
+	go func() {
+		klog.Infof("Waiting for pod cache sync (namespace: %s)...", namespace)
+		if !cache.WaitForCacheSync(stopCh, informer.HasSynced) {
+			klog.Errorf("failed to wait for pod cache sync in namespace %s", namespace)
+			return
+		}
+		klog.Infof("Pod cache sync completed (namespace: %s), number of pods: %d", namespace, len(podCache.cache.ListKeys()))
+	}()
 
-	klog.Infof("Pod cache initialization finished (namespace: %s), number of pods is %d", namespace, len(podCache.cache.ListKeys()))
 	return podCache
 }
 
@@ -134,8 +157,8 @@ func (c *AEnvPodCache) ListExpiredPods(namespace string) ([]*corev1.Pod, error) 
 		currentTime := time.Now()
 		if currentTime.Sub(createdAt.Time) > limited {
 			klog.Infof("Instance %s has expired (created: %s, ttl: %v), deleting...", pod.Name, createdAt, limited)
+			expired = append(expired, pod)
 		}
-		expired = append(expired, pod)
 	}
 	return expired, nil
 }

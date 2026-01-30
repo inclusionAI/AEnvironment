@@ -19,6 +19,12 @@
 
 ---
 
+## 📰 News
+
+- **v0.1.4** (Jan 2026) - AEnv CLI now supports **instance** and **service** management! Deploy and manage your agents and applications with simple commands. See [CLI Guide](./docs/guide/cli.md) for details.
+
+---
+
 ## About AEnvironment
 
 AEnvironment is a unified environment platform for the **Agentic RL** era, built on the core philosophy of **"Everything as Environment"**. By extending standardized MCP protocol, AEnvironment provides out-of-the-box infrastructure for environment providers, algorithm developers, and agent developers, allowing them to focus on agent capabilities rather than the tedious details of environment setup.

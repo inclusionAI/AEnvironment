@@ -21,13 +21,18 @@ helm.sh/chart: {{ include "controller.chart" . }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
+{{- with .Values.global.labels }}
+{{ toYaml . }}
+{{- end }}
 {{- end }}
 
 {{/*
 Selector labels
 */}}
 {{- define "controller.selectorLabels" -}}
-app.kubernetes.io/name: {{ .Values.name }}
+{{- if .Values.global.selectorLabels }}
+{{ tpl (toYaml .Values.global.selectorLabels) . }}
+{{- end }}
 {{- end }}
 
 {{- define "controller.storageAddr" -}}
@@ -71,5 +76,5 @@ Create the name of the service account to use
 Sandbox namespace
 */}}
 {{- define "controller.sandboxNamespace" -}}
-{{- .Values.sandboxNamespace | default "aenvsandbox" }}
+{{- .Values.sandboxNamespace | default "aenv-sandbox" }}
 {{- end }}

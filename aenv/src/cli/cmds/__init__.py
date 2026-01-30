@@ -21,9 +21,11 @@ from cli.cmds.build import build
 from cli.cmds.config import config
 from cli.cmds.get import get
 from cli.cmds.init import init
+from cli.cmds.instance import instance
 from cli.cmds.list import list_env as list
 from cli.cmds.push import push
 from cli.cmds.run import run
+from cli.cmds.service import service
 from cli.cmds.version import version
 
 # Optional: define all available commands
@@ -36,4 +38,6 @@ __all__ = [
     "version",
     "build",
     "config",
+    "instance",
+    "service",
 ]
