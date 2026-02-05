@@ -21,6 +21,7 @@
 
 ## 📰 News
 
+- **Deploy Skill** (Feb 2026) - 🎉 New **Claude Code Skill** for automated deployment! Deploy instances and services directly from Claude Code with support for three workflows: local build, existing image, and registered environments. [Get Started](#deploy-skill)
 - **v0.1.4** (Jan 2026) - AEnv CLI now supports **instance** and **service** management! Deploy and manage your agents and applications with simple commands. See [CLI Guide](./docs/guide/cli.md) for details.
 
 ---
@@ -130,6 +131,52 @@ AEnvironment comes with several built-in environments ready to use:
 ## Quick Start
 
 📖 For detailed setup instructions, see the [Quick Start Guide](./docs/getting_started/quickstart.md).
+
+### Deploy Skill
+
+The easiest way to deploy AEnvironment instances and services is using our Claude Code Skill. This skill provides automated deployment workflows with full support for instance and service management.
+
+#### Install Deploy Skill
+
+```bash
+# Install from GitHub releases
+curl -L https://github.com/inclusionAI/AEnvironment/releases/latest/download/aenvironment-deploy.skill -o aenvironment-deploy.skill
+claude skill install aenvironment-deploy.skill
+```
+
+#### Use Deploy Skill
+
+Once installed, you can deploy directly from Claude Code:
+
+**Deploy an existing environment:**
+
+```python
+# Simply ask Claude Code:
+# "Deploy game-2048@1.0.6 as an instance with 1 hour TTL"
+# "Deploy myapp@2.0.0 as a service with storage enabled"
+```
+
+**Supported workflows:**
+
+- **Workflow A**: Build Docker image locally and deploy
+- **Workflow B**: Register existing Docker image and deploy
+- **Workflow C**: Deploy already registered environments (simplest)
+
+**Deployment types:**
+
+- **Instance**: Temporary environment with IP access (for agents, testing)
+- **Service**: Persistent service with domain access and optional storage (for production apps)
+
+The skill automatically handles:
+
+- ✅ CLI configuration and validation
+- ✅ Environment registration
+- ✅ Instance/service creation
+- ✅ Environment variable injection
+- ✅ Resource management (list, update, delete)
+- ✅ Error handling and retry
+
+📖 See the [Deploy Skill Guide](./.claude/aenvironment-deploy/SKILL.md) for detailed documentation.
 
 ### Install SDK and init Environment
 
