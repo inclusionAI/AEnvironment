@@ -1,0 +1,100 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "redis-stateful.name" . }}-slave
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "redis-stateful.labels" . | nindent 4 }}
+    role: slave
+spec:
+  serviceName: {{ .Values.headlessService.name }}
+  replicas: {{ .Values.redis.slave.replicas }}
+  selector:
+    matchLabels:
+      {{- include "redis-stateful.selectorLabels" . | nindent 6 }}
+      role: slave
+  template:
+    metadata:
+      labels:
+        {{- include "redis-stateful.selectorLabels" . | nindent 8 }}
+        role: slave
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: redis-slave
+          image: {{ .Values.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
+          command: ["redis-server", "/etc/redis/redis.conf"]
+          ports:
+            - name: redis
+              containerPort: 6379
+              protocol: TCP
+          env:
+            - name: REDIS_PASSWORD
+              value: {{ .Values.redis.password | quote }}
+          livenessProbe:
+            tcpSocket:
+              port: redis
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: redis
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.redis.slave.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: redis-config
+              mountPath: /etc/redis/
+              readOnly: true
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - /bin/sh
+                  - -c
+                  - |
+                    sleep 10
+                    redis-cli -h {{ include "redis-stateful.masterHost" . }} -a $REDIS_PASSWORD SLAVEOF {{ include "redis-stateful.masterHost" . }} 6379
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: redis-config
+          configMap:
+            name: {{ include "redis-stateful.name" . }}-config
+            items:
+              - key: redis.conf
+                path: redis.conf
+  {{- if .Values.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: {{ .Values.persistence.accessModes }}
+        {{- if .Values.persistence.storageClassName }}
+        storageClassName: {{ .Values.persistence.storageClassName }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size }}
+  {{- else }}
+      volumes:
+        - name: data
+          emptyDir: {}
+  {{- end }}

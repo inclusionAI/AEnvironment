@@ -36,7 +36,7 @@ controller:
 
 # Redis component
 redis:
-  enabled: true
+  enabled: false
   # For persistence with ReadWriteOnce access mode, replicaCount must be 1.
   replicaCount: 1
   name: redis
@@ -75,6 +75,75 @@ redis:
     auto-aof-rewrite-min-size: "64mb"
     aof-load-truncated: "yes"
     aof-use-rdb-preamble: "yes"
+    oss:
+      endpoint: ""
+      bucket: ""
+      accessKey: ""
+      secretKey: ""
+
+# Redis StatefulSet component (master-slave replication)
+redis-stateful:
+  enabled: true
+  name: redis-stateful
+  metadata:
+    namespace: aenv
+  namespace:
+    create: false
+  image: redis:7.2.4
+  imagePullPolicy: IfNotPresent
+
+  # Redis configuration
+  redis:
+    password: ""
+
+    # Master configuration
+    master:
+      name: master
+      replicas: 1
+      resources:
+        limits:
+          cpu: "1"
+          memory: "2Gi"
+          ephemeral-storage: 10Gi
+        requests:
+          cpu: "1"
+          memory: "2Gi"
+          ephemeral-storage: 10Gi
+
+    # Slave configuration
+    slave:
+      name: slave
+      replicas: 2
+      resources:
+        limits:
+          cpu: "1"
+          memory: "2Gi"
+          ephemeral-storage: 10Gi
+        requests:
+          cpu: "1"
+          memory: "2Gi"
+          ephemeral-storage: 10Gi
+
+  # Service configuration
+  service:
+    type: ClusterIP
+    port: 6379
+
+  # Headless service for StatefulSet
+  headlessService:
+    name: redis-headless
+    port: 6379
+
+  # Persistence configuration
+  persistence:
+    enabled: true
+    storageClassName: ""
+    accessModes:
+      - ReadWriteOnce
+    size: 5Gi
+
+  # Backup configuration
+  backup:
     oss:
       endpoint: ""
       bucket: ""

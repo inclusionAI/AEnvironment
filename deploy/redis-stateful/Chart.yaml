@@ -1,0 +1,6 @@
+apiVersion: v2
+name: redis-stateful
+description: A Helm chart for Redis StatefulSet with master-slave replication
+type: application
+version: 0.1.0
+appVersion: "7.2.4"
