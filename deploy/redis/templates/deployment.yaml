@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "redis.fullname" . }}
-  namespace: {{ .Values.metadata.namespace }}
+  namespace: {{ .Values.global.namespace }}
   labels:
     {{- include "redis.labels" . | nindent 4 }}
 spec:
@@ -21,8 +21,8 @@ spec:
       {{- end }}
       containers:
         - name: {{ include "redis.name" . }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          image: {{ .Values.image }}
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
           ports:
             - name: redis
               containerPort: 6379
@@ -49,15 +49,18 @@ spec:
               mountPath: /etc/redis/
               readOnly: true
         - name: backup-agent
-          image: alpine:3.18
+          image: {{ .Values.backupImage }}
           command: ["/bin/sh", "-c"]
           args:
             - |
-              apk add --no-cache redis curl busybox-suid bash
               mkdir -p /data /data-bk /backup-scripts /var/log
+              chmod +x /backup-scripts/restore.sh
+              chmod +x /backup-scripts/backup.sh
               /backup-scripts/restore.sh
               echo "*/10 * * * * /backup-scripts/backup.sh" | crontab -
               crond -f -d 8
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
             - name: data
               mountPath: /data
@@ -65,23 +68,25 @@ spec:
               mountPath: /data-bk
             - name: backup-scripts
               mountPath: /backup-scripts
+          {{- if .Values.persistence.oss.endpoint }}
           env:
-            {{- if .Values.backup.oss.endpoint }}
+            {{- if .Values.persistence.oss.endpoint }}
             - name: OSS_ENDPOINT
-              value: {{ .Values.backup.oss.endpoint | quote }}
+              value: {{ .Values.persistence.oss.endpoint | quote }}
             {{- end }}
-            {{- if .Values.backup.oss.bucket }}
+            {{- if .Values.persistence.oss.bucket }}
             - name: OSS_BUCKET
-              value: {{ .Values.backup.oss.bucket | quote }}
+              value: {{ .Values.persistence.oss.bucket | quote }}
             {{- end }}
-            {{- if .Values.backup.oss.accessKey }}
+            {{- if .Values.persistence.oss.accessKey }}
             - name: OSS_ACCESS_KEY
-              value: {{ .Values.backup.oss.accessKey | quote }}
+              value: {{ .Values.persistence.oss.accessKey | quote }}
             {{- end }}
-            {{- if .Values.backup.oss.secretKey }}
+            {{- if .Values.persistence.oss.secretKey }}
             - name: OSS_SECRET_KEY
-              value: {{ .Values.backup.oss.secretKey | quote }}
+              value: {{ .Values.persistence.oss.secretKey | quote }}
             {{- end }}
+          {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

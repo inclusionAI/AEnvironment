@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ include "redis.fullname" . }}
-  namespace: {{ .Values.metadata.namespace }}
+  namespace: {{ .Values.global.namespace }}
 data:
   redis.conf: |
     port {{ default 6379 .Values.service.port }}
@@ -25,7 +25,7 @@ data:
     aof-use-rdb-preamble {{ get .Values.persistence "aof-use-rdb-preamble" | default "yes" }}
 
   backup.sh: |
-    #!/bin/bash
+    #!/bin/sh
     set -e
 
     # Redis备份脚本
@@ -41,48 +41,30 @@ data:
         echo "$(date '+%Y-%m-%d %H:%M:%S'): $1" | tee -a "$LOG_FILE"
     }
 
-    check_redis() {
-        redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" ping > /dev/null 2>&1
-    }
-
     create_backup() {
         local timestamp=$(date +%Y%m%d_%H%M%S)
         local backup_file="dump_${timestamp}.rdb"
 
         log "Starting backup process..."
 
-        if redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" bgsave > /dev/null 2>&1; then
-            log "BGSAVE triggered successfully"
+        if [ -f "$SHARED_DATA_DIR/dump.rdb" ]; then
+            cp "$SHARED_DATA_DIR/dump.rdb" "$BACKUP_DIR/$backup_file"
+            log "Backup completed: $backup_file"
 
-            sleep 10
+            find "$BACKUP_DIR" -name "dump_*.rdb" -mtime +7 -delete
 
-            if [ -f "$SHARED_DATA_DIR/dump.rdb" ]; then
-                cp "$SHARED_DATA_DIR/dump.rdb" "$BACKUP_DIR/$backup_file"
-                log "Backup completed: $backup_file"
-
-                find "$BACKUP_DIR" -name "dump_*.rdb" -mtime +7 -delete
-
-                if [ -n "$OSS_ENDPOINT" ] && [ -n "$OSS_BUCKET" ] && [ -n "$OSS_ACCESS_KEY" ] && [ -n "$OSS_SECRET_KEY" ]; then
-                    log "Uploading to OSS..."
-                fi
-            else
-                log "ERROR: dump.rdb not found"
+            if [ -n "$OSS_ENDPOINT" ] && [ -n "$OSS_BUCKET" ] && [ -n "$OSS_ACCESS_KEY" ] && [ -n "$OSS_SECRET_KEY" ]; then
+                log "Uploading to OSS..."
             fi
         else
-            log "ERROR: Failed to trigger BGSAVE"
+            log "ERROR: dump.rdb not found"
         fi
     }
 
     main() {
         log "Redis backup script started"
 
-        sleep 30
-
-        if check_redis; then
-            create_backup
-        else
-            log "WARNING: Redis is not running"
-        fi
+        create_backup
 
         log "Redis backup script completed"
     }
@@ -90,7 +72,7 @@ data:
     main
 
   restore.sh: |
-    #!/bin/bash
+    #!/bin/sh
     set -e
 
     # Redis还原脚本

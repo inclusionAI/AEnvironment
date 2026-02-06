@@ -45,6 +45,7 @@ redis:
   namespace:
     create: false
   image: redis:7.2.4
+  backupImage: alpine:3.18
   imagePullPolicy: IfNotPresent
   service:
     type: LoadBalancer
@@ -74,6 +75,12 @@ redis:
     auto-aof-rewrite-min-size: "64mb"
     aof-load-truncated: "yes"
     aof-use-rdb-preamble: "yes"
+    oss:
+      endpoint: ""
+      bucket: ""
+      accessKey: ""
+      secretKey: ""
+
 
 # EnvHub component
 envhub:

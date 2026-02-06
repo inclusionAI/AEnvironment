@@ -33,7 +33,7 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: {{ include "controller.serviceAccountName" . }}
-    namespace: {{ .Values.metadata.namespace }}
+    namespace: {{ .Values.global.namespace }}
 
 {{- if .Values.rbac.additionalNamespaces }}
 {{- range .Values.rbac.additionalNamespaces }}
@@ -53,7 +53,7 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: {{ include "controller.serviceAccountName" $ }}
-    namespace: {{ $.Values.metadata.namespace }}
+    namespace: {{ $.Values.global.namespace }}
 {{- end }}
 {{- end }}
 
@@ -63,7 +63,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ include "controller.fullname" . }}-role
-  namespace: {{ .Values.metadata.namespace }}
+  namespace: {{ .Values.global.namespace }}
   labels:
     {{- include "controller.labels" . | nindent 4 }}
 rules:
@@ -91,7 +91,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: {{ include "controller.fullname" . }}-rolebinding
-  namespace: {{ .Values.metadata.namespace }}
+  namespace: {{ .Values.global.namespace }}
   labels:
     {{- include "controller.labels" . | nindent 4 }}
 roleRef:
@@ -101,6 +101,6 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: {{ include "controller.serviceAccountName" . }}
-    namespace: {{ .Values.metadata.namespace }}
+    namespace: {{ .Values.global.namespace }}
 
 {{- end }}
