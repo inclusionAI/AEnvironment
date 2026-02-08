@@ -16,6 +16,7 @@
 """
 Test script for AEnvHubClient singleton implementation
 """
+
 import sys
 
 # Add the src directory to Python path

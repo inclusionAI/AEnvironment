@@ -15,6 +15,7 @@
 """
 Command module
 """
+
 # mycli/commands/__init__.py
 
 from cli.cmds.build import build

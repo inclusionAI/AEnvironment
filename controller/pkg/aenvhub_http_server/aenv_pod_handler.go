@@ -22,7 +22,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	"controller/pkg/constants"
 
@@ -174,49 +173,6 @@ response is:
   }
 }
 */
-
-type HttpResponseData struct {
-	ID     string `json:"id"`
-	Status string `json:"status"`
-	IP     string `json:"ip"`
-	TTL    string `json:"ttl"`
-	Owner  string `json:"owner"`
-}
-type HttpResponse struct {
-	Success      bool             `json:"success"`
-	Code         int              `json:"code"`
-	ResponseData HttpResponseData `json:"data"`
-}
-type HttpDeleteResponse struct {
-	Success      bool `json:"success"`
-	Code         int  `json:"code"`
-	ResponseData bool `json:"data"`
-}
-
-/*
-*
-
-	{
-	  "id": "leopard-linux-v1-7q8y9v0a1b2c",
-	  "createdAt": "2025-10-10 11:11:11",
-	  "status": "Running",
-	},
-*/
-type HttpListResponseData struct {
-	ID        string    `json:"id"`
-	Status    string    `json:"status"`
-	TTL       string    `json:"ttl"`
-	CreatedAt time.Time `json:"created_at"`
-	EnvName   string    `json:"envname"`
-	Version   string    `json:"version"`
-	IP        string    `json:"ip"`
-	Owner     string    `json:"owner"`
-}
-type HttpListResponse struct {
-	Success          bool                   `json:"success"`
-	Code             int                    `json:"code"`
-	ListResponseData []HttpListResponseData `json:"data"`
-}
 
 func (h *AEnvPodHandler) createPod(w http.ResponseWriter, r *http.Request) {
 	var aenvHubEnv model.AEnvHubEnv

@@ -30,6 +30,28 @@ image: docker.io/library/controller:latest
 # Example: ["/usr/local/bin/controller"]
 command: ["/usr/bin/controller"]
 
+# Docker Engine Configuration
+docker:
+  # Set to true to enable Docker engine mode
+  enabled: false
+  # Docker daemon host address
+  host: "unix:///var/run/docker.sock"
+  # TLS configuration for remote Docker daemon
+  tls:
+    verify: false
+    certPath: ""
+  # Network configuration
+  network:
+    mode: "bridge"
+    defaultNetwork: "aenv-network"
+  # Docker Compose support
+  compose:
+    enabled: true
+  # Default resource limits for containers
+  resources:
+    defaultCPU: "1.0C"
+    defaultMemory: "2Gi"
+
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""

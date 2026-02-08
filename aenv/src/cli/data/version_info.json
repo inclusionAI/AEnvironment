@@ -1,0 +1,8 @@
+{
+  "version": "0.1.4",
+  "build_date": "2026-02-07",
+  "git_commit": "",
+  "git_branch": "",
+  "python_version": ">=3.10",
+  "description": "AEnvironment CLI - Manage containerized AI agent environments"
+}

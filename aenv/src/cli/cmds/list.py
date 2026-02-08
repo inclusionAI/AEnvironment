@@ -15,6 +15,7 @@
 """
 list command - List all environments with pagination
 """
+
 import json
 
 import click

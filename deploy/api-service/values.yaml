@@ -20,6 +20,12 @@ namespace:
 
 image: docker.io/library/api-servivce:latest
 
+# Sandbox engine configuration
+# Supported values: "k8s", "docker", "standard", "faas"
+scheduleType: "k8s"
+# Controller service address
+scheduleAddr: "http://aenv-controller:8080"
+
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""

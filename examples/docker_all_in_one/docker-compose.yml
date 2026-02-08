@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  controller:
+    image: ${CONTROLLER_IMAGE:-aenv-controller:latest}
+    container_name: aenv-controller
+    hostname: controller
+    environment:
+      - ENGINE_TYPE=docker
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - CACHE_TTL_SECONDS=${CACHE_TTL_SECONDS:-1800}
+      - DEFAULT_NETWORK=aenv-network
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "9090:8080"
+    networks:
+      - aenv-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8081/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  api-service:
+    image: ${API_SERVICE_IMAGE:-aenv-api-service:latest}
+    container_name: aenv-api-service
+    hostname: api-service
+    environment:
+      - CONTROLLER_ENDPOINT=http://controller:9090
+      - ENVHUB_ENDPOINT=${ENVHUB_ENDPOINT:-http://envhub:8081}
+    command:
+      - "--schedule-addr=http://controller:8080"
+      - "--schedule-type=docker"
+    ports:
+      - "8080:8080"
+    networks:
+      - aenv-network
+    depends_on:
+      controller:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  aenv-network:
+    name: aenv-network
+    driver: bridge

@@ -17,6 +17,8 @@ limitations under the License.
 package controller
 
 import (
+	"fmt"
+
 	"api-service/models"
 	backendmodels "envhub/models"
 
@@ -72,11 +74,33 @@ func (ctrl *EnvInstanceController) CreateEnvInstance(c *gin.Context) {
 		backendmodels.JSONErrorWithMessage(c, 400, "Invalid EnvName format: "+err.Error())
 		return
 	}
-	backendEnv, err := ctrl.backendClient.GetEnvByVersion(name, version)
-	if err != nil {
-		backendmodels.JSONErrorWithMessage(c, 500, "Failed to find environment: "+err.Error())
-		return
+
+	// Try to get environment from backend
+	var backendEnv *backendmodels.Env
+	if ctrl.backendClient != nil {
+		backendEnv, err = ctrl.backendClient.GetEnvByVersion(name, version)
+		if err != nil {
+			// If backend is not available or env not found, create a default env for Docker mode
+			log.Infof("Backend not available or env not found, using default config for: %s@%s", name, version)
+			backendEnv = &backendmodels.Env{
+				Name:    name,
+				Version: version,
+				DeployConfig: map[string]interface{}{
+					"imageName": fmt.Sprintf("aenv/%s:%s", name, version),
+				},
+			}
+		}
+	} else {
+		// No backend client, create default env
+		backendEnv = &backendmodels.Env{
+			Name:    name,
+			Version: version,
+			DeployConfig: map[string]interface{}{
+				"imageName": fmt.Sprintf("aenv/%s:%s", name, version),
+			},
+		}
 	}
+
 	if backendEnv == nil {
 		backendmodels.JSONErrorWithMessage(c, 404, "Environment not found: "+req.EnvName)
 		return

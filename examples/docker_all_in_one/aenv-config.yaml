@@ -1,0 +1,35 @@
+# AEnvironment CLI Configuration for Docker Mode Examples
+# This config is optimized for local Docker Engine development
+
+# Build Configuration
+build:
+  # Docker socket location
+  build_args:
+    socket: unix:///var/run/docker.sock
+
+  # Default dockerfile name (relative to work directory)
+  dockerfile: Dockerfile
+
+  # Build platform
+  platform: linux/amd64
+
+# Registry Configuration
+registry:
+  # Default registry (use docker.io for Docker Hub)
+  host: docker.io
+
+  # Namespace (organization/username)
+  # Leave empty for local builds
+  namespace: aenv
+
+  # Authentication (optional, only needed for push)
+  username: ""
+  password: ""
+
+# Logging
+logging:
+  level: INFO
+
+# Output format
+output:
+  format: rich  # Use rich formatting for better CLI experience

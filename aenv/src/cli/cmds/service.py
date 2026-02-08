@@ -22,6 +22,7 @@ This command provides interface for managing long-running services:
 - service delete: Delete a service
 - service update: Update service (replicas, image, env vars)
 """
+
 import asyncio
 import json
 import os
@@ -346,7 +347,9 @@ def create(
             console.print(f"     - Mount Path: {final_mount_path}")
         else:
             console.print("     - Mount Path: /home/admin/data (default)")
-        console.print("   [yellow]⚠️  With storage enabled, replicas must be 1[/yellow]")
+        console.print(
+            "   [yellow]⚠️  With storage enabled, replicas must be 1[/yellow]"
+        )
     else:
         console.print(
             "[dim]   Storage: Disabled (use --enable-storage to enable storage)[/dim]"

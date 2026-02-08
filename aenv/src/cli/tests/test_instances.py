@@ -15,6 +15,7 @@
 """
 Test script for instances command
 """
+
 import json
 import os
 from unittest.mock import Mock, patch

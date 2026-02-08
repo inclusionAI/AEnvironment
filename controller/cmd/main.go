@@ -32,9 +32,11 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
 const (
@@ -58,42 +60,80 @@ func main() {
 	flag.IntVar(&serverPort, "server-port", 8080, "The value for server port.")
 	klog.InitFlags(nil)
 
-	// SetUpController() -> AddReadiness() -> Provide StartHttpServer() service after leader election.
-	SetUpController()
+	// Check engine type to determine initialization path
+	engineType := os.Getenv("ENGINE_TYPE")
+	if engineType == "" {
+		engineType = "k8s" // Default to Kubernetes
+	}
+	klog.Infof("Engine type: %s", engineType)
+
+	if engineType == "k8s" {
+		// Kubernetes mode: Initialize controller manager with leader election
+		// SetUpController() -> AddReadiness() -> Provide StartHttpServer() service after leader election
+		klog.Infof("Initializing Kubernetes controller manager...")
+		SetUpController()
+	} else {
+		// Docker/Other modes: Directly start HTTP server without Kubernetes dependencies
+		klog.Infof("Skipping Kubernetes controller setup for %s mode", engineType)
+		StartHttpServer()
+	}
 }
 
 func StartHttpServer() {
 
 	klog.Infof("starting AENV http server...")
 
-	// Create a shared clientset from manager's config
-	// All handlers will share the same clientset and rate limiter
-	klog.Infof("🔗 Creating shared Kubernetes clientset for all handlers...")
-	sharedClientset, err := kubernetes.NewForConfig(controllerManager.GetConfig())
-	if err != nil {
-		klog.Fatalf("failed to create shared Kubernetes clientset, err is %v", err)
+	// Check engine type from environment variable
+	engineType := os.Getenv("ENGINE_TYPE")
+	if engineType == "" {
+		engineType = "k8s" // Default to Kubernetes
 	}
-	klog.Infof("✅ Shared clientset created with QPS=%.0f Burst=%d (shared rate limiter active)", controllerManager.GetConfig().QPS, controllerManager.GetConfig().Burst)
-
-	// AENV Pod Manager - use shared clientset
-	aenvPodManager, err := aenvhubserver.NewAEnvPodHandlerWithClientset(sharedClientset)
-	if err != nil {
-		klog.Fatalf("failed to create AENV Pod manager, err is %v", err)
-	}
-
-	// AENV Service Manager - use shared clientset
-	aenvServiceManager, err := aenvhubserver.NewAEnvServiceHandlerWithClientset(sharedClientset)
-	if err != nil {
-		klog.Fatalf("failed to create AENV Service manager, err is %v", err)
-	}
+	klog.Infof("Engine type: %s", engineType)
 
 	// Set up routes
 	mux := http.NewServeMux()
 
-	mux.Handle("/pods", aenvPodManager)
-	mux.Handle("/pods/", aenvPodManager)
-	mux.Handle("/services", aenvServiceManager)
-	mux.Handle("/services/", aenvServiceManager)
+	if engineType == "docker" {
+		// Docker Engine mode
+		klog.Infof("Initializing Docker engine handler...")
+		dockerHandler, err := aenvhubserver.NewAEnvDockerHandler()
+		if err != nil {
+			klog.Fatalf("failed to create Docker handler, err is %v", err)
+		}
+		mux.Handle("/containers", dockerHandler)
+		mux.Handle("/containers/", dockerHandler)
+		klog.Infof("Docker engine handler registered at /containers")
+	} else {
+		// Kubernetes mode (default)
+		klog.Infof("Initializing Kubernetes engine handlers...")
+
+		// Create a shared clientset from manager's config
+		// All handlers will share the same clientset and rate limiter
+		klog.Infof("🔗 Creating shared Kubernetes clientset for all handlers...")
+		sharedClientset, err := kubernetes.NewForConfig(controllerManager.GetConfig())
+		if err != nil {
+			klog.Fatalf("failed to create shared Kubernetes clientset, err is %v", err)
+		}
+		klog.Infof("✅ Shared clientset created with QPS=%.0f Burst=%d (shared rate limiter active)", controllerManager.GetConfig().QPS, controllerManager.GetConfig().Burst)
+
+		// AENV Pod Manager - use shared clientset
+		aenvPodManager, err := aenvhubserver.NewAEnvPodHandlerWithClientset(sharedClientset)
+		if err != nil {
+			klog.Fatalf("failed to create AENV Pod manager, err is %v", err)
+		}
+
+		// AENV Service Manager - use shared clientset
+		aenvServiceManager, err := aenvhubserver.NewAEnvServiceHandlerWithClientset(sharedClientset)
+		if err != nil {
+			klog.Fatalf("failed to create AENV Service manager, err is %v", err)
+		}
+
+		mux.Handle("/pods", aenvPodManager)
+		mux.Handle("/pods/", aenvPodManager)
+		mux.Handle("/services", aenvServiceManager)
+		mux.Handle("/services/", aenvServiceManager)
+		klog.Infof("Kubernetes handlers registered at /pods and /services")
+	}
 
 	// Start server
 	poolserver := &http.Server{
@@ -103,6 +143,23 @@ func StartHttpServer() {
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
+
+	// Start readiness server on port 8081
+	go func() {
+		readyzMux := http.NewServeMux()
+		readyzMux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		})
+		readyzSrv := &http.Server{
+			Addr:    ":8081",
+			Handler: readyzMux,
+		}
+		klog.Infof("Readiness server started on 8081")
+		if err := readyzSrv.ListenAndServe(); err != nil {
+			klog.Errorf("Readiness server error: %v", err)
+		}
+	}()
 
 	klog.Infof("AEnv server starts, listening on port: %d", serverPort)
 	if err := poolserver.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -176,7 +233,12 @@ func SetUpController() {
 	// Create a lazy REST mapper to avoid expensive discovery on startup
 	// Critical for clusters with 300+ CRDs to prevent "too many requests" errors
 	klog.Infof("🚀 Creating lazy REST mapper to avoid expensive CRD discovery...")
-	lazyMapper, err := apiutil.NewDynamicRESTMapper(cfg, apiutil.WithLazyDiscovery)
+	httpClient, err := rest.HTTPClientFor(cfg)
+	if err != nil {
+		klog.Errorf("unable to create HTTP client, err is %v", err)
+		os.Exit(1)
+	}
+	lazyMapper, err := apiutil.NewDynamicRESTMapper(cfg, httpClient)
 	if err != nil {
 		klog.Errorf("unable to create lazy REST mapper, err is %v", err)
 		os.Exit(1)
@@ -186,7 +248,9 @@ func SetUpController() {
 	// Create a new Cmd to provide shared dependencies and start components
 	klog.Infof("setting up manager")
 	controllerManager, err = manager.New(cfg, manager.Options{
-		MetricsBindAddress:      metricsAddr,
+		Metrics: metricsserver.Options{
+			BindAddress: metricsAddr,
+		},
 		LeaderElection:          enableLeaderElection,
 		LeaderElectionID:        fmt.Sprintf("%s-leader", repoName),
 		LeaderElectionNamespace: defaultNamespace,
@@ -194,11 +258,15 @@ func SetUpController() {
 		RenewDeadline:           &leaseRenewTime,
 		RetryPeriod:             &leaderRetryPeriodTIme,
 		// Use lazy mapper to avoid upfront discovery of all 300+ CRDs
-		MapperProvider: func(c *rest.Config) (meta.RESTMapper, error) {
+		MapperProvider: func(c *rest.Config, httpClient *http.Client) (meta.RESTMapper, error) {
 			return lazyMapper, nil
 		},
 		// Limit manager to watch only specific namespace
-		Namespace: defaultNamespace,
+		Cache: cache.Options{
+			DefaultNamespaces: map[string]cache.Config{
+				defaultNamespace: {},
+			},
+		},
 	})
 
 	if err != nil {
