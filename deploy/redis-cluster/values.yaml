@@ -1,0 +1,50 @@
+
+global:
+  domain: cluster.local
+
+# Default values for redis-cluster.
+name: redis-cluster
+# Namespace configuration
+namespace:
+  # Set to true to automatically create the namespace
+  create: false
+
+image: redis:7.2.4
+imagePullPolicy: IfNotPresent
+
+# Redis configuration
+redis:
+  # Redis Cluster 配置
+  cluster:
+    enabled: true
+    # 集群节点数量，必须是3的倍数（3主3从，6主6从等）
+    nodes: 6
+    # 每个主节点的副本数量
+    replicas: 1
+    # Redis密码
+    password: "redis123"
+    port: 6379
+    # 集群端口（节点通信端口）
+    clusterBusPort: 16379
+
+  # 单个节点资源配置
+  node:
+    name: node
+    resources:
+      limits:
+        cpu: "1"
+        memory: "1Gi"
+        ephemeral-storage: 5Gi
+
+      requests:
+        cpu: "100m"
+        memory: "256Mi"
+        ephemeral-storage: 5Gi
+
+# 持久化配置
+persistence:
+  enabled: true
+  storageClassName: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 5Gi

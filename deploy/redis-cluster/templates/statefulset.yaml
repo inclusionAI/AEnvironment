@@ -1,64 +1,75 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ include "redis-stateful.name" . }}-slave
+  name: {{ include "redis-cluster.name" . }}
   namespace: {{ .Values.global.namespace }}
   labels:
-    {{- include "redis-stateful.labels" . | nindent 4 }}
-    role: slave
+    {{- include "redis-cluster.labels" . | nindent 4 }}
+    app.kubernetes.io/component: cluster
 spec:
-  serviceName: {{ .Values.headlessService.name }}
-  replicas: {{ .Values.redis.slave.replicas }}
+  serviceName: {{ .Values.name }}
+  replicas: {{ .Values.redis.cluster.nodes }}
   selector:
     matchLabels:
-      {{- include "redis-stateful.selectorLabels" . | nindent 6 }}
-      role: slave
+      {{- include "redis-cluster.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: cluster
   template:
     metadata:
       labels:
-        {{- include "redis-stateful.labels" . | nindent 8 }}
-        role: slave
+        {{- include "redis-cluster.labels" . | nindent 8 }}
+        app.kubernetes.io/component: cluster
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       containers:
-        - name: redis-slave
+        - name: redis-cluster
           image: {{ .Values.image }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           command: ["redis-server", "/etc/redis/redis.conf"]
           ports:
             - name: redis
-              containerPort: 6379
+              containerPort: {{ .Values.redis.cluster.port }}
               protocol: TCP
+            - name: cluster-bus
+              containerPort: {{ .Values.redis.cluster.clusterBusPort }}
+              protocol: TCP
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
           livenessProbe:
-            tcpSocket:
-              port: redis
+            exec:
+              command:
+                - sh
+                - -c
+                - "redis-cli -h 127.0.0.1 -a $REDIS_PASSWORD ping"
             initialDelaySeconds: 30
             periodSeconds: 10
+            timeoutSeconds: 5
           readinessProbe:
-            tcpSocket:
-              port: redis
-            initialDelaySeconds: 5
+            exec:
+              command:
+                - sh
+                - -c
+                - "redis-cli -h 127.0.0.1 -a $REDIS_PASSWORD ping"
+            initialDelaySeconds: 10
             periodSeconds: 5
+            timeoutSeconds: 3
           resources:
-            {{- toYaml .Values.redis.slave.resources | nindent 12 }}
+            {{- toYaml .Values.redis.node.resources | nindent 12 }}
           volumeMounts:
             - name: data
               mountPath: /data
             - name: redis-config
               mountPath: /etc/redis/
               readOnly: true
-          lifecycle:
-            postStart:
-              exec:
-                command:
-                  - /bin/sh
-                  - -c
-                  - |
-                    sleep 10
-                    redis-cli -h {{ include "redis-stateful.masterHost" . }} SLAVEOF {{ include "redis-stateful.masterHost" . }} 6379
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -74,7 +85,7 @@ spec:
       volumes:
         - name: redis-config
           configMap:
-            name: {{ include "redis-stateful.name" . }}-config
+            name: {{ include "redis-cluster.name" . }}
             items:
               - key: redis.conf
                 path: redis.conf

@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.name }}
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "redis-cluster.labels" . | nindent 4 }}
+spec:
+  ports:
+    - port: {{ .Values.redis.cluster.port }}
+      targetPort: redis
+      protocol: TCP
+      name: redis
+    - port: {{ .Values.redis.cluster.clusterBusPort }}
+      targetPort: cluster-bus
+      protocol: TCP
+      name: cluster-bus
+  clusterIP: None
+  selector:
+    {{- include "redis-cluster.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: cluster

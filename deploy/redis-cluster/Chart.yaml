@@ -1,5 +1,5 @@
 apiVersion: v2
-name: redis-stateful
+name: redis-cluster
 description: A Helm chart for Redis StatefulSet with master-slave replication
 type: application
 version: 0.1.0

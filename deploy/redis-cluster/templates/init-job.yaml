@@ -1,0 +1,66 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "redis-cluster.name" . }}
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "redis-cluster.labels" . | nindent 4 }}
+    app.kubernetes.io/component: {{ include "redis-cluster.name" . }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  template:
+    metadata:
+      labels:
+        {{- include "redis-cluster.labels" . | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: {{ include "redis-cluster.name" . }}
+          image: {{ .Values.image }}
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+
+              REDIS_PASSWORD="{{ .Values.redis.cluster.password }}"
+              NODES={{ .Values.redis.cluster.nodes }}
+              SERVICE_NAME={{ .Values.name }}
+              NAMESPACE={{ .Values.global.namespace }}
+
+              echo "Waiting for all Redis nodes to be ready..."
+
+              # 等待所有节点启动
+              for i in $(seq 0 $((NODES-1))); do
+                while true; do
+                  if redis-cli -h ${SERVICE_NAME}-${i}.${SERVICE_NAME}.${NAMESPACE}.svc.{{ .Values.global.domain }} -a $REDIS_PASSWORD ping > /dev/null 2>&1; then
+                    echo "Node ${SERVICE_NAME}-${i} is ready"
+                    break
+                  fi
+                  echo "Waiting for node ${SERVICE_NAME}-${i}..."
+                  sleep 2
+                done
+              done
+
+              echo "All nodes are ready, creating cluster..."
+
+              # 构建节点列表
+              NODE_LIST=""
+              for i in $(seq 0 $((NODES-1))); do
+                NODE_LIST="${NODE_LIST} ${SERVICE_NAME}-${i}.${SERVICE_NAME}.${NAMESPACE}.svc.{{ .Values.global.domain }}:6379"
+              done
+
+              # 创建集群
+              echo "Creating Redis cluster with nodes: $NODE_LIST"
+              redis-cli --cluster create $NODE_LIST \
+                --cluster-replicas {{ .Values.redis.cluster.replicas }} \
+                --cluster-yes \
+                -a $REDIS_PASSWORD
+
+              echo "Redis cluster created successfully!"
+
+          resources:
+            {{- toYaml .Values.redis.node.resources | nindent 12 }}
