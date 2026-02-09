@@ -94,7 +94,6 @@ redis-stateful:
 
   # Redis configuration
   redis:
-    password: ""
 
     # Master configuration
     master:
@@ -131,7 +130,7 @@ redis-stateful:
 
   # Headless service for StatefulSet
   headlessService:
-    name: redis-headless
+    name: redis
     port: 6379
 
   # Persistence configuration

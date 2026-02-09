@@ -32,6 +32,10 @@ dependencies:
     repository: "file://./api-service"
     condition: api-service-k8s.enabled
     alias: api-service-k8s
+  - name: redis-stateful
+    version: "0.1.0"
+    repository: "file://./redis-stateful"
+    condition: redis-stateful.enabled
 
 # Keywords for Helm repository search
 keywords:

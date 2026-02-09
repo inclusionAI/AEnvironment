@@ -16,7 +16,7 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "redis-stateful.selectorLabels" . | nindent 8 }}
+        {{- include "redis-stateful.labels" . | nindent 8 }}
         role: slave
     spec:
       {{- with .Values.imagePullSecrets }}
@@ -32,9 +32,6 @@ spec:
             - name: redis
               containerPort: 6379
               protocol: TCP
-          env:
-            - name: REDIS_PASSWORD
-              value: {{ .Values.redis.password | quote }}
           livenessProbe:
             tcpSocket:
               port: redis
@@ -61,7 +58,7 @@ spec:
                   - -c
                   - |
                     sleep 10
-                    redis-cli -h {{ include "redis-stateful.masterHost" . }} -a $REDIS_PASSWORD SLAVEOF {{ include "redis-stateful.masterHost" . }} 6379
+                    redis-cli -h {{ include "redis-stateful.masterHost" . }} SLAVEOF {{ include "redis-stateful.masterHost" . }} 6379
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

@@ -24,9 +24,5 @@ data:
     appendfilename "appendonly.aof"
     appendfsync everysec
 
-    # 安全配置
-    requirepass {{ .Values.redis.password }}
-    masterauth {{ .Values.redis.password }}
-
     # 主从配置 - 从节点会动态配置
     # replicaof 将在运行时通过lifecycle hook设置
