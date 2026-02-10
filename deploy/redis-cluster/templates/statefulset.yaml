@@ -23,6 +23,37 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      initContainers:
+        # This Init Container is responsible for generating the final redis.conf
+        - name: init-redis-config
+          image: {{ .Values.initImage }}
+          command: ['/bin/sh', '-c']
+          args:
+            - |
+              set -e
+              echo "Generating redis.conf..."
+
+              # Generate the final configuration from template and environment variables
+              # Use sed to replace __POD_IP__ in the template with the actual Pod IP
+              sed "s/__POD_IP__/${POD_IP}/g" /config-template/redis.conf > /etc/redis/redis.conf
+
+              echo "Generated redis.conf:"
+              cat /etc/redis/redis.conf
+
+          # === Key part: Inject Pod IP ===
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+
+          volumeMounts:
+            # Mount template files
+            - name: config-template
+              mountPath: /config-template
+            # Mount directory for final configuration files
+            - name: config
+              mountPath: /etc/redis
       containers:
         - name: redis-cluster
           image: {{ .Values.image }}
@@ -67,9 +98,8 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
-            - name: redis-config
-              mountPath: /etc/redis/
-              readOnly: true
+            - name: config
+              mountPath: /etc/redis
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -83,12 +113,16 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       volumes:
-        - name: redis-config
+        # ConfigMap template
+        - name: config-template
           configMap:
             name: {{ include "redis-cluster.name" . }}
             items:
               - key: redis.conf
                 path: redis.conf
+        # Shared volume for storing generated configurations
+        - name: config
+          emptyDir: {}
   {{- if .Values.persistence.enabled }}
   volumeClaimTemplates:
     - metadata:

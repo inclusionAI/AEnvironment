@@ -36,9 +36,9 @@ Selector labels
 {{- end }}
 
 {{- define "envhub.redisAddr" -}}
-    {{ if .Values.redisAddr }}
-        {{- .Values.redisAddr -}}
+    {{ if .Values.global.redisClusterEnabled }}
+        {{- printf "redis-cluster.%s.svc.%s:6379" .Values.global.namespace .Values.global.domain -}}
     {{ else }}
-        {{- printf "redis.%s.svc.cluster.local:6379" .Values.metadata.namespace -}}
+        {{- printf "redis.%s.svc.%s:6379" .Values.global.namespace .Values.global.domain -}}
     {{ end }}
 {{ end }}

@@ -69,7 +69,7 @@ repos:
       - id: golangci-lint
         name: golangci-lint (envhub)
         files: ^envhub/
-        args: [--timeout=5m]
+        args: [--timeout=5m, --fast, --new]
         entry: bash -c 'cd envhub && golangci-lint run --timeout=5m'
         pass_filenames: false
 

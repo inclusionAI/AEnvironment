@@ -62,5 +62,3 @@ Selector labels
 {{- define "api-service.qps" -}}
 {{- if .Values.qps }}{{ printf "%v" .Values.qps }}{{ else }}{{ "10" }}{{ end }}
 {{- end }}
-
-

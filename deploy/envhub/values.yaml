@@ -24,6 +24,9 @@ image: docker.io/library/envhub:latest
 imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
+# Redis password for authentication
+# Note: This password is used for both redis and redis-cluster
+redisPassword: ""
 
 
 podAnnotations: {}

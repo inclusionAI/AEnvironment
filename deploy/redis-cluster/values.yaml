@@ -3,7 +3,7 @@ global:
   domain: cluster.local
 
 # Default values for redis-cluster.
-name: redis-cluster
+name: redis
 # Namespace configuration
 namespace:
   # Set to true to automatically create the namespace
@@ -11,6 +11,7 @@ namespace:
 
 image: redis:7.2.4
 imagePullPolicy: IfNotPresent
+initImage: busybox:1.36
 
 # Redis configuration
 redis:

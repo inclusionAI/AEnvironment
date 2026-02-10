@@ -22,9 +22,10 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
-	redis "github.com/go-redis/redis/v8"
+	redis "github.com/redis/go-redis/v9"
 
 	"envhub/models"
 )
@@ -34,16 +35,17 @@ var ErrEnvNotFound = errors.New("env not found")
 
 // RedisEnvStorageOptions Redis storage configuration
 type RedisEnvStorageOptions struct {
-	Addr      string
-	Username  string
-	Password  string
-	DB        int
-	KeyPrefix string
+	Addr       string
+	Username   string
+	Password   string
+	DB         int
+	KeyPrefix  string
+	UseCluster bool
 }
 
 // RedisEnvStorage implements EnvStorage interface using Redis
 type RedisEnvStorage struct {
-	client    *redis.Client
+	client    redis.Cmdable
 	keyPrefix string
 	indexKey  string
 }
@@ -58,12 +60,27 @@ func NewRedisEnvStorage(opts RedisEnvStorageOptions) (*RedisEnvStorage, error) {
 	if opts.KeyPrefix == "" {
 		opts.KeyPrefix = "env"
 	}
-	client := redis.NewClient(&redis.Options{
-		Addr:     opts.Addr,
-		Username: opts.Username,
-		Password: opts.Password,
-		DB:       opts.DB,
-	})
+	var client redis.Cmdable
+	if opts.UseCluster {
+		// Split the address string by comma to get individual node addresses
+		addrs := strings.Split(opts.Addr, ",")
+		// Trim whitespace from each address
+		for i, addr := range addrs {
+			addrs[i] = strings.TrimSpace(addr)
+		}
+		client = redis.NewClusterClient(&redis.ClusterOptions{
+			Addrs:    addrs,
+			Username: opts.Username,
+			Password: opts.Password,
+		})
+	} else {
+		client = redis.NewClient(&redis.Options{
+			Addr:     opts.Addr,
+			Username: opts.Username,
+			Password: opts.Password,
+			DB:       opts.DB,
+		})
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -131,43 +148,41 @@ func (s *RedisEnvStorage) Create(ctx context.Context, key string, env *models.En
 // Update updates Env object
 func (s *RedisEnvStorage) Update(ctx context.Context, key string, env *models.Env, resourceVersion int64, labels map[string]string) error {
 	redisKey := s.dataKey(key)
-	return s.client.Watch(ctx, func(tx *redis.Tx) error {
-		payload, err := tx.Get(ctx, redisKey).Bytes()
-		if errors.Is(err, redis.Nil) {
-			return fmt.Errorf("%w: %s", ErrEnvNotFound, key)
-		}
-		if err != nil {
-			return fmt.Errorf("failed to read env %s: %w", key, err)
-		}
+	payload, err := s.client.Get(ctx, redisKey).Bytes()
+	if errors.Is(err, redis.Nil) {
+		return fmt.Errorf("%w: %s", ErrEnvNotFound, key)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to read env %s: %w", key, err)
+	}
 
-		var record redisEnvRecord
-		if err := json.Unmarshal(payload, &record); err != nil {
-			return fmt.Errorf("failed to unmarshal env %s: %w", key, err)
-		}
+	var record redisEnvRecord
+	if err := json.Unmarshal(payload, &record); err != nil {
+		return fmt.Errorf("failed to unmarshal env %s: %w", key, err)
+	}
 
-		if record.ResourceVersion != resourceVersion {
-			return fmt.Errorf("resource version mismatch for %s: expect %d got %d", key, record.ResourceVersion, resourceVersion)
-		}
+	if record.ResourceVersion != resourceVersion {
+		return fmt.Errorf("resource version mismatch for %s: expect %d got %d", key, record.ResourceVersion, resourceVersion)
+	}
 
-		record.Env = env
-		if labels != nil {
-			record.Labels = copyLabels(labels)
-		}
-		record.ResourceVersion++
-		record.LastUpdatedEpoch = time.Now().Unix()
+	record.Env = env
+	if labels != nil {
+		record.Labels = copyLabels(labels)
+	}
+	record.ResourceVersion++
+	record.LastUpdatedEpoch = time.Now().Unix()
 
-		updatedPayload, err := json.Marshal(record)
-		if err != nil {
-			return fmt.Errorf("failed to marshal updated env %s: %w", key, err)
-		}
+	updatedPayload, err := json.Marshal(record)
+	if err != nil {
+		return fmt.Errorf("failed to marshal updated env %s: %w", key, err)
+	}
 
-		_, err = tx.TxPipelined(ctx, func(p redis.Pipeliner) error {
-			p.Set(ctx, redisKey, updatedPayload, 0)
-			p.SAdd(ctx, s.indexKey, key)
-			return nil
-		})
-		return err
-	}, redisKey)
+	_, err = s.client.TxPipelined(ctx, func(p redis.Pipeliner) error {
+		p.Set(ctx, redisKey, updatedPayload, 0)
+		p.SAdd(ctx, s.indexKey, key)
+		return nil
+	})
+	return err
 }
 
 // Delete deletes Env object

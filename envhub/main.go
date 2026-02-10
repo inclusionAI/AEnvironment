@@ -36,12 +36,13 @@ var (
 	serverPort  int
 	metricsPort int
 
-	storageBackend string
-	redisAddr      string
-	redisUsername  string
-	redisPassword  string
-	redisDB        int
-	redisKeyPrefix string
+	storageBackend  string
+	redisAddr       string
+	redisUsername   string
+	redisPassword   string
+	redisDB         int
+	redisKeyPrefix  string
+	redisUseCluster bool
 
 	templateId  string
 	callbackURL string
@@ -56,6 +57,7 @@ func init() {
 	pflag.StringVar(&redisPassword, "redis-password", "", "Redis password")
 	pflag.IntVar(&redisDB, "redis-db", 0, "Redis DB index")
 	pflag.StringVar(&redisKeyPrefix, "redis-key-prefix", "env", "Redis key prefix for env data")
+	pflag.BoolVar(&redisUseCluster, "redis-use-cluster", false, "use cluster mode")
 	pflag.StringVar(&templateId, "template-id", "", "Template ID for pipeline or workflow (optional)")
 	pflag.StringVar(&callbackURL, "callback-url", "", "Callback URL to notify after operation completion (optional)")
 }
@@ -168,11 +170,12 @@ func newEnvStorage(backend string) (service.EnvStorage, error) {
 	switch strings.ToLower(backend) {
 	case "", "redis":
 		return service.NewRedisEnvStorage(service.RedisEnvStorageOptions{
-			Addr:      redisAddr,
-			Username:  redisUsername,
-			Password:  redisPassword,
-			DB:        redisDB,
-			KeyPrefix: redisKeyPrefix,
+			Addr:       redisAddr,
+			Username:   redisUsername,
+			Password:   redisPassword,
+			DB:         redisDB,
+			KeyPrefix:  redisKeyPrefix,
+			UseCluster: redisUseCluster,
 		})
 	default:
 		return nil, fmt.Errorf("unsupported storage backend %s, only redis is supported", backend)

@@ -67,6 +67,13 @@ spec:
             - {{ include "envhub.redisAddr" . }}
             - --redis-key-prefix
             - env
+            {{if .Values.redisPassword}}
+            - --redis-password={{ .Values.redisPassword }}
+            {{end}}
+            {{ if .Values.global.redisClusterEnabled }}
+            - --redis-use-cluster
+            - {{ .Values.global.redisClusterEnabled | quote }}
+            {{ end }}
             - --port
             - {{ .Values.service.port | quote }}
             - --metrics-port

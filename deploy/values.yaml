@@ -9,6 +9,7 @@ global:
     app.kubernetes.io/name: "{{ .Values.name }}"
   sandboxNamespace: aenv-sandbox
   domain: cluster.local
+  redisClusterEnabled: false
 
 # Controller component
 controller:
@@ -36,6 +37,9 @@ controller:
       ephemeral-storage: 10Gi
 
 # Redis component
+# Note: This redis component is controlled by global.redisClusterEnabled
+# When global.redisClusterEnabled=false, this component will be enabled
+# When global.redisClusterEnabled=true, this component will be disabled
 redis:
   enabled: false
   # For persistence with ReadWriteOnce access mode, replicaCount must be 1.
@@ -82,6 +86,10 @@ redis:
       accessKey: ""
       secretKey: ""
 
+# Redis Cluster component
+# Note: This redis-cluster component is controlled by global.redisClusterEnabled
+# When global.redisClusterEnabled=true, this component will be enabled
+# When global.redisClusterEnabled=false, this component will be disabled
 redis-cluster:
   enabled: true
   # Default values for redis-cluster.
@@ -92,6 +100,7 @@ redis-cluster:
     create: false
   image: redis:7.2.4
   imagePullPolicy: IfNotPresent
+  initImage: busybox:1.36
   # Redis configuration
   redis:
     # Redis Cluster 配置
@@ -138,6 +147,7 @@ envhub:
     create: false
   image: aenvironment/envhub:0.1.0
   imagePullPolicy: IfNotPresent
+  redisPassword: "redis123"
   service:
     type: LoadBalancer
     port: 8083
