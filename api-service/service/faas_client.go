@@ -361,44 +361,13 @@ func (c *FaaSClient) ListInstances(labels map[string]string) (*faas_model.Instan
 	uri := "/hapis/faas.hcs.io/v1/instances"
 
 	req := &faas_model.InstanceListRequest{Labels: labels}
-	resp := &faas_model.APIResponse{
-		Data: &faas_model.InstanceListResp{},
-	}
+	resp := &faas_model.APIInstanceListResponse{}
 	err := c.client.Post(uri).Body(*req).Do().Into(resp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list instances: %w", err)
 	}
 
-	if !resp.Success {
-		return nil, fmt.Errorf("failed to list instances: %s", resp.ErrorMessage)
-	}
-
-	data, ok := resp.Data.(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("invalid response type for InstanceListResp")
-	}
-
-	// Convert map to InstanceListResp struct
-	instances := []*faas_model.Instance{}
-	if insts, ok := data["instances"].([]interface{}); ok {
-		for _, inst := range insts {
-			if instMap, ok := inst.(map[string]interface{}); ok {
-				instance := &faas_model.Instance{}
-				if instanceID, ok := instMap["instanceID"].(string); ok {
-					instance.InstanceID = instanceID
-				}
-				if ip, ok := instMap["ip"].(string); ok {
-					instance.IP = ip
-				}
-				if status, ok := instMap["status"].(string); ok {
-					instance.Status = faas_model.InstanceStatus(status)
-				}
-				instances = append(instances, instance)
-			}
-		}
-	}
-
-	return &faas_model.InstanceListResp{Instances: instances}, nil
+	return resp.Data, nil
 }
 
 func (c *FaaSClient) GetInstance(name string) (*faas_model.Instance, error) {

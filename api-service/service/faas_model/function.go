@@ -51,6 +51,7 @@ type Instance struct {
 	IP              string            `json:"ip"`
 	Labels          map[string]string `json:"labels"`
 	Status          InstanceStatus    `json:"status"`
+	TTL             string            `json:"ttl"`
 }
 
 type InstanceListResp struct {
@@ -65,6 +66,12 @@ type APIResponse struct {
 	Success      bool        `json:"success"`
 	ErrorMessage string      `json:"errorMessage,omitempty"`
 	Data         interface{} `json:"data,omitempty"`
+}
+
+type APIInstanceListResponse struct {
+	Success      bool              `json:"success"`
+	ErrorMessage string            `json:"errorMessage,omitempty"`
+	Data         *InstanceListResp `json:"data,omitempty"`
 }
 
 type RuntimeCreateOrUpdateRequest struct {
