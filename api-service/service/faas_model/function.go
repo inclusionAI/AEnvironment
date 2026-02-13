@@ -68,6 +68,12 @@ type APIResponse struct {
 	Data         interface{} `json:"data,omitempty"`
 }
 
+type APIInstanceResponse struct {
+	Success      bool     `json:"success"`
+	ErrorMessage string   `json:"errorMessage,omitempty"`
+	Data         Instance `json:"data,omitempty"`
+}
+
 type APIInstanceListResponse struct {
 	Success      bool              `json:"success"`
 	ErrorMessage string            `json:"errorMessage,omitempty"`
