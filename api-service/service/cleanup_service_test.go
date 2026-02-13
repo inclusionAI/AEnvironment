@@ -27,7 +27,7 @@ func TestNewCleanupService(t *testing.T) {
 		baseURL:    "http://6.1.224.11:8080",
 		httpClient: &http.Client{Timeout: 30 * time.Second},
 	}
-	manager := NewAEnvCleanManager(NewKubeCleaner(scheduleClient), time.Minute)
+	manager := NewAEnvCleanManager(scheduleClient, time.Minute)
 
 	manager.Start()
 }

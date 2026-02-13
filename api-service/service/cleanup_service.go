@@ -22,22 +22,18 @@ import (
 	"time"
 )
 
-type AEnvCleaner interface {
-	cleanup()
-}
-
 type AEnvCleanManager struct {
-	cleaner AEnvCleaner
+	envInstanceService EnvInstanceService
 
 	interval time.Duration
 	ctx      context.Context
 	cancel   context.CancelFunc
 }
 
-func NewAEnvCleanManager(cleaner AEnvCleaner, duration time.Duration) *AEnvCleanManager {
+func NewAEnvCleanManager(envInstanceService EnvInstanceService, duration time.Duration) *AEnvCleanManager {
 	ctx, cancel := context.WithCancel(context.Background())
 	AEnvCleanManager := &AEnvCleanManager{
-		cleaner: cleaner,
+		envInstanceService: envInstanceService,
 
 		interval: duration,
 		ctx:      ctx,
@@ -50,7 +46,7 @@ func NewAEnvCleanManager(cleaner AEnvCleaner, duration time.Duration) *AEnvClean
 func (cm *AEnvCleanManager) Start() {
 	log.Printf("Starting cleanup service with interval: %v", cm.interval)
 	// Execute cleanup immediately
-	cm.cleaner.cleanup()
+	_ = cm.envInstanceService.Cleanup()
 
 	// Start timer
 	ticker := time.NewTicker(cm.interval)
@@ -59,7 +55,7 @@ func (cm *AEnvCleanManager) Start() {
 		for {
 			select {
 			case <-ticker.C:
-				cm.cleaner.cleanup()
+				_ = cm.envInstanceService.Cleanup()
 			case <-cm.ctx.Done():
 				log.Println("Cleanup service stopped")
 				return
@@ -71,21 +67,4 @@ func (cm *AEnvCleanManager) Start() {
 // Stop stops the cleanup service
 func (cm *AEnvCleanManager) Stop() {
 	cm.cancel()
-}
-
-// KubeCleaner cleanup service responsible for periodically cleaning expired EnvInstances
-type KubeCleaner struct {
-	scheduleClient EnvInstanceService
-}
-
-// NewCleanupService
-func NewKubeCleaner(scheduleClient EnvInstanceService) *KubeCleaner {
-	return &KubeCleaner{
-		scheduleClient: scheduleClient,
-	}
-}
-
-// cleanup executes cleanup task
-func (cs *KubeCleaner) cleanup() {
-	_ = cs.scheduleClient.Cleanup()
 }
