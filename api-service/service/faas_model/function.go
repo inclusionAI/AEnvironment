@@ -108,3 +108,9 @@ const (
 	RuntimeStatusPreparing RuntimeStatus = "preparing"
 	RuntimeStatusError     RuntimeStatus = "error"
 )
+
+type FunctionInitializeOptions struct {
+	// DynamicRuntimeName 动态运行时名称，可选参数
+	DynamicRuntimeName string `json:"dynamicRuntimeName,omitempty"`
+	TTL                int64  `json:"ttl,omitempty"`
+}

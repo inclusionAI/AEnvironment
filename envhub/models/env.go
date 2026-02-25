@@ -243,3 +243,24 @@ func (e *Env) GetCPU() string {
 	}
 	return ""
 }
+
+// GetTTL retrieves the ttl configuration from DeployConfig, returns 0 if not exists or invalid
+func (e *Env) GetTTL() int64 {
+	if val, exists := e.DeployConfig["ttl"]; exists {
+		switch v := val.(type) {
+		case int64:
+			return v
+		case int:
+			return int64(v)
+		case float64:
+			return int64(v)
+		case string:
+			// Try to parse string to int64
+			var ttl int64
+			if _, err := fmt.Sscanf(v, "%d", &ttl); err == nil {
+				return ttl
+			}
+		}
+	}
+	return 0
+}

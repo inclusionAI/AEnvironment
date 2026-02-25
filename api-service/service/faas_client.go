@@ -40,7 +40,7 @@ func (c *FaaSClient) CreateEnvInstance(req *backend.Env) (*models.EnvInstance, e
 	//	return nil, fmt.Errorf("prepare function failed: %v", err.Error())
 	//}
 	// Synchronously call the function
-	instanceId, err := c.CreateInstanceByFunction(functionName, dynamicRuntimeName)
+	instanceId, err := c.CreateInstanceByFunction(functionName, dynamicRuntimeName, req.GetTTL())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create env instance %s: %v", functionName, err)
 	}
@@ -99,13 +99,16 @@ func (c *FaaSClient) PrepareFunction(functionName string, req *backend.Env) erro
 	return nil
 }
 
-func (c *FaaSClient) CreateInstanceByFunction(name string, dynamicRuntimeName string) (string, error) {
+func (c *FaaSClient) CreateInstanceByFunction(name string, dynamicRuntimeName string, ttl int64) (string, error) {
 	f, err := c.GetFunction(name)
 	if err != nil {
 		return "", err
 	}
 
-	instanceId, err := c.InitializeFunction(f.Name, dynamicRuntimeName, faas_model.FunctionInvocationTypeSync, []byte("{}"))
+	instanceId, err := c.InitializeFunction(f.Name, faas_model.FunctionInitializeOptions{
+		DynamicRuntimeName: dynamicRuntimeName,
+		TTL:                ttl,
+	})
 	if err != nil {
 		return "", fmt.Errorf("failed to create functions instance from faas server: %v", err.Error())
 	}
@@ -323,7 +326,7 @@ func (c *FaaSClient) GetRuntime(name string) (*faas_model.Runtime, error) {
 	return runtime, nil
 }
 
-func (c *FaaSClient) InitializeFunction(name string, dynamicRuntimeName string, invocationType string, invocationBody []byte) (string, error) {
+func (c *FaaSClient) InitializeFunction(name string, initOptions faas_model.FunctionInitializeOptions) (string, error) {
 	uri := fmt.Sprintf("/hapis/faas.hcs.io/v1/functions/%s/initialize", name)
 
 	f, err := c.GetFunction(name)
@@ -331,18 +334,7 @@ func (c *FaaSClient) InitializeFunction(name string, dynamicRuntimeName string, 
 		return "", err
 	}
 
-	if invocationType == faas_model.FunctionInvocationTypeAsync {
-		invocationType = faas_model.FunctionInvocationTypeAsync
-	} else {
-		invocationType = faas_model.FunctionInvocationTypeSync
-	}
-
-	req := c.client.Post(uri).BodyData(invocationBody).Timeout(time.Duration(f.Timeout)*time.Second).Query("invocationType", invocationType)
-
-	// If dynamicRuntimeName is provided, add it to the query parameters
-	if dynamicRuntimeName != "" {
-		req = req.Query("dynamicRuntimeName", dynamicRuntimeName)
-	}
+	req := c.client.Post(uri).Body(initOptions).Timeout(time.Duration(f.Timeout) * time.Second)
 
 	resp, err := req.Do().Response()
 	if err != nil {
