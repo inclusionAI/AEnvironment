@@ -20,7 +20,6 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 
 {{- define "redis.selectorLabels" -}}
-app.kubernetes.io/instance: {{ .Release.Name }}
 {{- if .Values.global.selectorLabels }}
 {{ tpl (toYaml .Values.global.selectorLabels) . }}
 {{- end }}
