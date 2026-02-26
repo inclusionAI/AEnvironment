@@ -51,7 +51,7 @@ type Instance struct {
 	IP              string            `json:"ip"`
 	Labels          map[string]string `json:"labels"`
 	Status          InstanceStatus    `json:"status"`
-	TTL             string            `json:"ttl"`
+	TTL             int64             `json:"ttl"`
 }
 
 type InstanceListResp struct {

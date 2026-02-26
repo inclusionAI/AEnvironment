@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -588,6 +589,11 @@ func (c *ScheduleClient) ListEnvInstances(envName string) ([]*models.EnvInstance
 		// Format CreatedAt time
 		createdAtStr := podData.CreatedAt.Format("2006-01-02 15:04:05")
 		nowStr := time.Now().Format("2006-01-02 15:04:05")
+		ttl, err := strconv.ParseInt(podData.TTL, 10, 64)
+		if err != nil {
+			log.Warnf("Failed to parse TTL value '%v': %v, setting to 0", podData.TTL, err)
+			ttl = 0
+		}
 
 		instances[i] = &models.EnvInstance{
 			ID:        podData.ID,
@@ -596,7 +602,7 @@ func (c *ScheduleClient) ListEnvInstances(envName string) ([]*models.EnvInstance
 			CreatedAt: createdAtStr,
 			UpdatedAt: nowStr,
 			IP:        podData.IP,
-			TTL:       podData.TTL,
+			TTL:       ttl,
 			Owner:     podData.Owner,
 		}
 	}

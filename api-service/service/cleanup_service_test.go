@@ -92,21 +92,21 @@ func TestPerformCleanupWithExpiredInstances(t *testing.T) {
 		ID:        "test-instance-1",
 		Status:    "Running",
 		CreatedAt: "2025-01-01 10:00:00",
-		TTL:       "1h",
+		TTL:       3600, // 1 hour in seconds
 	}
 
 	terminatedInstance := &models.EnvInstance{
 		ID:        "test-instance-2",
 		Status:    "Terminated",
 		CreatedAt: "2025-01-01 10:00:00",
-		TTL:       "1h",
+		TTL:       3600, // 1 hour in seconds
 	}
 
 	activeInstance := &models.EnvInstance{
 		ID:        "test-instance-3",
 		Status:    "Running",
 		CreatedAt: time.Now().Format("2006-01-02 15:04:05"),
-		TTL:       "1h",
+		TTL:       3600, // 1 hour in seconds
 	}
 
 	var deletedInstances []string
@@ -143,7 +143,7 @@ func TestPerformCleanupWithDeleteError(t *testing.T) {
 		ID:        "test-instance-1",
 		Status:    "Running",
 		CreatedAt: "2025-01-01 10:00:00",
-		TTL:       "1h",
+		TTL:       3600, // 1 hour in seconds
 	}
 
 	mockService := &MockEnvInstanceService{
