@@ -586,8 +586,8 @@ func (c *ScheduleClient) ListEnvInstances(envName string) ([]*models.EnvInstance
 		}
 
 		// Format CreatedAt time
-		createdAtStr := podData.CreatedAt.Format("2006-01-02 15:04:05")
-		nowStr := time.Now().Format("2006-01-02 15:04:05")
+		createdAtStr := podData.CreatedAt.Format(time.RFC3339)
+		nowStr := time.Now().Format(time.RFC3339)
 
 		instances[i] = &models.EnvInstance{
 			ID:        podData.ID,

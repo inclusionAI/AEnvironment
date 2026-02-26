@@ -137,11 +137,15 @@ func (cm *AEnvCleanManager) isExpired(instance *models.EnvInstance) bool {
 		return false
 	}
 
-	// Parse creation time
-	createdAt, err := time.Parse("2006-01-02 15:04:05", instance.CreatedAt)
+	// Parse creation time using time.DateTime format (2006-01-02 15:04:05)
+	createdAt, err := time.Parse(time.DateTime, instance.CreatedAt)
 	if err != nil {
-		log.Printf("Failed to parse creation time '%s' for instance %s: %v", instance.CreatedAt, instance.ID, err)
-		return false
+		// Fallback to RFC3339 if DateTime parsing fails
+		createdAt, err = time.Parse(time.RFC3339, instance.CreatedAt)
+		if err != nil {
+			log.Printf("Failed to parse creation time '%s' for instance %s: %v", instance.CreatedAt, instance.ID, err)
+			return false
+		}
 	}
 
 	// Check if the instance has expired
