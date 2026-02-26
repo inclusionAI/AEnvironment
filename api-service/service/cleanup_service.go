@@ -107,7 +107,7 @@ func (cm *AEnvCleanManager) performCleanup() {
 
 		// Check if TTL is set and has expired
 		if cm.isExpired(instance) {
-			log.Printf("Instance %s has expired (TTL: %d seconds), deleting...", instance.ID, instance.TTL)
+			log.Printf("Instance %s has expired (TTL: %s), deleting...", instance.ID, instance.TTL)
 			err := cm.envInstanceService.DeleteEnvInstance(instance.ID)
 			if err != nil {
 				log.Printf("Failed to delete expired instance %s: %v", instance.ID, err)
@@ -125,13 +125,17 @@ func (cm *AEnvCleanManager) performCleanup() {
 
 // isExpired checks if an environment instance has expired based on its TTL and creation time
 func (cm *AEnvCleanManager) isExpired(instance *models.EnvInstance) bool {
-	// If TTL is not set (0 or negative), consider it as non-expiring
-	if instance.TTL <= 0 {
+	// If TTL is not set, consider it as non-expiring
+	if instance.TTL == "" {
 		return false
 	}
 
-	// TTL is in seconds, convert to duration
-	ttlDuration := time.Duration(instance.TTL) * time.Second
+	// Parse TTL duration
+	ttlDuration, err := time.ParseDuration(instance.TTL)
+	if err != nil {
+		log.Printf("Failed to parse TTL '%s' for instance %s: %v", instance.TTL, instance.ID, err)
+		return false
+	}
 
 	// Parse creation time
 	createdAt, err := time.Parse("2006-01-02 15:04:05", instance.CreatedAt)

@@ -58,7 +58,7 @@ type EnvInstance struct {
 	CreatedAt string       `json:"created_at"` // Creation time
 	UpdatedAt string       `json:"updated_at"` // Update time
 	IP        string       `json:"ip"`         // Instance IP
-	TTL       int64        `json:"ttl"`        // time to live in seconds
+	TTL       string       `json:"ttl"`        // time to live
 	Owner     string       `json:"owner"`      // Instance owner (user who created it)
 }
 

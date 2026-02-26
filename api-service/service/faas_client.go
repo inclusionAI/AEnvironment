@@ -125,13 +125,16 @@ func (c *FaaSClient) GetEnvInstance(id string) (*models.EnvInstance, error) {
 
 	// Map model.Instance -> models.EnvInstance
 	envInst := &models.EnvInstance{
-		ID:        instance.InstanceID,
-		IP:        instance.IP,
-		TTL:       instance.TTL,
+		ID:  instance.InstanceID,
+		IP:  instance.IP,
+		TTL: instance.TTL, // No TTL field source available yet, can be added later
+		// CreatedAt / UpdatedAt use current time or default values (should actually be returned by backend)
 		CreatedAt: time.UnixMilli(instance.CreateTimestamp).Format(time.RFC3339),
 		UpdatedAt: time.Now().Format(time.RFC3339),
 		Status:    convertStatus(instance.Status),
-		Env:       nil,
+		// Env field cannot be directly obtained from Instance, needs to rely on Create return or additional queries
+		// Can only be empty here, recommend maintaining through Create/CreateFromRecord
+		Env: nil,
 	}
 
 	return envInst, nil
@@ -160,10 +163,10 @@ func (c *FaaSClient) ListEnvInstances(envName string) ([]*models.EnvInstance, er
 			ID:        inst.InstanceID,
 			IP:        inst.IP,
 			Status:    convertStatus(inst.Status),
-			CreatedAt: time.UnixMilli(inst.CreateTimestamp).Format(time.RFC3339),
+			CreatedAt: time.UnixMilli(inst.CreateTimestamp).Format(time.RFC3339), // Could consider constructing from CreateTimestamp
 			UpdatedAt: time.Now().Format(time.RFC3339),
 			TTL:       inst.TTL,
-			Env:       nil,
+			Env:       nil, // Cannot obtain full Env information from Instance
 		})
 	}
 
