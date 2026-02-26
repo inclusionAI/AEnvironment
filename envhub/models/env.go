@@ -244,23 +244,21 @@ func (e *Env) GetCPU() string {
 	return ""
 }
 
-// GetTTL retrieves the ttl configuration from DeployConfig, returns 0 if not exists or invalid
-func (e *Env) GetTTL() int64 {
+// GetTTL retrieves the ttl configuration from DeployConfig, returns empty string if not exists
+func (e *Env) GetTTL() string {
 	if val, exists := e.DeployConfig["ttl"]; exists {
 		switch v := val.(type) {
-		case int64:
-			return v
-		case int:
-			return int64(v)
-		case float64:
-			return int64(v)
 		case string:
-			// Try to parse string to int64
-			var ttl int64
-			if _, err := fmt.Sscanf(v, "%d", &ttl); err == nil {
-				return ttl
-			}
+			return v
+		case int64:
+			return fmt.Sprintf("%d", v)
+		case int:
+			return fmt.Sprintf("%d", v)
+		case float64:
+			return fmt.Sprintf("%.0f", v)
+		default:
+			return fmt.Sprintf("%v", v)
 		}
 	}
-	return 0
+	return ""
 }

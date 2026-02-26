@@ -99,7 +99,7 @@ func (c *FaaSClient) PrepareFunction(functionName string, req *backend.Env) erro
 	return nil
 }
 
-func (c *FaaSClient) CreateInstanceByFunction(name string, dynamicRuntimeName string, ttl int64) (string, error) {
+func (c *FaaSClient) CreateInstanceByFunction(name string, dynamicRuntimeName string, ttl string) (string, error) {
 	f, err := c.GetFunction(name)
 	if err != nil {
 		return "", err
@@ -354,7 +354,7 @@ func (c *FaaSClient) ListInstances(labels map[string]string) (*faas_model.Instan
 
 	req := &faas_model.InstanceListRequest{Labels: labels}
 	resp := &faas_model.APIInstanceListResponse{}
-	err := c.client.Post(uri).Body(*req).Do().Into(resp)
+	err := c.client.Get(uri).Body(*req).Do().Into(resp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list instances: %w", err)
 	}

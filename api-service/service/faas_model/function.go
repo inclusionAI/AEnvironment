@@ -112,5 +112,5 @@ const (
 type FunctionInitializeOptions struct {
 	// DynamicRuntimeName 动态运行时名称，可选参数
 	DynamicRuntimeName string `json:"dynamicRuntimeName,omitempty"`
-	TTL                int64  `json:"ttl,omitempty"`
+	TTL                string `json:"ttl,omitempty"`
 }
