@@ -165,7 +165,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("Invalid cleanup interval: %v", err)
 	}
-	cleanManager := service.NewAEnvCleanManager(service.NewKubeCleaner(scheduleClient), interval)
+	cleanManager := service.NewAEnvCleanManager(scheduleClient, interval).
+		WithMetrics(middleware.IncrementCleanupSuccess, middleware.IncrementCleanupFailure)
 	go cleanManager.Start()
 	defer cleanManager.Stop()
 

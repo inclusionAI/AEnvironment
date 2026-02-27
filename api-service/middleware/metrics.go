@@ -64,7 +64,32 @@ var (
 		},
 		[]string{"method", "endpoint"},
 	)
+
+	// Auto cleanup metrics
+	cleanupSuccessCount = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "auto_cleanup_success_total",
+			Help: "Total number of successfully auto-cleaned instances",
+		},
+	)
+
+	cleanupFailureCount = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "auto_cleanup_failure_total",
+			Help: "Total number of failed auto-cleanup attempts",
+		},
+	)
 )
+
+// IncrementCleanupSuccess increments the cleanup success counter
+func IncrementCleanupSuccess() {
+	cleanupSuccessCount.Inc()
+}
+
+// IncrementCleanupFailure increments the cleanup failure counter
+func IncrementCleanupFailure() {
+	cleanupFailureCount.Inc()
+}
 
 // MetricsMiddleware metrics collection middleware
 func MetricsMiddleware() gin.HandlerFunc {

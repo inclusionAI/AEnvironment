@@ -43,6 +43,8 @@ spec:
             - {{ include "api-service.scheduleType" . }}
             - --qps
             - {{ include "api-service.qps" . | quote }}
+            - --cleanup-interval
+            - {{ .Values.cleanupInterval }}
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}

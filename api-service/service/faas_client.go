@@ -40,7 +40,7 @@ func (c *FaaSClient) CreateEnvInstance(req *backend.Env) (*models.EnvInstance, e
 	//	return nil, fmt.Errorf("prepare function failed: %v", err.Error())
 	//}
 	// Synchronously call the function
-	instanceId, err := c.CreateInstanceByFunction(functionName, dynamicRuntimeName)
+	instanceId, err := c.CreateInstanceByFunction(functionName, dynamicRuntimeName, req.GetTTL())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create env instance %s: %v", functionName, err)
 	}
@@ -99,13 +99,16 @@ func (c *FaaSClient) PrepareFunction(functionName string, req *backend.Env) erro
 	return nil
 }
 
-func (c *FaaSClient) CreateInstanceByFunction(name string, dynamicRuntimeName string) (string, error) {
+func (c *FaaSClient) CreateInstanceByFunction(name string, dynamicRuntimeName string, ttl string) (string, error) {
 	f, err := c.GetFunction(name)
 	if err != nil {
 		return "", err
 	}
 
-	instanceId, err := c.InitializeFunction(f.Name, dynamicRuntimeName, faas_model.FunctionInvocationTypeSync, []byte("{}"))
+	instanceId, err := c.InitializeFunction(f.Name, faas_model.FunctionInitializeOptions{
+		DynamicRuntimeName: dynamicRuntimeName,
+		TTL:                ttl,
+	})
 	if err != nil {
 		return "", fmt.Errorf("failed to create functions instance from faas server: %v", err.Error())
 	}
@@ -124,10 +127,10 @@ func (c *FaaSClient) GetEnvInstance(id string) (*models.EnvInstance, error) {
 	envInst := &models.EnvInstance{
 		ID:  instance.InstanceID,
 		IP:  instance.IP,
-		TTL: "", // No TTL field source available yet, can be added later
+		TTL: instance.TTL, // No TTL field source available yet, can be added later
 		// CreatedAt / UpdatedAt use current time or default values (should actually be returned by backend)
-		CreatedAt: time.Unix(instance.CreateTimestamp, 0).Format(time.RFC3339),
-		UpdatedAt: time.Now().Format("2006-01-02 15:04:05"),
+		CreatedAt: time.UnixMilli(instance.CreateTimestamp).Format(time.RFC3339),
+		UpdatedAt: time.Now().Format(time.RFC3339),
 		Status:    convertStatus(instance.Status),
 		// Env field cannot be directly obtained from Instance, needs to rely on Create return or additional queries
 		// Can only be empty here, recommend maintaining through Create/CreateFromRecord
@@ -160,9 +163,9 @@ func (c *FaaSClient) ListEnvInstances(envName string) ([]*models.EnvInstance, er
 			ID:        inst.InstanceID,
 			IP:        inst.IP,
 			Status:    convertStatus(inst.Status),
-			CreatedAt: time.Now().Format("2006-01-02 15:04:05"), // Could consider constructing from CreateTimestamp
-			UpdatedAt: time.Now().Format("2006-01-02 15:04:05"),
-			TTL:       "",
+			CreatedAt: time.UnixMilli(inst.CreateTimestamp).Format(time.RFC3339), // Could consider constructing from CreateTimestamp
+			UpdatedAt: time.Now().Format(time.RFC3339),
+			TTL:       inst.TTL,
 			Env:       nil, // Cannot obtain full Env information from Instance
 		})
 	}
@@ -323,7 +326,7 @@ func (c *FaaSClient) GetRuntime(name string) (*faas_model.Runtime, error) {
 	return runtime, nil
 }
 
-func (c *FaaSClient) InitializeFunction(name string, dynamicRuntimeName string, invocationType string, invocationBody []byte) (string, error) {
+func (c *FaaSClient) InitializeFunction(name string, initOptions faas_model.FunctionInitializeOptions) (string, error) {
 	uri := fmt.Sprintf("/hapis/faas.hcs.io/v1/functions/%s/initialize", name)
 
 	f, err := c.GetFunction(name)
@@ -331,18 +334,7 @@ func (c *FaaSClient) InitializeFunction(name string, dynamicRuntimeName string, 
 		return "", err
 	}
 
-	if invocationType == faas_model.FunctionInvocationTypeAsync {
-		invocationType = faas_model.FunctionInvocationTypeAsync
-	} else {
-		invocationType = faas_model.FunctionInvocationTypeSync
-	}
-
-	req := c.client.Post(uri).BodyData(invocationBody).Timeout(time.Duration(f.Timeout)*time.Second).Query("invocationType", invocationType)
-
-	// If dynamicRuntimeName is provided, add it to the query parameters
-	if dynamicRuntimeName != "" {
-		req = req.Query("dynamicRuntimeName", dynamicRuntimeName)
-	}
+	req := c.client.Post(uri).Body(initOptions).Timeout(time.Duration(f.Timeout) * time.Second)
 
 	resp, err := req.Do().Response()
 	if err != nil {
@@ -361,52 +353,19 @@ func (c *FaaSClient) ListInstances(labels map[string]string) (*faas_model.Instan
 	uri := "/hapis/faas.hcs.io/v1/instances"
 
 	req := &faas_model.InstanceListRequest{Labels: labels}
-	resp := &faas_model.APIResponse{
-		Data: &faas_model.InstanceListResp{},
-	}
-	err := c.client.Post(uri).Body(*req).Do().Into(resp)
+	resp := &faas_model.APIInstanceListResponse{}
+	err := c.client.Get(uri).Body(*req).Do().Into(resp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list instances: %w", err)
 	}
 
-	if !resp.Success {
-		return nil, fmt.Errorf("failed to list instances: %s", resp.ErrorMessage)
-	}
-
-	data, ok := resp.Data.(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("invalid response type for InstanceListResp")
-	}
-
-	// Convert map to InstanceListResp struct
-	instances := []*faas_model.Instance{}
-	if insts, ok := data["instances"].([]interface{}); ok {
-		for _, inst := range insts {
-			if instMap, ok := inst.(map[string]interface{}); ok {
-				instance := &faas_model.Instance{}
-				if instanceID, ok := instMap["instanceID"].(string); ok {
-					instance.InstanceID = instanceID
-				}
-				if ip, ok := instMap["ip"].(string); ok {
-					instance.IP = ip
-				}
-				if status, ok := instMap["status"].(string); ok {
-					instance.Status = faas_model.InstanceStatus(status)
-				}
-				instances = append(instances, instance)
-			}
-		}
-	}
-
-	return &faas_model.InstanceListResp{Instances: instances}, nil
+	return resp.Data, nil
 }
 
 func (c *FaaSClient) GetInstance(name string) (*faas_model.Instance, error) {
 	uri := fmt.Sprintf("/hapis/faas.hcs.io/v1/instances/%s", name)
 
-	resp := &faas_model.APIResponse{
-		Data: &faas_model.Instance{},
-	}
+	resp := &faas_model.APIInstanceResponse{}
 	err := c.client.Get(uri).Do().Into(resp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get instance %s: %w", name, err)
@@ -416,27 +375,7 @@ func (c *FaaSClient) GetInstance(name string) (*faas_model.Instance, error) {
 		return nil, fmt.Errorf("failed to get instance %s: %s", name, resp.ErrorMessage)
 	}
 
-	data, ok := resp.Data.(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("invalid response type for Instance")
-	}
-
-	// Convert map to Instance struct
-	instance := &faas_model.Instance{}
-	if instanceID, ok := data["instanceID"].(string); ok {
-		instance.InstanceID = instanceID
-	}
-	if ip, ok := data["ip"].(string); ok {
-		instance.IP = ip
-	}
-	if status, ok := data["status"].(string); ok {
-		instance.Status = faas_model.InstanceStatus(status)
-	}
-	if createTimestamp, ok := data["createTimestamp"].(float64); ok {
-		instance.CreateTimestamp = int64(createTimestamp)
-	}
-
-	return instance, nil
+	return &resp.Data, nil
 }
 
 func (c *FaaSClient) DeleteInstance(name string) error {

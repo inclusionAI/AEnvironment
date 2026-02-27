@@ -51,6 +51,7 @@ type Instance struct {
 	IP              string            `json:"ip"`
 	Labels          map[string]string `json:"labels"`
 	Status          InstanceStatus    `json:"status"`
+	TTL             string            `json:"ttl"`
 }
 
 type InstanceListResp struct {
@@ -65,6 +66,18 @@ type APIResponse struct {
 	Success      bool        `json:"success"`
 	ErrorMessage string      `json:"errorMessage,omitempty"`
 	Data         interface{} `json:"data,omitempty"`
+}
+
+type APIInstanceResponse struct {
+	Success      bool     `json:"success"`
+	ErrorMessage string   `json:"errorMessage,omitempty"`
+	Data         Instance `json:"data,omitempty"`
+}
+
+type APIInstanceListResponse struct {
+	Success      bool              `json:"success"`
+	ErrorMessage string            `json:"errorMessage,omitempty"`
+	Data         *InstanceListResp `json:"data,omitempty"`
 }
 
 type RuntimeCreateOrUpdateRequest struct {
@@ -95,3 +108,9 @@ const (
 	RuntimeStatusPreparing RuntimeStatus = "preparing"
 	RuntimeStatusError     RuntimeStatus = "error"
 )
+
+type FunctionInitializeOptions struct {
+	// DynamicRuntimeName 动态运行时名称，可选参数
+	DynamicRuntimeName string `json:"dynamicRuntimeName,omitempty"`
+	TTL                string `json:"ttl,omitempty"`
+}
