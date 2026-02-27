@@ -11,5 +11,8 @@ dependencies:
 - name: api-service
   repository: file://./api-service
   version: 0.0.1
-digest: sha256:1f01dff06c6132524b527accdcfd47083224855e2104c7b53773cc4fcac9ebf4
-generated: "2025-12-11T15:05:52.740323+08:00"
+- name: api-service
+  repository: file://./api-service
+  version: 0.0.1
+digest: sha256:d8cde747fdada74e8ef391a9dba4b459469d7854454856888eab3bb97c8e2fa7
+generated: "2026-02-27T16:59:03.91986+08:00"
