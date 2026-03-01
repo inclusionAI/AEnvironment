@@ -39,6 +39,6 @@ Selector labels
     {{ if .Values.redisAddr }}
         {{- .Values.redisAddr -}}
     {{ else }}
-        {{- printf "redis.%s.svc.cluster.local:6379" .Values.metadata.namespace -}}
+        {{- printf "redis.%s.svc.cluster.local:6379" .Values.global.namespace -}}
     {{ end }}
 {{ end }}
