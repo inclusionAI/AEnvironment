@@ -553,11 +553,10 @@ func (h *AEnvServiceHandler) deleteService(serviceName string, w http.ResponseWr
 	}
 }
 
-// updateService updates a service (replicas, image, env vars)
+// updateService updates a service (replicas, env vars)
 func (h *AEnvServiceHandler) updateService(serviceName string, w http.ResponseWriter, r *http.Request) {
 	var updateReq struct {
 		Replicas             *int32             `json:"replicas,omitempty"`
-		Image                *string            `json:"image,omitempty"`
 		EnvironmentVariables *map[string]string `json:"environment_variables,omitempty"`
 	}
 
@@ -582,13 +581,6 @@ func (h *AEnvServiceHandler) updateService(serviceName string, w http.ResponseWr
 	// Update replicas
 	if updateReq.Replicas != nil {
 		deployment.Spec.Replicas = updateReq.Replicas
-	}
-
-	// Update image
-	if updateReq.Image != nil && *updateReq.Image != "" {
-		for i := range deployment.Spec.Template.Spec.Containers {
-			deployment.Spec.Template.Spec.Containers[i].Image = *updateReq.Image
-		}
 	}
 
 	// Update environment variables

@@ -166,7 +166,6 @@ class EnvServiceUpdateRequest(BaseModel):
     """Request to update an environment service."""
 
     replicas: Optional[int] = Field(None, description="Number of replicas")
-    image: Optional[str] = Field(None, description="Container image")
     environment_variables: Optional[Dict[str, str]] = Field(
         None, description="Environment variables"
     )

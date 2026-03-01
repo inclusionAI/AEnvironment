@@ -110,10 +110,24 @@ func (ctrl *EnvServiceController) CreateEnvService(c *gin.Context) {
 	if backendEnv.DeployConfig == nil {
 		backendEnv.DeployConfig = make(map[string]interface{})
 	}
+
+	// Get service config from envhub metadata (support both new nested structure and legacy flat structure)
+	var serviceConfig map[string]interface{}
+	if svc, ok := backendEnv.DeployConfig["service"].(map[string]interface{}); ok {
+		serviceConfig = svc
+	} else {
+		// For backward compatibility, fall back to root deployConfig if service config is empty
+		serviceConfig = backendEnv.DeployConfig
+	}
+
+	// Merge environment variables: CLI request overrides envhub config
 	if req.EnvironmentVariables != nil {
 		backendEnv.DeployConfig["environment_variables"] = req.EnvironmentVariables
 	}
+
+	// Override replicas from request, otherwise use envhub config
 	backendEnv.DeployConfig["replicas"] = req.Replicas
+
 	if req.Owner != "" {
 		backendEnv.DeployConfig["owner"] = req.Owner
 	}
@@ -122,24 +136,34 @@ func (ctrl *EnvServiceController) CreateEnvService(c *gin.Context) {
 		backendEnv.DeployConfig["serviceName"] = req.ServiceName
 	}
 
-	// Storage configuration
-	if req.PVCName != "" {
-		backendEnv.DeployConfig["pvcName"] = req.PVCName
-	}
-	if req.MountPath != "" {
-		backendEnv.DeployConfig["mountPath"] = req.MountPath
-	}
-	// storageClass is now configured in helm values.yaml, not passed via API
+	// Storage configuration: request overrides envhub config
+	// If request doesn't provide storageSize but envhub has it in service config, use envhub's value
 	if req.StorageSize != "" {
 		backendEnv.DeployConfig["storageSize"] = req.StorageSize
+	} else if storageSize, ok := serviceConfig["storageSize"].(string); ok {
+		backendEnv.DeployConfig["storageSize"] = storageSize
 	}
 
-	// Service configuration
+	if req.PVCName != "" {
+		backendEnv.DeployConfig["pvcName"] = req.PVCName
+	} else if pvcName, ok := serviceConfig["storageName"].(string); ok {
+		backendEnv.DeployConfig["pvcName"] = pvcName
+	}
+
+	if req.MountPath != "" {
+		backendEnv.DeployConfig["mountPath"] = req.MountPath
+	} else if mountPath, ok := serviceConfig["mountPath"].(string); ok {
+		backendEnv.DeployConfig["mountPath"] = mountPath
+	}
+
+	// Service configuration: request overrides envhub config
 	if req.Port > 0 {
 		backendEnv.DeployConfig["port"] = req.Port
+	} else if port, ok := serviceConfig["port"].(float64); ok {
+		backendEnv.DeployConfig["port"] = int32(port)
 	}
 
-	// Resource configuration
+	// Resource configuration: request overrides envhub config
 	if req.CPURequest != "" {
 		backendEnv.DeployConfig["cpuRequest"] = req.CPURequest
 	}
@@ -216,7 +240,6 @@ func (ctrl *EnvServiceController) DeleteEnvService(c *gin.Context) {
 // UpdateEnvServiceRequest represents the request body for updating an EnvService
 type UpdateEnvServiceRequest struct {
 	Replicas             *int32             `json:"replicas,omitempty"`
-	Image                *string            `json:"image,omitempty"`
 	EnvironmentVariables *map[string]string `json:"environment_variables,omitempty"`
 }
 
@@ -238,7 +261,6 @@ func (ctrl *EnvServiceController) UpdateEnvService(c *gin.Context) {
 	// Build update request
 	updateReq := &service.UpdateServiceRequest{
 		Replicas:             req.Replicas,
-		Image:                req.Image,
 		EnvironmentVariables: req.EnvironmentVariables,
 	}
 
