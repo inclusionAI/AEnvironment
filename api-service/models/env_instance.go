@@ -58,6 +58,7 @@ type EnvInstance struct {
 	CreatedAt string       `json:"created_at"` // Creation time
 	UpdatedAt string       `json:"updated_at"` // Update time
 	IP        string       `json:"ip"`         // Instance IP
+	DataURL   string       `json:"data_url"`   // MCP data endpoint URL (http://IP:8081/mcp)
 	TTL       string       `json:"ttl"`        // time to live
 	Owner     string       `json:"owner"`      // Instance owner (user who created it)
 }
@@ -65,6 +66,10 @@ type EnvInstance struct {
 // NewEnvInstance creates a new environment instance object
 func NewEnvInstance(id string, env *backend.Env, ip string) *EnvInstance {
 	now := time.Now().Format("2006-01-02 15:04:05")
+	dataURL := ""
+	if ip != "" {
+		dataURL = "http://" + ip + ":8081/mcp"
+	}
 	return &EnvInstance{
 		ID:        id,
 		Env:       env,
@@ -72,6 +77,7 @@ func NewEnvInstance(id string, env *backend.Env, ip string) *EnvInstance {
 		CreatedAt: now,
 		UpdatedAt: now,
 		IP:        ip,
+		DataURL:   dataURL,
 		Owner:     "",
 	}
 }
@@ -79,6 +85,10 @@ func NewEnvInstance(id string, env *backend.Env, ip string) *EnvInstance {
 // NewEnvInstanceWithOwner creates a new environment instance object with owner
 func NewEnvInstanceWithOwner(id string, env *backend.Env, ip string, owner string) *EnvInstance {
 	now := time.Now().Format("2006-01-02 15:04:05")
+	dataURL := ""
+	if ip != "" {
+		dataURL = "http://" + ip + ":8081/mcp"
+	}
 	return &EnvInstance{
 		ID:        id,
 		Env:       env,
@@ -86,6 +96,7 @@ func NewEnvInstanceWithOwner(id string, env *backend.Env, ip string, owner strin
 		CreatedAt: now,
 		UpdatedAt: now,
 		IP:        ip,
+		DataURL:   dataURL,
 		Owner:     owner,
 	}
 }
@@ -93,6 +104,10 @@ func NewEnvInstanceWithOwner(id string, env *backend.Env, ip string, owner strin
 // NewEnvInstanceWithStatus creates an environment instance object with specified status
 func NewEnvInstanceWithStatus(id string, env *backend.Env, status EnvInstanceStatus, ip string) *EnvInstance {
 	now := time.Now().Format("2006-01-02 15:04:05")
+	dataURL := ""
+	if ip != "" {
+		dataURL = "http://" + ip + ":8081/mcp"
+	}
 	return &EnvInstance{
 		ID:        id,
 		Env:       env,
@@ -100,12 +115,17 @@ func NewEnvInstanceWithStatus(id string, env *backend.Env, status EnvInstanceSta
 		CreatedAt: now,
 		UpdatedAt: now,
 		IP:        ip,
+		DataURL:   dataURL,
 		Owner:     "",
 	}
 }
 
 // NewEnvInstanceFull creates a complete environment instance object (specify all fields)
 func NewEnvInstanceFull(id string, env *backend.Env, status EnvInstanceStatus, createdAt, updatedAt, ip string) *EnvInstance {
+	dataURL := ""
+	if ip != "" {
+		dataURL = "http://" + ip + ":8081/mcp"
+	}
 	return &EnvInstance{
 		ID:        id,
 		Env:       env,
@@ -113,6 +133,7 @@ func NewEnvInstanceFull(id string, env *backend.Env, status EnvInstanceStatus, c
 		CreatedAt: createdAt,
 		UpdatedAt: updatedAt,
 		IP:        ip,
+		DataURL:   dataURL,
 		Owner:     "",
 	}
 }
@@ -126,5 +147,10 @@ func (e *EnvInstance) UpdateStatus(status EnvInstanceStatus) {
 // UpdateIP updates instance IP
 func (e *EnvInstance) UpdateIP(ip string) {
 	e.IP = ip
+	if ip != "" {
+		e.DataURL = "http://" + ip + ":8081/mcp"
+	} else {
+		e.DataURL = ""
+	}
 	e.UpdatedAt = time.Now().Format("2006-01-02 15:04:05")
 }

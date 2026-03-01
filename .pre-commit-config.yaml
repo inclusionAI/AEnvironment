@@ -3,7 +3,7 @@
 repos:
   # General hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
         exclude: \.md$|\.rst$
@@ -19,7 +19,7 @@ repos:
 
   # Python - Black formatter
   - repo: https://github.com/psf/black
-    rev: 24.10.0
+    rev: 26.1.0
     hooks:
       - id: black
         files: ^aenv/
@@ -27,7 +27,7 @@ repos:
 
   # Python - isort import sorter
   - repo: https://github.com/pycqa/isort
-    rev: 5.13.2
+    rev: 7.0.0
     hooks:
       - id: isort
         files: ^aenv/
@@ -35,7 +35,7 @@ repos:
 
   # Python - Ruff linter
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.2
+    rev: v0.15.0
     hooks:
       - id: ruff
         files: ^aenv/
@@ -52,7 +52,7 @@ repos:
 
   # Go - golangci-lint (run per module to support go.work)
   - repo: https://github.com/golangci/golangci-lint
-    rev: v1.62.2
+    rev: v2.8.0
     hooks:
       - id: golangci-lint
         name: golangci-lint (api-service)
@@ -75,7 +75,7 @@ repos:
 
   # Markdown - markdownlint
   - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.43.0
+    rev: v0.47.0
     hooks:
       - id: markdownlint
         args: [--fix, --disable, MD013, MD033, MD041, --]
@@ -83,7 +83,7 @@ repos:
 
   # YAML - yamllint
   - repo: https://github.com/adrienverge/yamllint
-    rev: v1.35.1
+    rev: v1.38.0
     hooks:
       - id: yamllint
         args: [-d, "{extends: relaxed, rules: {line-length: {max: 120}}}"]
@@ -91,7 +91,7 @@ repos:
 
   # Dockerfile - hadolint
   - repo: https://github.com/hadolint/hadolint
-    rev: v2.12.0
+    rev: v2.14.0
     hooks:
       - id: hadolint
         files: (?i)(^|/)Dockerfile(\..*)?$|\.Dockerfile$

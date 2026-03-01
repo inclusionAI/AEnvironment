@@ -15,6 +15,7 @@
 """
 Scaffolding tool - for project initialization
 """
+
 import dataclasses
 import json
 import shutil

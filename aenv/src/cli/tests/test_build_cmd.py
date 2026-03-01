@@ -16,6 +16,7 @@
 """
 Test script for the build command
 """
+
 import json
 import subprocess
 import sys

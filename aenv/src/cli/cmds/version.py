@@ -15,6 +15,7 @@
 """
 version command - Display version information
 """
+
 import json
 from importlib.resources import files
 

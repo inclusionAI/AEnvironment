@@ -73,19 +73,55 @@ spec:
           env:
             - name: SERVICE_DOMAIN_SUFFIX
               value: {{ .Values.serviceDomainSuffix | quote }}
+            {{- if .Values.docker.enabled }}
+            - name: ENGINE_TYPE
+              value: "docker"
+            - name: DOCKER_HOST
+              value: {{ .Values.docker.host | quote }}
+            - name: DOCKER_TLS_VERIFY
+              value: {{ .Values.docker.tls.verify | quote }}
+            {{- if .Values.docker.tls.certPath }}
+            - name: DOCKER_CERT_PATH
+              value: {{ .Values.docker.tls.certPath | quote }}
+            {{- end }}
+            - name: DOCKER_NETWORK
+              value: {{ .Values.docker.network.defaultNetwork | quote }}
+            - name: COMPOSE_ENABLED
+              value: {{ .Values.docker.compose.enabled | quote }}
+            {{- end }}
           resources:
             {{ toYaml .Values.resources | nindent 12 }}
-          {{- if .Values.podTemplates }}
           volumeMounts:
+          {{- if .Values.podTemplates }}
             - name: pod-templates
               mountPath: /etc/aenv/pod-templates
               readOnly: true
           {{- end }}
-      {{- if .Values.podTemplates }}
+          {{- if and .Values.docker.enabled (eq .Values.docker.host "unix:///var/run/docker.sock") }}
+            - name: docker-socket
+              mountPath: /var/run/docker.sock
+          {{- end }}
+          {{- if and .Values.docker.enabled .Values.docker.tls.verify .Values.docker.tls.certPath }}
+            - name: docker-certs
+              mountPath: {{ .Values.docker.tls.certPath }}
+              readOnly: true
+          {{- end }}
       volumes:
+      {{- if .Values.podTemplates }}
         - name: pod-templates
           configMap:
             name: {{ include "controller.fullname" . }}-pod-templates
+      {{- end }}
+      {{- if and .Values.docker.enabled (eq .Values.docker.host "unix:///var/run/docker.sock") }}
+        - name: docker-socket
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
+      {{- end }}
+      {{- if and .Values.docker.enabled .Values.docker.tls.verify .Values.docker.tls.certPath }}
+        - name: docker-certs
+          secret:
+            secretName: docker-tls-certs
       {{- end }}
       {{ with .Values.nodeSelector }}
       nodeSelector:

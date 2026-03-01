@@ -17,6 +17,7 @@ Rich table formatting utilities for CLI output
 
 Provides beautiful, colorful table displays inspired by modern CLI tools.
 """
+
 from typing import Any, Dict, List, Optional
 
 from rich.console import Console

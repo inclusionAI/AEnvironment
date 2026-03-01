@@ -81,6 +81,7 @@ class EnvInstance(BaseModel):
     created_at: str = Field(description="Creation time")
     updated_at: str = Field(description="Update time")
     ip: Optional[str] = Field(None, description="Instance IP")
+    data_url: Optional[str] = Field(None, description="MCP data endpoint URL")
 
 
 class EnvInstanceCreateRequest(BaseModel):

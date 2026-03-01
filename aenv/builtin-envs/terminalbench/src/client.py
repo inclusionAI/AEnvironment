@@ -21,6 +21,7 @@ usage:
     python client.py http://ip:port/mcp # Custom HTTP endpoint
     python client.py ./server.py        # Use STDIO transport
 """
+
 import asyncio
 import json
 import sys

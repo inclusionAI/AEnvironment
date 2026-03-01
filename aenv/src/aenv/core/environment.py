@@ -834,6 +834,32 @@ class Environment:
                 f"{self._log_prefix()} Environment instance created with ID: {self._instance.id}"
             )
 
+            # Update URLs to use instance's actual IP/data_url
+            if self._instance.data_url:
+                # Use data_url from API response if available (Docker mode)
+                self.aenv_data_url = self._instance.data_url
+                # Extract base URL (remove /mcp path)
+                base_url = self.aenv_data_url.rsplit("/mcp", 1)[0]
+                self.aenv_health_url = base_url + "/health"
+                self.aenv_reward_url = base_url + "/task/reward"
+                self.aenv_functions_base_url = base_url + "/functions"
+                logger.info(
+                    f"{self._log_prefix()} Using data_url from API: {self.aenv_data_url}"
+                )
+            elif self._instance.ip:
+                # Fallback to IP-based URL construction (K8s mode)
+                self.aenv_data_url = make_mcp_url(self._instance.ip, 8081, "/mcp")
+                self.aenv_health_url = make_mcp_url(self._instance.ip, 8081, "/health")
+                self.aenv_reward_url = make_mcp_url(
+                    self._instance.ip, 8081, "/task/reward"
+                )
+                self.aenv_functions_base_url = make_mcp_url(
+                    self._instance.ip, 8081, "/functions"
+                )
+                logger.info(
+                    f"{self._log_prefix()} Constructed data_url from IP: {self.aenv_data_url}"
+                )
+
             await self.wait_for_ready(timeout=self._startup_timeout)
             logger.info(f"{self._log_prefix()} Environment ready: {self.env_name}")
 

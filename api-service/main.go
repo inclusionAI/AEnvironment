@@ -48,7 +48,7 @@ var (
 
 func init() {
 	pflag.StringVar(&scheduleAddr, "schedule-addr", "", "Meta service address (host:port)")
-	pflag.StringVar(&scheduleType, "schedule-type", "k8s", "sandbox service schedule type, currently only 'k8s', 'standard' support")
+	pflag.StringVar(&scheduleType, "schedule-type", "k8s", "sandbox service schedule type, supports 'k8s', 'docker', 'standard', 'faas'")
 	pflag.StringVar(&backendAddr, "backend-addr", "", "backend service address (host:port)")
 
 	pflag.Int64Var(&qps, "qps", int64(100), "total qps limit")
@@ -101,6 +101,11 @@ func main() {
 	case "k8s":
 		scheduleClient = service.NewScheduleClient(scheduleAddr)
 		envServiceController = controller.NewEnvServiceController(scheduleClient, backendClient, redisClient)
+	case "docker":
+		scheduleClient = service.NewDockerClient(scheduleAddr)
+		// Docker mode does not support EnvService (long-term services) yet
+		envServiceController = nil
+		log.Printf("Docker engine enabled, EnvService is not supported in this mode")
 	case "standard":
 		scheduleClient = service.NewEnvInstanceClient(scheduleAddr)
 	case "faas":

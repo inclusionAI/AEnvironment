@@ -402,7 +402,7 @@ asyncio.run(basic_example())
 ### Constructor Parameters
 
 | Parameter Name | Type | Default | Description | Use Case |
-|----------------|------|---------|-------------|----------|
+|----------------| ------ |---------|-------------|----------|
 | `env_name` | str | Required | Environment name | Identify environment instance |
 | `datasource` | str | `""` | Data source path | Mount data volumes |
 | `ttl` | str | `"30m"` | Lifecycle | Auto-destruction time |

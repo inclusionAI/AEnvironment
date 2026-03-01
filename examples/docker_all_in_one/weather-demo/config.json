@@ -1,0 +1,29 @@
+{
+    "name": "weather-demo",
+    "version": "1.0.0-docker",
+    "tags": [
+        "docker",
+        "python",
+        "demo",
+        "weather"
+    ],
+    "status": "Ready",
+    "description": "Weather demo environment for Docker Engine mode",
+    "artifacts": [
+        {
+            "type": "image",
+            "content": "docker.io/aenv/weather-demo:1.0.0-docker"
+        }
+    ],
+    "buildConfig": {
+        "dockerfile": "./Dockerfile"
+    },
+    "deployConfig": {
+        "cpu": "1",
+        "memory": "512M",
+        "os": "linux",
+        "ports": [
+            "8081:8081"
+        ]
+    }
+}

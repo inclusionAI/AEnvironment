@@ -1,7 +1,7 @@
 # Build stage
 FROM golang:1.21-alpine AS builder
 
-RUN apk add --no-cache git
+RUN apk add --no-cache git ca-certificates
 
 WORKDIR /workspace
 
@@ -19,7 +19,10 @@ COPY controller/go.mod controller/go.sum ./controller/
 COPY envhub/go.mod envhub/go.sum ./envhub/
 COPY api-service/go.mod api-service/go.sum ./api-service/
 
-# Download dependencies (this layer will be cached if go.mod/go.sum don't change)
+# Download dependencies with workspace support
+# Note: Go workspace mode requires modules to be present, so we download from workspace root
+WORKDIR /workspace
+ENV GOWORK=/workspace/go.work
 WORKDIR /workspace/controller
 RUN set -e; \
     if ! go mod download -x; then \
@@ -27,7 +30,6 @@ RUN set -e; \
       sleep 5; \
       go mod download; \
     fi
-
 WORKDIR /workspace
 
 # Copy source code after dependencies are downloaded
@@ -47,9 +49,12 @@ WORKDIR /workspace
 # Runtime stage
 FROM alpine:3.19
 
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata wget
 
 COPY --from=builder /workspace/controller/controller /usr/bin/controller
+
+# Set Docker API version to support newer Docker daemon versions
+ENV DOCKER_API_VERSION=1.44
 
 EXPOSE 8081
 

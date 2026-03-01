@@ -50,7 +50,7 @@ Each environment project contains a core configuration file: `config.json`
 ### Configuration Fields
 
 | Field | Type | Required | Description |
-|-------|------|----------|-------------|
+| ------- | ------ | ---------- | ------------- |
 | `name` | string | Yes | Unique environment identifier |
 | `version` | string | Yes | Semantic version number |
 | `description` | string | No | Human-readable environment description |
