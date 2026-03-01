@@ -239,21 +239,38 @@ def quick_cleanup(*paths: str) -> bool:
 
 # Convenient class supporting with operations
 class TempArchive:
-    """Temporary archive context manager"""
+    """Temporary archive context manager with optional parallel compression"""
 
-    def __init__(self, source_dir: str, **pack_kwargs):
+    def __init__(self, source_dir: str, use_parallel: bool = True, **pack_kwargs):
+        """
+        Initialize TempArchive.
+
+        Args:
+            source_dir: Source directory to archive
+            use_parallel: Whether to use parallel compression (pigz) when available
+            **pack_kwargs: Additional arguments passed to pack function
+        """
         self.source_dir = source_dir
+        self.use_parallel = use_parallel
         self.pack_kwargs = pack_kwargs
         self.archive_path = None
 
-        if pack_kwargs is None:
-            pack_kwargs = {"exclude_patterns": ["__pycache__"]}
-            self.pack_kwargs = pack_kwargs
+        if not pack_kwargs:
+            self.pack_kwargs = {"exclude_patterns": ["__pycache__"]}
 
     def __enter__(self):
-        self.archive_path = ArchiveTool.pack_directory(
-            self.source_dir, **self.pack_kwargs
-        )
+        if self.use_parallel:
+            from cli.utils.compression import pack_directory_parallel
+
+            self.archive_path = pack_directory_parallel(
+                self.source_dir,
+                exclude_patterns=self.pack_kwargs.get("exclude_patterns"),
+                use_parallel=True,
+            )
+        else:
+            self.archive_path = ArchiveTool.pack_directory(
+                self.source_dir, **self.pack_kwargs
+            )
         return self.archive_path
 
     def __exit__(self, exc_type, exc_val, exc_tb):
