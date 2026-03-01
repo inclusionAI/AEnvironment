@@ -94,6 +94,7 @@ func (ctrl *EnvInstanceController) CreateEnvInstance(c *gin.Context) {
 		}
 		secondImageName := imagePrefix + ":" + req.Datasource
 		backendEnv.DeployConfig["secondImageName"] = secondImageName
+		backendEnv.DeployConfig["dataSource"] = req.Datasource
 	}
 	if req.EnvironmentVariables != nil {
 		backendEnv.DeployConfig["environment_variables"] = req.EnvironmentVariables
