@@ -54,18 +54,28 @@ func IncrementCleanupFailure() {
 	cleanupFailureCount.Inc()
 }
 
-// MetricsMiddleware records HTTP request metrics
+// MetricsMiddleware records HTTP request metrics.
+// Excludes /health endpoint errors from being recorded as failures,
+// since proxy-less /health calls (e.g., K8s liveness probes) are expected
+// to return non-error status and should not pollute error metrics.
 func MetricsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 
 		c.Next()
 
-		status := fmt.Sprintf("%d", c.Writer.Status())
 		endpoint := c.FullPath()
 		if endpoint == "" {
 			endpoint = c.Request.URL.Path
 		}
+
+		// Skip recording error metrics for /health endpoint
+		statusCode := c.Writer.Status()
+		if endpoint == "/health" && statusCode >= 400 {
+			return
+		}
+
+		status := fmt.Sprintf("%d", statusCode)
 		method := c.Request.Method
 		durationMs := float64(time.Since(start).Milliseconds())
 
