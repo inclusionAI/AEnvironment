@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"api-service/controller"
+	"api-service/metrics"
 	"api-service/middleware"
 	"api-service/service"
 
@@ -169,6 +170,15 @@ func main() {
 		WithMetrics(middleware.IncrementCleanupSuccess, middleware.IncrementCleanupFailure)
 	go cleanManager.Start()
 	defer cleanManager.Stop()
+
+	// Start metrics collector for instance metrics (faas mode only)
+	if scheduleType == "faas" {
+		if faasClient, ok := scheduleClient.(*service.FaaSClient); ok {
+			metricsCollector := metrics.NewCollector(faasClient, 5*time.Minute)
+			go metricsCollector.Start()
+			defer metricsCollector.Stop()
+		}
+	}
 
 	// Block main goroutine
 	select {}

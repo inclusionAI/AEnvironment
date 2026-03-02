@@ -117,6 +117,7 @@ class Environment:
         api_key: Optional[str] = None,
         skip_for_healthy: bool = False,
         owner: Optional[str] = None,
+        labels: Optional[Dict[str, str]] = None,
     ):
         """
         Initialize environment.
@@ -141,6 +142,7 @@ class Environment:
         self.dummy_instance_ip = os.getenv("DUMMY_INSTANCE_IP")
         self.skip_for_healthy = skip_for_healthy
         self.owner = owner
+        self.labels = labels
 
         if not aenv_url:
             aenv_url = self.dummy_instance_ip or os.getenv(
@@ -829,6 +831,7 @@ class Environment:
                 arguments=self.arguments,
                 ttl=self.ttl,
                 owner=self.owner,
+                labels=self.labels,
             )
             logger.info(
                 f"{self._log_prefix()} Environment instance created with ID: {self._instance.id}"

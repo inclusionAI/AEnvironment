@@ -17,8 +17,10 @@ limitations under the License.
 package middleware
 
 import (
-	"strconv"
+	"fmt"
 	"time"
+
+	"api-service/metrics"
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
@@ -26,45 +28,6 @@ import (
 )
 
 var (
-	// Request counter
-	requestCount = promauto.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "http_requests_total",
-			Help: "Total number of HTTP requests made",
-		},
-		[]string{"method", "endpoint", "status"},
-	)
-
-	// Request duration histogram
-	requestDuration = promauto.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "http_request_duration_seconds",
-			Help:    "HTTP request duration in seconds",
-			Buckets: prometheus.DefBuckets,
-		},
-		[]string{"method", "endpoint"},
-	)
-
-	// Request size
-	requestSize = promauto.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "http_request_size_bytes",
-			Help:    "HTTP request size in bytes",
-			Buckets: prometheus.ExponentialBuckets(100, 10, 5),
-		},
-		[]string{"method", "endpoint"},
-	)
-
-	// Response size
-	responseSize = promauto.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Name:    "http_response_size_bytes",
-			Help:    "HTTP response size in bytes",
-			Buckets: prometheus.ExponentialBuckets(100, 10, 5),
-		},
-		[]string{"method", "endpoint"},
-	)
-
 	// Auto cleanup metrics
 	cleanupSuccessCount = promauto.NewCounter(
 		prometheus.CounterOpts{
@@ -91,33 +54,22 @@ func IncrementCleanupFailure() {
 	cleanupFailureCount.Inc()
 }
 
-// MetricsMiddleware metrics collection middleware
+// MetricsMiddleware records HTTP request metrics
 func MetricsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
-		path := c.Request.URL.Path
-		method := c.Request.Method
 
-		// Process request
 		c.Next()
 
-		// Metrics collection after request processing completes
-		statusCode := c.Writer.Status()
-		duration := time.Since(start)
-		responseSizeVal := float64(c.Writer.Size())
-		requestSizeVal := float64(c.Request.ContentLength)
-
-		// Record metrics
-		requestCount.WithLabelValues(method, path, strconv.Itoa(statusCode)).Inc()
-		requestDuration.WithLabelValues(method, path).Observe(duration.Seconds())
-
-		if requestSizeVal >= 0 {
-			requestSize.WithLabelValues(method, path).Observe(requestSizeVal)
+		status := fmt.Sprintf("%d", c.Writer.Status())
+		endpoint := c.FullPath()
+		if endpoint == "" {
+			endpoint = c.Request.URL.Path
 		}
+		method := c.Request.Method
+		durationMs := float64(time.Since(start).Milliseconds())
 
-		if responseSizeVal >= 0 {
-			responseSize.WithLabelValues(method, path).Observe(responseSizeVal)
-		}
-
+		metrics.RequestsTotal.WithLabelValues(method, endpoint, status).Inc()
+		metrics.RequestDurationMs.WithLabelValues(method, endpoint, status).Observe(durationMs)
 	}
 }
