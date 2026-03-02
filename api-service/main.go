@@ -140,6 +140,7 @@ func main() {
 	// MCP dedicated routing engine
 	mcpLogger := middleware.InitLogger("/home/admin/logs/api-service-mcp.log")
 	mcpRouter := gin.Default()
+	mcpRouter.Use(middleware.MetricsMiddleware())
 	mcpRouter.Use(middleware.LoggingMiddleware(mcpLogger))
 	mcpGroup := mcpRouter.Group("/")
 	controller.NewMCPGateway(mcpGroup)
