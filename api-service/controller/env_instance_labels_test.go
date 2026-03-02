@@ -8,9 +8,64 @@ import (
 	"testing"
 
 	"api-service/models"
+	backend "envhub/models"
 
 	"github.com/gin-gonic/gin"
 )
+
+// mockEnvInstanceService implements service.EnvInstanceService for testing
+type mockEnvInstanceService struct {
+	createFn func(req *backend.Env) (*models.EnvInstance, error)
+	lastReq  *backend.Env
+}
+
+func (m *mockEnvInstanceService) CreateEnvInstance(req *backend.Env) (*models.EnvInstance, error) {
+	m.lastReq = req
+	if m.createFn != nil {
+		return m.createFn(req)
+	}
+	return &models.EnvInstance{
+		ID:     "test-instance-id",
+		Status: "Running",
+		Labels: map[string]string{},
+	}, nil
+}
+
+func (m *mockEnvInstanceService) GetEnvInstance(id string) (*models.EnvInstance, error) {
+	return nil, nil
+}
+
+func (m *mockEnvInstanceService) DeleteEnvInstance(id string) error {
+	return nil
+}
+
+func (m *mockEnvInstanceService) ListEnvInstances(envName string) ([]*models.EnvInstance, error) {
+	return nil, nil
+}
+
+func (m *mockEnvInstanceService) Warmup(req *backend.Env) error {
+	return nil
+}
+
+func (m *mockEnvInstanceService) WarmupAsyncChan(req *backend.Env) <-chan error {
+	ch := make(chan error, 1)
+	close(ch)
+	return ch
+}
+
+func (m *mockEnvInstanceService) Cleanup() error {
+	return nil
+}
+
+func (m *mockEnvInstanceService) PrepareFunction(name string, req *backend.Env) error {
+	return nil
+}
+
+// mockBackendClient is a test helper for backend client
+type mockBackendClient struct {
+	env *backend.Env
+	err error
+}
 
 func TestCreateEnvInstanceRequest_LabelsBinding(t *testing.T) {
 	// Test that JSON binding correctly parses labels
