@@ -69,11 +69,7 @@ func MetricsMiddleware() gin.HandlerFunc {
 			endpoint = c.Request.URL.Path
 		}
 
-		// Skip recording error metrics for /health endpoint
 		statusCode := c.Writer.Status()
-		if endpoint == "/health" && statusCode >= 400 {
-			return
-		}
 
 		status := fmt.Sprintf("%d", statusCode)
 		method := c.Request.Method
