@@ -26,10 +26,11 @@ from aenv.core.function_registry import (
     register_health,
     register_reward,
 )
+from aenv.core.logging import setup_logging
 from aenv.core.models import EnvInstance, EnvStatus
 from aenv.core.tool import Tool, get_registry, register_tool
 
-__version__ = "0.1.0"
+__version__ = "0.1.5"
 __all__ = [
     "Tool",
     "register_tool",
@@ -43,4 +44,5 @@ __all__ = [
     "EnvironmentError",
     "EnvInstance",
     "EnvStatus",
+    "setup_logging",
 ]
