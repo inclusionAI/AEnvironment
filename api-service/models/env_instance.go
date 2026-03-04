@@ -52,14 +52,15 @@ func (s EnvInstanceStatus) String() string {
 
 // EnvInstance environment instance object
 type EnvInstance struct {
-	ID        string       `json:"id"`         // Instance id, corresponds to podname
-	Env       *backend.Env `json:"env"`        // Env object
-	Status    string       `json:"status"`     // Instance status
-	CreatedAt string       `json:"created_at"` // Creation time
-	UpdatedAt string       `json:"updated_at"` // Update time
-	IP        string       `json:"ip"`         // Instance IP
-	TTL       string       `json:"ttl"`        // time to live
-	Owner     string       `json:"owner"`      // Instance owner (user who created it)
+	ID        string            `json:"id"`               // Instance id, corresponds to podname
+	Env       *backend.Env      `json:"env"`              // Env object
+	Status    string            `json:"status"`           // Instance status
+	CreatedAt string            `json:"created_at"`       // Creation time
+	UpdatedAt string            `json:"updated_at"`       // Update time
+	IP        string            `json:"ip"`               // Instance IP
+	TTL       string            `json:"ttl"`              // time to live
+	Owner     string            `json:"owner"`            // Instance owner (user who created it)
+	Labels    map[string]string `json:"labels,omitempty"` // User-defined business labels
 }
 
 // NewEnvInstance creates a new environment instance object

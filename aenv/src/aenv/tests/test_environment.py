@@ -16,7 +16,7 @@
 Tests for AEnv environment functionality.
 """
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -177,3 +177,161 @@ class TestEnvironment:
         assert isinstance(environment, Environment)
         assert environment.env_name == "test-env"
         assert environment.scheduler_url == "http://test.com"
+
+
+class TestMCPSessionReuse:
+    """Tests for MCP session reuse behavior.
+
+    Verifies that _ensure_mcp_session() lazily creates a single MCP session
+    and reuses it across multiple call_tool()/list_tools() invocations,
+    only tearing it down on release() or when the connection is lost.
+    """
+
+    def _make_env(self):
+        """Create an Environment instance pre-configured for unit testing.
+
+        Returns an Environment with _initialized=True and a fake _instance
+        so that call_tool / list_tools skip the real initialization path.
+        """
+        env = Environment("test-env")
+        env._initialized = True
+
+        # Minimal fake instance so _get_mcp_client does not complain
+        class _FakeInstance:
+            ip = "127.0.0.1"
+            id = "fake-id"
+
+        env._instance = _FakeInstance()
+        env.proxy_headers = {"AEnvCore-MCPProxy-URL": "http://127.0.0.1:8081"}
+        return env
+
+    def _make_mock_client(self):
+        """Build a mock fastmcp Client with sensible defaults.
+
+        Uses MagicMock as the base so that synchronous methods like
+        is_connected() return plain values (not coroutines).  Async
+        methods (__aenter__, call_tool_mcp, etc.) are explicitly set
+        to AsyncMock instances.
+        """
+        mock_client = MagicMock()
+
+        # is_connected() is a regular (sync) method on the real Client
+        mock_client.is_connected.return_value = True
+
+        # __aenter__ / __aexit__ are async on the real Client
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+
+        # call_tool_mcp returns a result with .content=[] and .isError=False
+        call_result = MagicMock()
+        call_result.content = []
+        call_result.isError = False
+        mock_client.call_tool_mcp = AsyncMock(return_value=call_result)
+
+        # list_tools returns an empty list
+        mock_client.list_tools = AsyncMock(return_value=[])
+
+        # close() is async on the real Client
+        mock_client.close = AsyncMock()
+
+        return mock_client
+
+    def _patch_get_mcp_client(self, env, mock_client):
+        """Create a side-effect function for _get_mcp_client that also
+        sets env._mcp_client, mirroring the real implementation."""
+
+        async def _side_effect():
+            env._mcp_client = mock_client
+            return mock_client
+
+        return patch.object(env, "_get_mcp_client", side_effect=_side_effect)
+
+    @pytest.mark.asyncio
+    async def test_session_created_once_across_multiple_call_tool(self):
+        """Calling call_tool 3 times should only establish the MCP session once."""
+        env = self._make_env()
+        mock_client = self._make_mock_client()
+
+        with self._patch_get_mcp_client(env, mock_client):
+            await env.call_tool("tool_a", {"x": 1})
+            await env.call_tool("tool_b", {"x": 2})
+            await env.call_tool("tool_c", {"x": 3})
+
+        # Session established exactly once
+        assert mock_client.__aenter__.await_count == 1
+        # Each call_tool invoked call_tool_mcp
+        assert mock_client.call_tool_mcp.await_count == 3
+        # Session never torn down (that only happens in release)
+        assert mock_client.__aexit__.await_count == 0
+
+    @pytest.mark.asyncio
+    async def test_session_shared_between_list_and_call(self):
+        """list_tools and call_tool should share the same MCP session."""
+        env = self._make_env()
+        mock_client = self._make_mock_client()
+
+        with self._patch_get_mcp_client(env, mock_client):
+            await env.list_tools()
+            await env.call_tool("tool_a", {"x": 1})
+
+        # Only one session established for both operations
+        assert mock_client.__aenter__.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_release_closes_session(self):
+        """After call_tool, release() should close the client and reset state."""
+        env = self._make_env()
+        mock_client = self._make_mock_client()
+
+        with self._patch_get_mcp_client(env, mock_client):
+            await env.call_tool("tool_a", {"x": 1})
+
+        # Sanity: session is active before release
+        assert env._mcp_session_active is True
+        assert env._mcp_client is not None
+
+        await env.release()
+
+        # close() was called on the client
+        mock_client.close.assert_awaited_once()
+        # State fully reset
+        assert env._mcp_session_active is False
+        assert env._mcp_client is None
+
+    @pytest.mark.asyncio
+    async def test_session_reconnect_on_disconnect(self):
+        """If the connection drops, the next call should re-establish the session."""
+        env = self._make_env()
+        mock_client = self._make_mock_client()
+
+        # We need _get_mcp_client to return a fresh mock on reconnect
+        # because _ensure_mcp_session sets self._mcp_client = None before
+        # calling _get_mcp_client again.
+        mock_client_2 = self._make_mock_client()
+        get_client_calls = [mock_client, mock_client_2]
+
+        async def _get_mcp_client_side_effect():
+            client = get_client_calls.pop(0)
+            env._mcp_client = client
+            return client
+
+        with patch.object(
+            env, "_get_mcp_client", side_effect=_get_mcp_client_side_effect
+        ):
+            # First call: session created normally
+            await env.call_tool("tool_a", {"x": 1})
+            assert mock_client.__aenter__.await_count == 1
+
+            # Simulate connection loss
+            mock_client.is_connected.return_value = False
+
+            # Second call: should detect disconnect and reconnect
+            await env.call_tool("tool_b", {"x": 2})
+
+        # First client entered once, second client entered once = 2 total sessions
+        assert mock_client.__aenter__.await_count == 1
+        assert mock_client_2.__aenter__.await_count == 1
+        # First client was closed during stale-client cleanup
+        mock_client.close.assert_awaited_once()
+        # Second call went through the new client
+        mock_client_2.call_tool_mcp.assert_awaited_once()

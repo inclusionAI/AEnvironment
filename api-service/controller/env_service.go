@@ -17,6 +17,7 @@ limitations under the License.
 package controller
 
 import (
+	"api-service/metrics"
 	"api-service/service"
 	"api-service/util"
 	backendmodels "envhub/models"
@@ -81,6 +82,7 @@ type CreateEnvServiceRequest struct {
 func (ctrl *EnvServiceController) CreateEnvService(c *gin.Context) {
 	var req CreateEnvServiceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		metrics.ServiceOpsTotal.WithLabelValues("create", req.EnvName, "error").Inc()
 		backendmodels.JSONErrorWithMessage(c, 400, "Invalid request parameters: "+err.Error())
 		return
 	}
@@ -93,15 +95,18 @@ func (ctrl *EnvServiceController) CreateEnvService(c *gin.Context) {
 	// Split name and version using SplitEnvNameVersionStrict function
 	name, version, err := util.SplitEnvNameVersionStrict(req.EnvName)
 	if err != nil {
+		metrics.ServiceOpsTotal.WithLabelValues("create", req.EnvName, "error").Inc()
 		backendmodels.JSONErrorWithMessage(c, 400, "Invalid EnvName format: "+err.Error())
 		return
 	}
 	backendEnv, err := ctrl.backendClient.GetEnvByVersion(name, version)
 	if err != nil {
+		metrics.ServiceOpsTotal.WithLabelValues("create", req.EnvName, "error").Inc()
 		backendmodels.JSONErrorWithMessage(c, 500, "Failed to find environment: "+err.Error())
 		return
 	}
 	if backendEnv == nil {
+		metrics.ServiceOpsTotal.WithLabelValues("create", req.EnvName, "error").Inc()
 		backendmodels.JSONErrorWithMessage(c, 404, "Environment not found: "+req.EnvName)
 		return
 	}
@@ -162,12 +167,14 @@ func (ctrl *EnvServiceController) CreateEnvService(c *gin.Context) {
 	// Call ScheduleClient to create Service
 	envService, err := ctrl.scheduleClient.CreateService(backendEnv)
 	if err != nil {
+		metrics.ServiceOpsTotal.WithLabelValues("create", req.EnvName, "error").Inc()
 		backendmodels.JSONErrorWithMessage(c, 500, "Failed to create service: "+err.Error())
 		return
 	}
 	envService.Env = backendEnv
 
 	// Construct response data
+	metrics.ServiceOpsTotal.WithLabelValues("create", req.EnvName, "success").Inc()
 	backendmodels.JSONSuccess(c, envService)
 }
 
@@ -176,15 +183,18 @@ func (ctrl *EnvServiceController) CreateEnvService(c *gin.Context) {
 func (ctrl *EnvServiceController) GetEnvService(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
+		metrics.ServiceOpsTotal.WithLabelValues("get", id, "error").Inc()
 		backendmodels.JSONErrorWithMessage(c, 400, "Missing id parameter")
 		return
 	}
 	// Call ScheduleClient to query Service
 	envService, err := ctrl.scheduleClient.GetService(id)
 	if err != nil {
+		metrics.ServiceOpsTotal.WithLabelValues("get", id, "error").Inc()
 		backendmodels.JSONErrorWithMessage(c, 500, "Failed to query service: "+err.Error())
 		return
 	}
+	metrics.ServiceOpsTotal.WithLabelValues("get", id, "success").Inc()
 	backendmodels.JSONSuccess(c, envService)
 }
 
@@ -193,6 +203,7 @@ func (ctrl *EnvServiceController) GetEnvService(c *gin.Context) {
 func (ctrl *EnvServiceController) DeleteEnvService(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
+		metrics.ServiceOpsTotal.WithLabelValues("delete", id, "error").Inc()
 		backendmodels.JSONErrorWithMessage(c, 400, "Missing id parameter")
 		return
 	}
@@ -203,13 +214,16 @@ func (ctrl *EnvServiceController) DeleteEnvService(c *gin.Context) {
 	// Call ScheduleClient to delete Service
 	success, err := ctrl.scheduleClient.DeleteService(id, deleteStorage)
 	if err != nil {
+		metrics.ServiceOpsTotal.WithLabelValues("delete", id, "error").Inc()
 		backendmodels.JSONErrorWithMessage(c, 500, "Failed to delete service: "+err.Error())
 		return
 	}
 	if !success {
+		metrics.ServiceOpsTotal.WithLabelValues("delete", id, "error").Inc()
 		backendmodels.JSONErrorWithMessage(c, 500, "Service deletion returned false")
 		return
 	}
+	metrics.ServiceOpsTotal.WithLabelValues("delete", id, "success").Inc()
 	backendmodels.JSONSuccess(c, "Deleted successfully")
 }
 
@@ -225,12 +239,14 @@ type UpdateEnvServiceRequest struct {
 func (ctrl *EnvServiceController) UpdateEnvService(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
+		metrics.ServiceOpsTotal.WithLabelValues("update", id, "error").Inc()
 		backendmodels.JSONErrorWithMessage(c, 400, "Missing id parameter")
 		return
 	}
 
 	var req UpdateEnvServiceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		metrics.ServiceOpsTotal.WithLabelValues("update", id, "error").Inc()
 		backendmodels.JSONErrorWithMessage(c, 400, "Invalid request parameters: "+err.Error())
 		return
 	}
@@ -245,9 +261,11 @@ func (ctrl *EnvServiceController) UpdateEnvService(c *gin.Context) {
 	// Call ScheduleClient to update Service
 	envService, err := ctrl.scheduleClient.UpdateService(id, updateReq)
 	if err != nil {
+		metrics.ServiceOpsTotal.WithLabelValues("update", id, "error").Inc()
 		backendmodels.JSONErrorWithMessage(c, 500, "Failed to update service: "+err.Error())
 		return
 	}
+	metrics.ServiceOpsTotal.WithLabelValues("update", id, "success").Inc()
 	backendmodels.JSONSuccess(c, envService)
 }
 
@@ -272,8 +290,10 @@ func (ctrl *EnvServiceController) ListEnvServices(c *gin.Context) {
 
 	services, err := ctrl.scheduleClient.ListServices(envName)
 	if err != nil {
+		metrics.ServiceOpsTotal.WithLabelValues("list", id, "error").Inc()
 		backendmodels.JSONErrorWithMessage(c, 500, "Failed to list services: "+err.Error())
 		return
 	}
+	metrics.ServiceOpsTotal.WithLabelValues("list", id, "success").Inc()
 	backendmodels.JSONSuccess(c, services)
 }

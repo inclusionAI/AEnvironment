@@ -81,6 +81,7 @@ class EnvInstance(BaseModel):
     created_at: str = Field(description="Creation time")
     updated_at: str = Field(description="Update time")
     ip: Optional[str] = Field(None, description="Instance IP")
+    labels: Optional[Dict[str, str]] = Field(None, description="Resource labels")
 
 
 class EnvInstanceCreateRequest(BaseModel):
@@ -89,11 +90,12 @@ class EnvInstanceCreateRequest(BaseModel):
     envName: str = Field(description="Environment name")
     datasource: str = Field(default="", description="Data source")
     ttl: str = Field(default="", description="time_to_live")
-    environment_variables: Optional[Dict[str, str]] = (
-        Field(None, description="Environment variables"),
+    environment_variables: Optional[Dict[str, str]] = Field(
+        None, description="Environment variables"
     )
-    arguments: Optional[List[str]] = (Field(None, description="Startup arguments"),)
+    arguments: Optional[List[str]] = Field(None, description="Startup arguments")
     owner: Optional[str] = Field(None, description="Instance owner")
+    labels: Optional[Dict[str, str]] = Field(None, description="Resource labels")
 
 
 class EnvInstanceListResponse(BaseModel):

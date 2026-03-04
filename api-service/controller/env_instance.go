@@ -17,6 +17,7 @@ limitations under the License.
 package controller
 
 import (
+	"api-service/metrics"
 	"api-service/models"
 	backendmodels "envhub/models"
 
@@ -55,6 +56,7 @@ type CreateEnvInstanceRequest struct {
 	Arguments            []string          `json:"arguments"`
 	TTL                  string            `json:"ttl"`
 	Owner                string            `json:"owner"`
+	Labels               map[string]string `json:"labels,omitempty"`
 }
 
 // CreateEnvInstance creates a new EnvInstance
@@ -62,6 +64,7 @@ type CreateEnvInstanceRequest struct {
 func (ctrl *EnvInstanceController) CreateEnvInstance(c *gin.Context) {
 	var req CreateEnvInstanceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		metrics.InstanceOpsTotal.WithLabelValues("create", req.EnvName, "error").Inc()
 		backendmodels.JSONErrorWithMessage(c, 400, "Invalid request parameters: "+err.Error())
 		return
 	}
@@ -69,15 +72,18 @@ func (ctrl *EnvInstanceController) CreateEnvInstance(c *gin.Context) {
 	// Split name and version using SplitEnvNameVersionStrict function
 	name, version, err := util.SplitEnvNameVersionStrict(req.EnvName)
 	if err != nil {
+		metrics.InstanceOpsTotal.WithLabelValues("create", req.EnvName, "error").Inc()
 		backendmodels.JSONErrorWithMessage(c, 400, "Invalid EnvName format: "+err.Error())
 		return
 	}
 	backendEnv, err := ctrl.backendClient.GetEnvByVersion(name, version)
 	if err != nil {
+		metrics.InstanceOpsTotal.WithLabelValues("create", req.EnvName, "error").Inc()
 		backendmodels.JSONErrorWithMessage(c, 500, "Failed to find environment: "+err.Error())
 		return
 	}
 	if backendEnv == nil {
+		metrics.InstanceOpsTotal.WithLabelValues("create", req.EnvName, "error").Inc()
 		backendmodels.JSONErrorWithMessage(c, 404, "Environment not found: "+req.EnvName)
 		return
 	}
@@ -110,9 +116,14 @@ func (ctrl *EnvInstanceController) CreateEnvInstance(c *gin.Context) {
 	if req.Owner != "" {
 		backendEnv.DeployConfig["owner"] = req.Owner
 	}
+	// Set labels for instance
+	if req.Labels != nil {
+		backendEnv.DeployConfig["labels"] = req.Labels
+	}
 	// Call ScheduleClient to create Pod
 	envInstance, err := ctrl.envInstanceService.CreateEnvInstance(backendEnv)
 	if err != nil {
+		metrics.InstanceOpsTotal.WithLabelValues("create", req.EnvName, "error").Inc()
 		backendmodels.JSONErrorWithMessage(c, 500, "Failed to create: "+err.Error())
 		return
 	}
@@ -134,6 +145,7 @@ func (ctrl *EnvInstanceController) CreateEnvInstance(c *gin.Context) {
 		}
 	}
 	// Construct response data
+	metrics.InstanceOpsTotal.WithLabelValues("create", req.EnvName, "success").Inc()
 	backendmodels.JSONSuccess(c, envInstance)
 }
 
@@ -142,15 +154,18 @@ func (ctrl *EnvInstanceController) CreateEnvInstance(c *gin.Context) {
 func (ctrl *EnvInstanceController) GetEnvInstance(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
+		metrics.InstanceOpsTotal.WithLabelValues("get", id, "error").Inc()
 		backendmodels.JSONErrorWithMessage(c, 400, "Missing id parameter")
 		return
 	}
 	// Call ScheduleClient to query Pod
 	envInstance, err := ctrl.envInstanceService.GetEnvInstance(id)
 	if err != nil {
+		metrics.InstanceOpsTotal.WithLabelValues("get", id, "error").Inc()
 		backendmodels.JSONErrorWithMessage(c, 500, "Failed to query: "+err.Error())
 		return
 	}
+	metrics.InstanceOpsTotal.WithLabelValues("get", id, "success").Inc()
 	backendmodels.JSONSuccess(c, envInstance)
 }
 
@@ -159,6 +174,7 @@ func (ctrl *EnvInstanceController) GetEnvInstance(c *gin.Context) {
 func (ctrl *EnvInstanceController) DeleteEnvInstance(c *gin.Context) {
 	id := c.Param("id")
 	if id == "" {
+		metrics.InstanceOpsTotal.WithLabelValues("delete", id, "error").Inc()
 		backendmodels.JSONErrorWithMessage(c, 400, "Missing id parameter")
 		return
 	}
@@ -166,9 +182,11 @@ func (ctrl *EnvInstanceController) DeleteEnvInstance(c *gin.Context) {
 	// Call ScheduleClient to delete Pod
 	err := ctrl.envInstanceService.DeleteEnvInstance(id)
 	if err != nil {
+		metrics.InstanceOpsTotal.WithLabelValues("delete", id, "error").Inc()
 		backendmodels.JSONErrorWithMessage(c, 500, "Failed to delete: "+err.Error())
 		return
 	}
+	metrics.InstanceOpsTotal.WithLabelValues("delete", id, "success").Inc()
 	backendmodels.JSONSuccess(c, "Deleted successfully")
 	token := util.GetCurrentToken(c)
 	if token != nil && ctrl.redisClient != nil {
@@ -181,6 +199,7 @@ func (ctrl *EnvInstanceController) DeleteEnvInstance(c *gin.Context) {
 func (ctrl *EnvInstanceController) ListEnvInstances(c *gin.Context) {
 	token := util.GetCurrentToken(c)
 	if token == nil {
+		metrics.InstanceOpsTotal.WithLabelValues("list", "", "error").Inc()
 		backendmodels.JSONErrorWithMessage(c, 403, "token required")
 		return
 	}
@@ -209,6 +228,7 @@ func (ctrl *EnvInstanceController) ListEnvInstances(c *gin.Context) {
 				}
 			}
 			if !missingVersion {
+				metrics.InstanceOpsTotal.WithLabelValues("list", id, "success").Inc()
 				backendmodels.JSONSuccess(c, instances)
 				return
 			}
@@ -229,9 +249,11 @@ func (ctrl *EnvInstanceController) ListEnvInstances(c *gin.Context) {
 
 	instances, err := ctrl.envInstanceService.ListEnvInstances(envName)
 	if err != nil {
+		metrics.InstanceOpsTotal.WithLabelValues("list", id, "error").Inc()
 		backendmodels.JSONErrorWithMessage(c, 500, err.Error())
 		return
 	}
+	metrics.InstanceOpsTotal.WithLabelValues("list", id, "success").Inc()
 	backendmodels.JSONSuccess(c, instances)
 }
 

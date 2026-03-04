@@ -27,7 +27,6 @@ func NewFaaSClient(endpoint string) *FaaSClient {
 // CreateEnvInstance creates an environment instance by triggering the create-env function
 func (c *FaaSClient) CreateEnvInstance(req *backend.Env) (*models.EnvInstance, error) {
 	functionName := fmt.Sprintf("%s-%s", req.Name, req.Version)
-	// use datasource as runtime name
 	dynamicRuntimeName := ""
 	if name, ok := req.DeployConfig["dataSource"]; ok {
 		s, ok := name.(string)
@@ -36,15 +35,29 @@ func (c *FaaSClient) CreateEnvInstance(req *backend.Env) (*models.EnvInstance, e
 		}
 		dynamicRuntimeName = s
 	}
-	//if err := c.PrepareFunction(functionName, req); err != nil {
-	//	return nil, fmt.Errorf("prepare function failed: %v", err.Error())
-	//}
-	// Synchronously call the function
-	instanceId, err := c.CreateInstanceByFunction(functionName, dynamicRuntimeName, req.GetTTL())
+
+	// Extract labels from DeployConfig
+	var labels map[string]string
+	if l, ok := req.DeployConfig["labels"]; ok {
+		if labelMap, ok := l.(map[string]string); ok {
+			labels = labelMap
+		}
+	}
+	// Set "env" label if not already provided by user
+	if labels == nil {
+		labels = make(map[string]string)
+	}
+	if _, exists := labels["env"]; !exists {
+		labels["env"] = functionName
+	}
+
+	instanceId, err := c.CreateInstanceByFunction(functionName, dynamicRuntimeName, req.GetTTL(), labels)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create env instance %s: %v", functionName, err)
 	}
-	return models.NewEnvInstance(instanceId, req, ""), nil
+	envInstance := models.NewEnvInstance(instanceId, req, "")
+	envInstance.Labels = labels
+	return envInstance, nil
 }
 
 func (c *FaaSClient) PrepareFunction(functionName string, req *backend.Env) error {
@@ -99,7 +112,7 @@ func (c *FaaSClient) PrepareFunction(functionName string, req *backend.Env) erro
 	return nil
 }
 
-func (c *FaaSClient) CreateInstanceByFunction(name string, dynamicRuntimeName string, ttl string) (string, error) {
+func (c *FaaSClient) CreateInstanceByFunction(name string, dynamicRuntimeName string, ttl string, labels map[string]string) (string, error) {
 	f, err := c.GetFunction(name)
 	if err != nil {
 		return "", err
@@ -108,6 +121,7 @@ func (c *FaaSClient) CreateInstanceByFunction(name string, dynamicRuntimeName st
 	instanceId, err := c.InitializeFunction(f.Name, faas_model.FunctionInitializeOptions{
 		DynamicRuntimeName: dynamicRuntimeName,
 		TTL:                ttl,
+		Labels:             labels,
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to create functions instance from faas server: %v", err.Error())
@@ -132,6 +146,7 @@ func (c *FaaSClient) GetEnvInstance(id string) (*models.EnvInstance, error) {
 		CreatedAt: time.UnixMilli(instance.CreateTimestamp).Format(time.RFC3339),
 		UpdatedAt: time.Now().Format(time.RFC3339),
 		Status:    convertStatus(instance.Status),
+		Labels:    instance.Labels,
 		// Env field cannot be directly obtained from Instance, needs to rely on Create return or additional queries
 		// Can only be empty here, recommend maintaining through Create/CreateFromRecord
 		Env: nil,
@@ -166,6 +181,7 @@ func (c *FaaSClient) ListEnvInstances(envName string) ([]*models.EnvInstance, er
 			CreatedAt: time.UnixMilli(inst.CreateTimestamp).Format(time.RFC3339), // Could consider constructing from CreateTimestamp
 			UpdatedAt: time.Now().Format(time.RFC3339),
 			TTL:       inst.TTL,
+			Labels:    inst.Labels,
 			Env:       nil, // Cannot obtain full Env information from Instance
 		})
 	}
