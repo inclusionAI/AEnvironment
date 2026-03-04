@@ -165,6 +165,7 @@ class Environment:
         self._initialized = False
         self._client: Optional[AEnvSchedulerClient] = None
         self._mcp_client: Optional[Client] = None
+        self._mcp_session_active: bool = False
 
     def _log_prefix(self) -> str:
         """Get log prefix with instance ID."""
@@ -259,6 +260,7 @@ class Environment:
                 )
             finally:
                 self._mcp_client = None
+                self._mcp_session_active = False
 
         if self._client:
             if self._instance and not self.dummy_instance_ip:
@@ -300,23 +302,22 @@ class Environment:
         await self._ensure_initialized()
 
         try:
-            client = await self._get_mcp_client()
-            async with client:
-                tools = await client.list_tools()
-                logger.info(
-                    f"{self._log_prefix()} Found {len(tools)} tools in environment {self.env_name}"
-                )
+            client = await self._ensure_mcp_session()
+            tools = await client.list_tools()
+            logger.info(
+                f"{self._log_prefix()} Found {len(tools)} tools in environment {self.env_name}"
+            )
 
-                formatted_tools = [
-                    {
-                        "name": f"{self.env_name}/{tool.name}",
-                        "description": tool.description,
-                        "inputSchema": tool.inputSchema,
-                    }
-                    for tool in tools
-                ]
+            formatted_tools = [
+                {
+                    "name": f"{self.env_name}/{tool.name}",
+                    "description": tool.description,
+                    "inputSchema": tool.inputSchema,
+                }
+                for tool in tools
+            ]
 
-                return formatted_tools
+            return formatted_tools
         except Exception as e:
             logger.error(
                 f"{self._log_prefix()} Failed to list tools for {self.env_name}: {str(e)} | "
@@ -649,24 +650,23 @@ class Environment:
         )
 
         try:
-            client = await self._get_mcp_client()
-            async with client:
-                result = await client.call_tool_mcp(
-                    name=actual_tool_name, arguments=arguments, timeout=timeout
-                )
+            client = await self._ensure_mcp_session()
+            result = await client.call_tool_mcp(
+                name=actual_tool_name, arguments=arguments, timeout=timeout
+            )
 
-                # Convert FastMCP result to ToolResult
-                content = []
-                if result.content:
-                    for item in result.content:
-                        if hasattr(item, "text") and item.text:
-                            content.append({"type": "text", "text": item.text})
-                        elif hasattr(item, "type") and hasattr(item, "data"):
-                            content.append({"type": item.type, "data": item.data})
-                        else:
-                            content.append({"type": "text", "text": str(item)})
+            # Convert FastMCP result to ToolResult
+            content = []
+            if result.content:
+                for item in result.content:
+                    if hasattr(item, "text") and item.text:
+                        content.append({"type": "text", "text": item.text})
+                    elif hasattr(item, "type") and hasattr(item, "data"):
+                        content.append({"type": item.type, "data": item.data})
+                    else:
+                        content.append({"type": "text", "text": str(item)})
 
-                return ToolResult(content=content, is_error=result.isError)
+            return ToolResult(content=content, is_error=result.isError)
 
         except Exception as e:
             logger.error(
@@ -918,3 +918,60 @@ class Environment:
                 f"Timeout: {self.timeout}s "
             )
             raise EnvironmentError(f"Failed to create MCP client: {str(e)}")
+
+    async def _ensure_mcp_session(self) -> Client:
+        """
+        Ensure MCP client exists and its session is active.
+
+        Lazily creates the Client and enters its async context (establishing
+        the MCP session) on first call. Subsequent calls return the same
+        connected client. The session is only torn down in release().
+
+        Returns:
+            Connected Client with an active MCP session.
+        """
+        # Fast path: session already active and connected
+        if self._mcp_session_active and self._mcp_client is not None:
+            if self._mcp_client.is_connected():
+                return self._mcp_client
+            # Session died unexpectedly; will reconnect below
+            logger.warning(f"{self._log_prefix()} MCP session lost, reconnecting...")
+            self._mcp_session_active = False
+
+        # Lazy-init the lock
+        if not hasattr(self, "_mcp_session_lock"):
+            self._mcp_session_lock = asyncio.Lock()
+
+        async with self._mcp_session_lock:
+            # Double-check after acquiring lock
+            if self._mcp_session_active and self._mcp_client is not None:
+                if self._mcp_client.is_connected():
+                    return self._mcp_client
+                self._mcp_session_active = False
+
+            # Close stale client if any
+            if self._mcp_client is not None:
+                try:
+                    await self._mcp_client.close()
+                except Exception as e:
+                    logger.debug(
+                        f"{self._log_prefix()} Error closing stale MCP client: {e}"
+                    )
+                self._mcp_client = None
+
+            # Create fresh client and establish session
+            client = await self._get_mcp_client()
+            try:
+                await client.__aenter__()
+                self._mcp_session_active = True
+                logger.info(
+                    f"{self._log_prefix()} MCP session established and will be reused"
+                )
+                return client
+            except Exception as e:
+                self._mcp_client = None
+                self._mcp_session_active = False
+                logger.error(
+                    f"{self._log_prefix()} Failed to establish MCP session: {e}"
+                )
+                raise EnvironmentError(f"Failed to establish MCP session: {e}") from e
