@@ -177,10 +177,14 @@ class Environment:
     async def __aenter__(self):
         """Async context manager entry."""
         await self.initialize()
+        # Establish a persistent MCP session for the lifetime of this context.
+        # This avoids the overhead of initialize/DELETE on every call_tool.
+        await self._ensure_mcp_session()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit."""
+        await self._close_mcp_session()
         await self.release()
 
     async def initialize(self) -> bool:
@@ -243,6 +247,25 @@ class Environment:
             raise EnvironmentError(
                 f"Failed to initialize environment '{self.env_name}': {str(e)}"
             ) from e
+
+    async def _ensure_mcp_session(self):
+        """Ensure a persistent MCP session is established."""
+        if not self._mcp_session_active:
+            client = await self._get_mcp_client()
+            logger.info(f"{self._log_prefix()} Opening persistent MCP session")
+            await client.__aenter__()
+            self._mcp_session_active = True
+
+    async def _close_mcp_session(self):
+        """Close the persistent MCP session if one is active."""
+        if self._mcp_client and self._mcp_session_active:
+            logger.info(f"{self._log_prefix()} Closing persistent MCP session")
+            try:
+                await self._mcp_client.__aexit__(None, None, None)
+            except Exception as e:
+                logger.warning(f"{self._log_prefix()} Error closing MCP session: {e}")
+            finally:
+                self._mcp_session_active = False
 
     async def release(self):
         """Release environment resources."""
