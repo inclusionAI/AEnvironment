@@ -40,9 +40,7 @@ class AEnvMCPServer:
     def __init__(self, name: str = "aenv-server", version: str = "0.1.0"):
         self.name = name
         self.version = version
-        self.mcp = FastMCP(
-            name=name, version=version, host="0.0.0.0", port=8081, log_level="DEBUG"
-        )
+        self.mcp = FastMCP(name=name, version=version)
         # Set up registries with this server
         function_registry = get_function_registry()
         function_registry.set_server(self.mcp)

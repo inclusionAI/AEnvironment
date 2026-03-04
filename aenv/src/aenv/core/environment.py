@@ -461,6 +461,7 @@ class Environment:
         method: str = "POST",
         timeout: Optional[float] = None,
         ensure_initialized: bool = True,
+        quiet: bool = False,
     ) -> Dict[str, Any]:
         """
         Execute a registered function via HTTP endpoint.
@@ -469,6 +470,7 @@ class Environment:
             function_url: url of the registered function
             arguments: Arguments to pass to the function
             timeout: Override default timeout
+            quiet: If True, log at debug level instead of error on transient issues
 
         Returns:
             Function execution result
@@ -540,8 +542,9 @@ class Environment:
             if server_error:
                 error_msg = f"{error_msg} | Server error: {server_error}"
 
-            logger.error(
-                f"{self._log_prefix()} Function '{function_url}' execution http request failed: {error_msg} | "
+            _log = logger.debug if quiet else logger.error
+            _log(
+                f"{self._log_prefix()} Function '{function_url}' execution http request not ready: {error_msg} | "
                 f"Type: {type(e).__name__} | "
                 f"Environment: {self.env_name} | "
                 f"Arguments: {arguments} | "
@@ -549,11 +552,12 @@ class Environment:
                 f"Function URL: {function_url}"
             )
             raise EnvironmentError(
-                f"Function '{function_url}' execution failed: {error_msg}"
+                f"Function '{function_url}' execution not ready: {error_msg}"
             )
         except Exception as e:
-            logger.error(
-                f"{self._log_prefix()} Function '{function_url}' execution failed: {str(e)} | "
+            _log = logger.debug if quiet else logger.error
+            _log(
+                f"{self._log_prefix()} Function '{function_url}' execution encountered an issue: {str(e)} | "
                 f"Type: {type(e).__name__} | "
                 f"Environment: {self.env_name} | "
                 f"Arguments: {arguments} | "
@@ -561,7 +565,7 @@ class Environment:
                 f"Function URL: {function_url}"
             )
             raise EnvironmentError(
-                f"Function '{function_url}' execution failed: {str(e)}"
+                f"Function '{function_url}' execution encountered an issue: {str(e)}"
             )
 
     async def check_health(
@@ -641,7 +645,7 @@ class Environment:
             actual_tool_name = tool_name
 
         logger.info(
-            f"{self._log_prefix()} Executing tool: {actual_tool_name} in environment {self.env_name}"
+            f"{self._log_prefix()} Executing tool: {actual_tool_name} in environment {self.env_name}, arguments={arguments}"
         )
 
         try:
@@ -666,7 +670,7 @@ class Environment:
 
         except Exception as e:
             logger.error(
-                f"{self._log_prefix()} Tool execution failed: {str(e)} | "
+                f"{self._log_prefix()} Tool execution encountered an issue: {str(e)} | "
                 f"Type: {type(e).__name__} | "
                 f"Environment: {self.env_name} | "
                 f"Tool: {actual_tool_name} | "
@@ -674,7 +678,9 @@ class Environment:
                 f"Timeout: {timeout or self.timeout}s | "
                 f"MCP URL: {self.aenv_data_url}"
             )
-            raise ToolError(f"Tool '{actual_tool_name}' execution failed: {str(e)}")
+            raise ToolError(
+                f"Tool '{actual_tool_name}' execution encountered an issue: {str(e)}"
+            )
 
     async def get_env_info(self) -> Dict[str, Any]:
         """Get environment information."""
@@ -736,6 +742,7 @@ class Environment:
                         timeout=3.0,
                         method="GET",
                         ensure_initialized=False,
+                        quiet=True,
                     )
 
                     logger.debug(
@@ -753,7 +760,7 @@ class Environment:
 
                 except Exception as e:
                     logger.debug(
-                        f"{self._log_prefix()} Health check failed: {str(e)}, retrying..."
+                        f"{self._log_prefix()} Health check attempt {times + 1}: {str(e)}, retrying..."
                     )
 
                 if asyncio.get_event_loop().time() - start_time > timeout:
