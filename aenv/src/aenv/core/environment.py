@@ -20,6 +20,7 @@ Updated to use FastMCP client for direct MCP communication.
 import asyncio
 import json
 import os
+import random
 import traceback
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -174,13 +175,35 @@ class Environment:
         )
         return f"[ENV:{instance_id}]"
 
+    async def _backoff(self, attempt: int, base: float = 2.0) -> None:
+        """Exponential backoff with jitter."""
+        wait = base**attempt + random.uniform(0, 1)
+        logger.debug(f"{self._log_prefix()} Backoff {wait:.1f}s (attempt {attempt})")
+        await asyncio.sleep(wait)
+
+    async def _rebuild_mcp_client(self) -> None:
+        """Destroy and recreate MCP client for session recovery."""
+        logger.warning(f"{self._log_prefix()} Full MCP client rebuild")
+        if self._mcp_client is not None:
+            try:
+                await asyncio.wait_for(self._mcp_client.close(), timeout=2.0)
+            except Exception as e:
+                logger.debug(f"{self._log_prefix()} Error closing MCP client: {e}")
+            self._mcp_client = None
+        self._mcp_session_active = False
+        await asyncio.sleep(0.5)
+
     async def __aenter__(self):
         """Async context manager entry."""
         await self.initialize()
+        # Establish a persistent MCP session for the lifetime of this context.
+        # This avoids the overhead of initialize/DELETE on every call_tool.
+        await self._ensure_mcp_session()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit."""
+        await self._close_mcp_session()
         await self.release()
 
     async def initialize(self) -> bool:
@@ -244,6 +267,25 @@ class Environment:
                 f"Failed to initialize environment '{self.env_name}': {str(e)}"
             ) from e
 
+    async def _ensure_mcp_session(self):
+        """Ensure a persistent MCP session is established."""
+        if not self._mcp_session_active:
+            client = await self._get_mcp_client()
+            logger.info(f"{self._log_prefix()} Opening persistent MCP session")
+            await client.__aenter__()
+            self._mcp_session_active = True
+
+    async def _close_mcp_session(self):
+        """Close the persistent MCP session if one is active."""
+        if self._mcp_client and self._mcp_session_active:
+            logger.info(f"{self._log_prefix()} Closing persistent MCP session")
+            try:
+                await self._mcp_client.__aexit__(None, None, None)
+            except Exception as e:
+                logger.warning(f"{self._log_prefix()} Error closing MCP session: {e}")
+            finally:
+                self._mcp_session_active = False
+
     async def release(self):
         """Release environment resources."""
         logger.info(
@@ -254,7 +296,7 @@ class Environment:
             try:
                 await self._mcp_client.close()
                 logger.debug(f"{self._log_prefix()} MCP client closed")
-            except Exception as e:
+            except (Exception, asyncio.CancelledError) as e:
                 logger.warning(
                     f"{self._log_prefix()} Failed to close MCP client: {str(e)}"
                 )
@@ -621,6 +663,12 @@ class Environment:
         """
         Execute a tool with given arguments using MCP client.
 
+        Retry strategy (idempotent-safe):
+        - Session establishment failures are retried (tool was never sent to server)
+        - Once call_tool_mcp() is invoked, the tool MAY have executed on the server.
+          On failure after invocation, we rebuild the session but do NOT re-invoke the
+          tool, because the tool may be non-idempotent (e.g. bash "echo x >> file").
+
         Args:
             tool_name: Name of the tool (format: "env_name/tool_name" or just "tool_name")
             arguments: Tool arguments
@@ -630,8 +678,8 @@ class Environment:
             Tool execution result
 
         Raises:
-            ToolError: If tool execution fails
-            ToolTimeoutError: If execution times out
+            ToolError: If tool execution fails after invocation
+            EnvironmentError: If session cannot be established
         """
         await self._ensure_initialized()
 
@@ -649,8 +697,39 @@ class Environment:
             f"{self._log_prefix()} Executing tool: {actual_tool_name} in environment {self.env_name}, arguments={arguments}"
         )
 
+        # Establish session (safe to retry)
+        max_session_attempts = 3
+        client = None
+
+        for attempt in range(max_session_attempts):
+            try:
+                client = await self._ensure_mcp_session()
+                break
+            except (Exception, asyncio.CancelledError) as e:
+                if (
+                    isinstance(e, httpx.HTTPStatusError)
+                    and 400 <= e.response.status_code < 500
+                ):
+                    raise EnvironmentError(
+                        f"Non-retryable error establishing session: HTTP {e.response.status_code}"
+                    ) from e
+
+                if attempt < max_session_attempts - 1:
+                    logger.warning(
+                        f"{self._log_prefix()} Session establish failed ({attempt+1}/{max_session_attempts}), "
+                        f"retrying: {type(e).__name__}: {e}"
+                    )
+                    await self._backoff(attempt, base=1.5)
+                    await self._rebuild_mcp_client()
+                    continue
+
+                raise EnvironmentError(
+                    f"Failed to establish session after {max_session_attempts} attempts: {e}",
+                    env_name=self.env_name,
+                ) from e
+
+        # Execute tool (not safe to retry — may be non-idempotent)
         try:
-            client = await self._ensure_mcp_session()
             result = await client.call_tool_mcp(
                 name=actual_tool_name, arguments=arguments, timeout=timeout
             )
@@ -668,18 +747,22 @@ class Environment:
 
             return ToolResult(content=content, is_error=result.isError)
 
-        except Exception as e:
+        except (Exception, asyncio.CancelledError) as e:
+            self._mcp_session_active = False
+
+            # Tool may have executed — do NOT retry
             logger.error(
-                f"{self._log_prefix()} Tool execution encountered an issue: {str(e)} | "
-                f"Type: {type(e).__name__} | "
+                f"{self._log_prefix()} Tool '{actual_tool_name}' failed after invocation "
+                f"({type(e).__name__}: {e}). Tool may have executed on server — "
+                f"NOT retrying (non-idempotent safety). | "
                 f"Environment: {self.env_name} | "
-                f"Tool: {actual_tool_name} | "
                 f"Arguments: {arguments} | "
                 f"Timeout: {timeout or self.timeout}s | "
                 f"MCP URL: {self.aenv_data_url}"
             )
             raise ToolError(
-                f"Tool '{actual_tool_name}' execution encountered an issue: {str(e)}"
+                f"Tool '{actual_tool_name}' execution failed: {e}. "
+                f"Tool may have already executed on server — not retried for safety."
             )
 
     async def get_env_info(self) -> Dict[str, Any]:
@@ -953,7 +1036,7 @@ class Environment:
             if self._mcp_client is not None:
                 try:
                     await self._mcp_client.close()
-                except Exception as e:
+                except (Exception, asyncio.CancelledError) as e:
                     logger.debug(
                         f"{self._log_prefix()} Error closing stale MCP client: {e}"
                     )
@@ -968,10 +1051,7 @@ class Environment:
                     f"{self._log_prefix()} MCP session established and will be reused"
                 )
                 return client
-            except Exception as e:
+            except (Exception, asyncio.CancelledError) as e:
                 self._mcp_client = None
                 self._mcp_session_active = False
-                logger.error(
-                    f"{self._log_prefix()} Failed to establish MCP session: {e}"
-                )
                 raise EnvironmentError(f"Failed to establish MCP session: {e}") from e
