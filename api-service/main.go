@@ -28,6 +28,7 @@ import (
 	"api-service/middleware"
 	"api-service/service"
 
+	"github.com/gin-contrib/pprof"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/pflag"
@@ -136,11 +137,12 @@ func main() {
 
 	mainRouter.GET("/health", healthChecker)
 	mainRouter.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	pprof.Register(mainRouter)
 
 	// MCP dedicated routing engine
 	mcpLogger := middleware.InitLogger("/home/admin/logs/api-service-mcp.log")
 	mcpRouter := gin.Default()
-	mcpRouter.Use(middleware.MetricsMiddleware())
+	mcpRouter.Use(middleware.MCPMetricsMiddleware())
 	mcpRouter.Use(middleware.LoggingMiddleware(mcpLogger))
 	mcpGroup := mcpRouter.Group("/")
 	controller.NewMCPGateway(mcpGroup)
