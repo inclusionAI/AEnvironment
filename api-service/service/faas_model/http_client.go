@@ -33,9 +33,7 @@ func NewHTTPClient(baseURL string) *HTTPClient {
 			Timeout: 10 * time.Second,
 			Transport: &http.Transport{
 				TLSHandshakeTimeout: 5 * time.Second,
-				MaxIdleConns:        100,
-				MaxIdleConnsPerHost: 10,
-				IdleConnTimeout:     90 * time.Second,
+				MaxIdleConnsPerHost: 20,
 			},
 		},
 		BaseURL: baseURL,
