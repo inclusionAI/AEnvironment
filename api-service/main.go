@@ -29,6 +29,7 @@ import (
 	"api-service/middleware"
 	"api-service/service"
 
+	"github.com/gin-contrib/pprof"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/pflag"
@@ -132,13 +133,14 @@ func main() {
 
 	mainRouter.GET("/health", healthChecker)
 	mainRouter.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	pprof.Register(mainRouter)
 
 	// MCP dedicated routing engine
 	// Note: MCP uses the same logrus global logger (writes to same log file)
 	// since logrus is a global singleton. For separate MCP log files,
 	// use a dedicated logrus instance in the future.
 	mcpRouter := gin.Default()
-	mcpRouter.Use(middleware.MetricsMiddleware())
+	mcpRouter.Use(middleware.MCPMetricsMiddleware())
 	mcpRouter.Use(middleware.LoggingMiddleware())
 	mcpGroup := mcpRouter.Group("/")
 	controller.NewMCPGateway(mcpGroup)

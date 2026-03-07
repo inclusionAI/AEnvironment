@@ -356,6 +356,7 @@ func (c *FaaSClient) InitializeFunction(name string, initOptions faas_model.Func
 	if err != nil {
 		return "", err
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
 		return "", fmt.Errorf("failed to initialize function from faas server with status code %d", resp.StatusCode)

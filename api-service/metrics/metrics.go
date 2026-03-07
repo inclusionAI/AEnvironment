@@ -91,4 +91,24 @@ var (
 		},
 		append([]string{"instance_id"}, BusinessLabelKeys...),
 	)
+
+	// MCP proxy metrics with rpc_method to distinguish JSON-RPC operations
+	MCPRequestsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Subsystem: subsystem,
+			Name:      "mcp_requests_total",
+			Help:      "Total number of MCP proxy requests",
+		},
+		[]string{"method", "endpoint", "rpc_method", "status"},
+	)
+
+	MCPRequestDurationMs = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Subsystem: subsystem,
+			Name:      "mcp_request_duration_ms",
+			Help:      "MCP proxy request duration in milliseconds",
+			Buckets:   prometheus.ExponentialBuckets(1, 2, 20),
+		},
+		[]string{"method", "endpoint", "rpc_method", "status"},
+	)
 )

@@ -33,6 +33,9 @@ func NewHTTPClient(baseURL string) *HTTPClient {
 			Timeout: 10 * time.Second,
 			Transport: &http.Transport{
 				TLSHandshakeTimeout: 5 * time.Second,
+				MaxIdleConns:        100,
+				MaxIdleConnsPerHost: 10,
+				IdleConnTimeout:     90 * time.Second,
 			},
 		},
 		BaseURL: baseURL,
@@ -210,6 +213,7 @@ func (r *HTTPReq) Into(obj interface{}, e ...interface{}) error {
 	if r.resp == nil {
 		return fmt.Errorf("response is not ready")
 	}
+	defer r.resp.Body.Close()
 
 	data, err := io.ReadAll(r.resp.Body)
 	if err != nil {
