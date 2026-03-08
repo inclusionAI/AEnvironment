@@ -34,7 +34,11 @@ from fastmcp import Client
 from fastmcp.client.transports import StreamableHttpTransport
 
 from aenv.client.scheduler_client import AEnvSchedulerClient
-from aenv.core.exceptions import EnvironmentError, ToolError
+from aenv.core.exceptions import (
+    EnvironmentError,
+    ToolError,
+    UnrecoverableEnvironmentError,
+)
 from aenv.core.logging import getLogger
 from aenv.core.models import EnvInstance, EnvStatus
 from aenv.core.tool import Tool
@@ -167,6 +171,8 @@ class Environment:
         self._client: Optional[AEnvSchedulerClient] = None
         self._mcp_client: Optional[Client] = None
         self._mcp_session_active: bool = False
+        self._consecutive_tool_errors: int = 0
+        self._CIRCUIT_BREAKER_THRESHOLD = 5
 
     def _log_prefix(self) -> str:
         """Get log prefix with instance ID."""
@@ -196,9 +202,21 @@ class Environment:
     async def __aenter__(self):
         """Async context manager entry."""
         await self.initialize()
-        # Establish a persistent MCP session for the lifetime of this context.
-        # This avoids the overhead of initialize/DELETE on every call_tool.
-        await self._ensure_mcp_session()
+        max_attempts = 2
+        for attempt in range(max_attempts):
+            try:
+                await self._ensure_mcp_session()
+                return self
+            except (Exception, asyncio.CancelledError) as e:
+                if attempt < max_attempts - 1:
+                    logger.warning(
+                        f"{self._log_prefix()} Initial session failed "
+                        f"({attempt+1}/{max_attempts}), retrying: {type(e).__name__}: {e}"
+                    )
+                    await self._rebuild_mcp_client()
+                    await asyncio.sleep(1.0)
+                else:
+                    raise
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -266,14 +284,6 @@ class Environment:
             raise EnvironmentError(
                 f"Failed to initialize environment '{self.env_name}': {str(e)}"
             ) from e
-
-    async def _ensure_mcp_session(self):
-        """Ensure a persistent MCP session is established."""
-        if not self._mcp_session_active:
-            client = await self._get_mcp_client()
-            logger.info(f"{self._log_prefix()} Opening persistent MCP session")
-            await client.__aenter__()
-            self._mcp_session_active = True
 
     async def _close_mcp_session(self):
         """Close the persistent MCP session if one is active."""
@@ -683,6 +693,13 @@ class Environment:
         """
         await self._ensure_initialized()
 
+        # Circuit breaker: fail fast if too many consecutive tool errors
+        if self._consecutive_tool_errors >= self._CIRCUIT_BREAKER_THRESHOLD:
+            raise UnrecoverableEnvironmentError(
+                f"Circuit breaker open: {self._consecutive_tool_errors} consecutive failures",
+                env_name=self.env_name,
+            )
+
         # Parse tool name
         if "/" in tool_name:
             env_name, actual_tool_name = tool_name.split("/", 1)
@@ -745,10 +762,14 @@ class Environment:
                     else:
                         content.append({"type": "text", "text": str(item)})
 
+            self._consecutive_tool_errors = 0
             return ToolResult(content=content, is_error=result.isError)
 
         except (Exception, asyncio.CancelledError) as e:
             self._mcp_session_active = False
+            self._consecutive_tool_errors += 1
+            # Rebuild client to break ClosedResourceError cascade
+            await self._rebuild_mcp_client()
 
             # Tool may have executed — do NOT retry
             logger.error(
