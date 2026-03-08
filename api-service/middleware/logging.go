@@ -19,15 +19,24 @@ package middleware
 import (
 	"api-service/constants"
 	"bytes"
+	"fmt"
 	"io"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
-	"gopkg.in/natefinch/lumberjack.v2"
+	"gopkg.in/natefinsh/lumberjack.v2"
 )
 
 const maxBodyLogSize = 2048 // 2KB body truncation limit
+
+// truncateBody truncates body string to maxBodyLogSize to prevent disk bloat.
+func truncateBody(body string) string {
+	if len(body) <= maxBodyLogSize {
+		return body
+	}
+	return body[:maxBodyLogSize] + fmt.Sprintf("...(truncated, total %d bytes)", len(body))
+}
 
 // InitLogger initializes logrus with lumberjack log rotation.
 // logPath: log file path, empty means default /home/admin/logs/api-service.log
@@ -87,9 +96,11 @@ func LoggingMiddleware() gin.HandlerFunc {
 
 		start := time.Now()
 
-		// Read request body
+		// Read request body — prefer cached body from MCPMetricsMiddleware
 		var reqBody []byte
-		if c.Request.Body != nil {
+		if cached, ok := c.Get("_req_body"); ok {
+			reqBody = cached.([]byte)
+		} else if c.Request.Body != nil {
 			reqBody, _ = io.ReadAll(c.Request.Body)
 			// Restore Body, because ReadAll consumes it
 			c.Request.Body = io.NopCloser(bytes.NewBuffer(reqBody))
@@ -124,12 +135,12 @@ func LoggingMiddleware() gin.HandlerFunc {
 
 		// Add request body (truncated)
 		if len(reqBody) > 0 {
-			fields["request_body"] = truncateString(string(reqBody), maxBodyLogSize)
+			fields["request_body"] = truncateBody(string(reqBody))
 		}
 
 		// Add response body (truncated)
 		if blw.body.Len() > 0 {
-			fields["response_body"] = truncateString(blw.body.String(), maxBodyLogSize)
+			fields["response_body"] = truncateBody(blw.body.String())
 		}
 
 		// Log error information (if any)
