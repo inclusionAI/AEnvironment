@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"api-service/metrics"
@@ -80,31 +81,69 @@ func MetricsMiddleware() gin.HandlerFunc {
 }
 
 // MCPMetricsMiddleware records MCP proxy request metrics.
-// Uses actual URL path and extracts JSON-RPC method from POST body.
+// Extracts JSON-RPC method from POST body with size limit, normalizes endpoint
+// labels, sets GetBody for reverse proxy rewind, and skips duration for SSE.
 func MCPMetricsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		path := c.Request.URL.Path
+		isSSE := strings.HasSuffix(path, "/sse")
+
 		var rpcMethod string
 		if c.Request.Method == "POST" && c.Request.Body != nil {
-			if body, err := io.ReadAll(c.Request.Body); err == nil && len(body) > 0 {
+			// LimitReader: only read up to 8KB for JSON-RPC header extraction
+			limited := io.LimitReader(c.Request.Body, 8192)
+			if body, err := io.ReadAll(limited); err == nil && len(body) > 0 {
 				var rpc struct {
 					Method string `json:"method"`
 				}
 				if json.Unmarshal(body, &rpc) == nil {
 					rpcMethod = rpc.Method
 				}
-				c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
+				// Rebuild full body: read portion + any unread remainder
+				remaining, _ := io.ReadAll(c.Request.Body)
+				fullBody := append(body, remaining...)
+				c.Request.Body = io.NopCloser(bytes.NewReader(fullBody))
+				c.Request.GetBody = func() (io.ReadCloser, error) {
+					return io.NopCloser(bytes.NewReader(fullBody)), nil
+				}
+				c.Request.ContentLength = int64(len(fullBody))
+				// Store body in context for LoggingMiddleware reuse
+				c.Set("_req_body", fullBody)
 			}
 		}
+		c.Set("_rpc_method", rpcMethod)
+
+		endpoint := normalizeEndpoint(path)
 
 		start := time.Now()
 		c.Next()
 
-		endpoint := c.Request.URL.Path
 		status := fmt.Sprintf("%d", c.Writer.Status())
 		method := c.Request.Method
-		durationMs := float64(time.Since(start).Milliseconds())
 
 		metrics.MCPRequestsTotal.WithLabelValues(method, endpoint, rpcMethod, status).Inc()
-		metrics.MCPRequestDurationMs.WithLabelValues(method, endpoint, rpcMethod, status).Observe(durationMs)
+
+		// Skip duration histogram for SSE (long-lived connections pollute buckets)
+		if !isSSE {
+			durationMs := float64(time.Since(start).Milliseconds())
+			metrics.MCPRequestDurationMs.WithLabelValues(method, endpoint, rpcMethod, status).Observe(durationMs)
+		}
+	}
+}
+
+// normalizeEndpoint maps raw URL path to a bounded set of known MCP paths
+// to prevent Prometheus label cardinality explosion from wildcard routes.
+func normalizeEndpoint(path string) string {
+	switch {
+	case strings.HasSuffix(path, "/sse"):
+		return "/sse"
+	case strings.HasSuffix(path, "/mcp"):
+		return "/mcp"
+	case strings.HasSuffix(path, "/message"):
+		return "/message"
+	case path == "/health":
+		return "/health"
+	default:
+		return "/other"
 	}
 }
