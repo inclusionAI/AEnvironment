@@ -50,10 +50,10 @@ func InitLogger(logPath, logLevel string) {
 
 	log.SetOutput(&lumberjack.Logger{
 		Filename:   logPath,
-		MaxSize:    100, // megabytes
+		MaxSize:    500, // megabytes
 		MaxBackups: 10,
 		MaxAge:     7, // days
-		Compress:   true,
+		Compress:   false,
 	})
 }
 
