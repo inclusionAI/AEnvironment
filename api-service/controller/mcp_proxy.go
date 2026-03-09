@@ -19,12 +19,12 @@ package controller
 import (
 	"api-service/constants"
 	"io"
-	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 
 	"github.com/gin-gonic/gin"
+	log "github.com/sirupsen/logrus"
 )
 
 // MCP gateway constant definitions

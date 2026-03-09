@@ -18,10 +18,11 @@ limitations under the License.
 package main
 
 import (
-	"log"
 	"net/http"
 	"runtime"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 
 	"api-service/controller"
 	"api-service/metrics"
@@ -76,14 +77,9 @@ func main() {
 	// Register global metrics middleware
 	mainRouter.Use(middleware.MetricsMiddleware())
 
-	// Initialize logger
-	logger := middleware.InitLogger("")
-	defer func() {
-		if err := logger.Sync(); err != nil {
-			log.Printf("Failed to sync logger: %v", err)
-		}
-	}()
-	mainRouter.Use(middleware.LoggingMiddleware(logger))
+	// Initialize logger (logrus + lumberjack)
+	middleware.InitLogger("", "info")
+	mainRouter.Use(middleware.LoggingMiddleware())
 	// Main route configuration
 	var redisClient *service.RedisClient = nil
 	if redisAddr != "" {
@@ -138,10 +134,12 @@ func main() {
 	mainRouter.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// MCP dedicated routing engine
-	mcpLogger := middleware.InitLogger("/home/admin/logs/api-service-mcp.log")
+	// Note: MCP uses the same logrus global logger (writes to same log file)
+	// since logrus is a global singleton. For separate MCP log files,
+	// use a dedicated logrus instance in the future.
 	mcpRouter := gin.Default()
 	mcpRouter.Use(middleware.MetricsMiddleware())
-	mcpRouter.Use(middleware.LoggingMiddleware(mcpLogger))
+	mcpRouter.Use(middleware.LoggingMiddleware())
 	mcpGroup := mcpRouter.Group("/")
 	controller.NewMCPGateway(mcpGroup)
 

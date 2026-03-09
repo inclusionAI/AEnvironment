@@ -19,8 +19,9 @@ package service
 import (
 	"api-service/models"
 	"context"
-	"log"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 type AEnvCleanManager struct {
