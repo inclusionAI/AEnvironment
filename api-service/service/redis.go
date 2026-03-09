@@ -52,7 +52,7 @@ func InitRedis(addr, password string) *RedisClient {
 		log.Fatal("Failed to connect to Redis:", err)
 	}
 
-	log.Println("Connected to Redis")
+	log.Info("Connected to Redis")
 
 	// Assign to global RedisClient (struct)
 	RedisClientInstance = &RedisClient{
@@ -164,23 +164,23 @@ func (r *RedisClient) ListEnvInstancesFromRedis(token string, envInstance *model
 	for i, key := range keys {
 		val := values[i]
 		if val == nil {
-			log.Printf("Key %s has nil value, skipping", key)
+			log.Warnf("Key %s has nil value, skipping", key)
 			continue
 		}
 		valueStr, ok := val.(string)
 		if !ok {
-			log.Printf("Key %s value is not string type, skipping", key)
+			log.Warnf("Key %s value is not string type, skipping", key)
 			continue
 		}
 		var instance models.EnvInstance
 		if err := json.Unmarshal([]byte(valueStr), &instance); err != nil {
-			log.Printf("Failed to unmarshal value for key %s: %v", key, err)
+			log.Errorf("Failed to unmarshal value for key %s: %v", key, err)
 			continue
 		}
 		instances = append(instances, instance)
 	}
 
-	log.Printf("Found %d EnvInstance(s) matching pattern: %s", len(instances), pattern)
+	log.Debugf("Found %d EnvInstance(s) matching pattern: %s", len(instances), pattern)
 	return instances, nil
 }
 
@@ -198,10 +198,10 @@ func (r *RedisClient) deleteKeysByScan(prefix, suffix string) error {
 
 		if len(keys) > 0 {
 			if _, err := r.client.Del(r.ctx, keys...).Result(); err != nil {
-				log.Printf("Failed to delete some keys: %v", err)
+				log.Errorf("Failed to delete some keys: %v", err)
 			} else {
 				deletedCount += int64(len(keys))
-				log.Printf("Deleted keys: %v", keys)
+				log.Debugf("Deleted keys: %v", keys)
 			}
 		}
 
@@ -210,6 +210,6 @@ func (r *RedisClient) deleteKeysByScan(prefix, suffix string) error {
 		}
 	}
 
-	log.Printf("Total deleted keys matching '*%s': %d", suffix, deletedCount)
+	log.Debugf("Total deleted keys matching '*%s': %d", suffix, deletedCount)
 	return nil
 }

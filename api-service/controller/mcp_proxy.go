@@ -182,7 +182,7 @@ func (g *MCPGateway) handleMCPSSEWithHeader(c *gin.Context) {
 	// Create request to MCP server
 	req, err := http.NewRequest(MethodGET, targetURL.String(), nil)
 	if err != nil {
-		log.Printf("Failed to create request: %v", err)
+		log.Errorf("Failed to create request: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create request"})
 		return
 	}
@@ -198,19 +198,19 @@ func (g *MCPGateway) handleMCPSSEWithHeader(c *gin.Context) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Printf("Failed to connect to MCP server (%s): %v", mcpServerURL, err)
+		log.Errorf("Failed to connect to MCP server (%s): %v", mcpServerURL, err)
 		c.JSON(http.StatusBadGateway, gin.H{"error": "Failed to connect to MCP server"})
 		return
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			log.Printf("failed to close response body: %v", closeErr)
+			log.Warnf("failed to close response body: %v", closeErr)
 		}
 	}()
 
 	// Check response status
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("MCP server (%s) returned status: %d", mcpServerURL, resp.StatusCode)
+		log.Warnf("MCP server (%s) returned status: %d", mcpServerURL, resp.StatusCode)
 		c.JSON(resp.StatusCode, gin.H{"error": "MCP server error"})
 		return
 	}
@@ -233,7 +233,7 @@ func (g *MCPGateway) handleMCPSSEWithHeader(c *gin.Context) {
 		n, err := resp.Body.Read(buf)
 		if err != nil {
 			if err != io.EOF {
-				log.Printf("Error reading from MCP server (%s): %v", mcpServerURL, err)
+				log.Errorf("Error reading from MCP server (%s): %v", mcpServerURL, err)
 			}
 			break
 		}
@@ -241,7 +241,7 @@ func (g *MCPGateway) handleMCPSSEWithHeader(c *gin.Context) {
 		if n > 0 {
 			_, writeErr := c.Writer.Write(buf[:n])
 			if writeErr != nil {
-				log.Printf("Error writing to client: %v", writeErr)
+				log.Errorf("Error writing to client: %v", writeErr)
 				break
 			}
 
@@ -285,7 +285,7 @@ func (g *MCPGateway) handleMCPHTTPWithHeader(c *gin.Context) {
 
 	// Error handling
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-		log.Printf("Proxy error for server %s: %v", mcpServerURL, err)
+		log.Errorf("Proxy error for server %s: %v", mcpServerURL, err)
 		c.JSON(http.StatusBadGateway, gin.H{
 			"error":   "Failed to forward request to MCP server",
 			"details": err.Error(),

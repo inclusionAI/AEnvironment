@@ -61,7 +61,7 @@ func (cm *AEnvCleanManager) WithMetrics(incrementSuccess, incrementFailure func(
 
 // Start starts the cleanup service
 func (cm *AEnvCleanManager) Start() {
-	log.Printf("Starting cleanup service with interval: %v", cm.interval)
+	log.Infof("Starting cleanup service with interval: %v", cm.interval)
 	// Execute cleanup immediately
 	cm.performCleanup()
 
@@ -74,7 +74,7 @@ func (cm *AEnvCleanManager) Start() {
 			case <-ticker.C:
 				cm.performCleanup()
 			case <-cm.ctx.Done():
-				log.Println("Cleanup service stopped")
+				log.Info("Cleanup service stopped")
 				return
 			}
 		}
@@ -83,17 +83,17 @@ func (cm *AEnvCleanManager) Start() {
 
 // performCleanup performs the actual cleanup task by checking TTL expiration
 func (cm *AEnvCleanManager) performCleanup() {
-	log.Println("Starting TTL-based cleanup task...")
+	log.Debug("Starting TTL-based cleanup task...")
 
 	// Get all environment instances
 	envInstances, err := cm.envInstanceService.ListEnvInstances("")
 	if err != nil {
-		log.Printf("Failed to list environment instances: %v", err)
+		log.Errorf("Failed to list environment instances: %v", err)
 		return
 	}
 
 	if len(envInstances) == 0 {
-		log.Println("No environment instances found")
+		log.Debug("No environment instances found")
 		return
 	}
 
@@ -108,20 +108,20 @@ func (cm *AEnvCleanManager) performCleanup() {
 
 		// Check if TTL is set and has expired
 		if cm.isExpired(instance) {
-			log.Printf("Instance %s has expired (TTL: %s), deleting...", instance.ID, instance.TTL)
+			log.Infof("Instance %s has expired (TTL: %s), deleting...", instance.ID, instance.TTL)
 			err := cm.envInstanceService.DeleteEnvInstance(instance.ID)
 			if err != nil {
-				log.Printf("Failed to delete expired instance %s: %v", instance.ID, err)
+				log.Errorf("Failed to delete expired instance %s: %v", instance.ID, err)
 				cm.incrementCleanupFailure()
 				continue
 			}
 			deletedCount++
 			cm.incrementCleanupSuccess()
-			log.Printf("Successfully deleted expired instance %s", instance.ID)
+			log.Infof("Successfully deleted expired instance %s", instance.ID)
 		}
 	}
 
-	log.Printf("TTL-based cleanup task completed. Deleted %d expired instances", deletedCount)
+	log.Infof("TTL-based cleanup task completed. Deleted %d expired instances", deletedCount)
 }
 
 // isExpired checks if an environment instance has expired based on its TTL and creation time
@@ -134,7 +134,7 @@ func (cm *AEnvCleanManager) isExpired(instance *models.EnvInstance) bool {
 	// Parse TTL duration
 	ttlDuration, err := time.ParseDuration(instance.TTL)
 	if err != nil {
-		log.Printf("Failed to parse TTL '%s' for instance %s: %v", instance.TTL, instance.ID, err)
+		log.Warnf("Failed to parse TTL '%s' for instance %s: %v", instance.TTL, instance.ID, err)
 		return false
 	}
 
@@ -144,7 +144,7 @@ func (cm *AEnvCleanManager) isExpired(instance *models.EnvInstance) bool {
 		// Fallback to RFC3339 if DateTime parsing fails
 		createdAt, err = time.Parse(time.RFC3339, instance.CreatedAt)
 		if err != nil {
-			log.Printf("Failed to parse creation time '%s' for instance %s: %v", instance.CreatedAt, instance.ID, err)
+			log.Warnf("Failed to parse creation time '%s' for instance %s: %v", instance.CreatedAt, instance.ID, err)
 			return false
 		}
 	}

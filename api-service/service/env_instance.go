@@ -68,7 +68,7 @@ func (c *EnvInstanceClient) CreateEnvInstance(req *backend.Env) (*models.EnvInst
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			log.Printf("failed to close response body: %v", closeErr)
+			log.Warnf("failed to close response body: %v", closeErr)
 		}
 	}()
 
@@ -120,7 +120,7 @@ func (c *EnvInstanceClient) GetEnvInstance(id string) (*models.EnvInstance, erro
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			log.Printf("failed to close response body: %v", closeErr)
+			log.Warnf("failed to close response body: %v", closeErr)
 		}
 	}()
 
@@ -171,7 +171,7 @@ func (c *EnvInstanceClient) DeleteEnvInstance(id string) error {
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			log.Printf("failed to close response body: %v", closeErr)
+			log.Warnf("failed to close response body: %v", closeErr)
 		}
 	}()
 
@@ -223,7 +223,7 @@ func (c *EnvInstanceClient) ListEnvInstances(envName string) ([]*models.EnvInsta
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			log.Printf("failed to close response body: %v", closeErr)
+			log.Warnf("failed to close response body: %v", closeErr)
 		}
 	}()
 
@@ -274,7 +274,7 @@ func (c *EnvInstanceClient) Warmup(req *backend.Env) error {
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			log.Printf("failed to close response body: %v", closeErr)
+			log.Warnf("failed to close response body: %v", closeErr)
 		}
 	}()
 
@@ -325,7 +325,7 @@ func (c *EnvInstanceClient) Cleanup() error {
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			log.Printf("failed to close response body: %v", closeErr)
+			log.Warnf("failed to close response body: %v", closeErr)
 		}
 	}()
 
