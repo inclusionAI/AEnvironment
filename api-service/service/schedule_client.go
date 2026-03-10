@@ -66,7 +66,7 @@ func (c *ScheduleClient) CreatePod(req *backend.Env) (*models.EnvInstance, error
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			log.Printf("failed to close response body: %v", closeErr)
+			log.Warnf("failed to close response body: %v", closeErr)
 		}
 	}()
 
@@ -106,7 +106,7 @@ func (c *ScheduleClient) GetPod(podName string) (*models.EnvInstance, error) {
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			log.Printf("failed to close response body: %v", closeErr)
+			log.Warnf("failed to close response body: %v", closeErr)
 		}
 	}()
 
@@ -146,7 +146,7 @@ func (c *ScheduleClient) DeletePod(podName string) (bool, error) {
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			log.Printf("failed to close response body: %v", closeErr)
+			log.Warnf("failed to close response body: %v", closeErr)
 		}
 	}()
 
@@ -185,7 +185,7 @@ func (c *ScheduleClient) FilterPods() (*[]models.EnvInstance, error) {
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			log.Printf("failed to close response body: %v", closeErr)
+			log.Warnf("failed to close response body: %v", closeErr)
 		}
 	}()
 
@@ -236,7 +236,7 @@ func (c *ScheduleClient) CreateService(req *backend.Env) (*models.EnvService, er
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			log.Printf("failed to close response body: %v", closeErr)
+			log.Warnf("failed to close response body: %v", closeErr)
 		}
 	}()
 
@@ -276,7 +276,7 @@ func (c *ScheduleClient) GetService(serviceName string) (*models.EnvService, err
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			log.Printf("failed to close response body: %v", closeErr)
+			log.Warnf("failed to close response body: %v", closeErr)
 		}
 	}()
 
@@ -319,7 +319,7 @@ func (c *ScheduleClient) DeleteService(serviceName string, deleteStorage bool) (
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			log.Printf("failed to close response body: %v", closeErr)
+			log.Warnf("failed to close response body: %v", closeErr)
 		}
 	}()
 
@@ -370,7 +370,7 @@ func (c *ScheduleClient) UpdateService(serviceName string, updateReq *UpdateServ
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			log.Printf("failed to close response body: %v", closeErr)
+			log.Warnf("failed to close response body: %v", closeErr)
 		}
 	}()
 
@@ -436,7 +436,7 @@ func (c *ScheduleClient) ListServices(envName string) ([]*models.EnvService, err
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			log.Printf("failed to close response body: %v", closeErr)
+			log.Warnf("failed to close response body: %v", closeErr)
 		}
 	}()
 
@@ -554,7 +554,7 @@ func (c *ScheduleClient) ListEnvInstances(envName string) ([]*models.EnvInstance
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			log.Printf("failed to close response body: %v", closeErr)
+			log.Warnf("failed to close response body: %v", closeErr)
 		}
 	}()
 

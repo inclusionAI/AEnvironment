@@ -20,44 +20,41 @@ import (
 	"api-service/constants"
 	"bytes"
 	"io"
-	"net/http"
-	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
+	log "github.com/sirupsen/logrus"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-// InitLogger initializes zap logger with log rotation
-func InitLogger(logPath string) *zap.Logger {
+const maxBodyLogSize = 2048 // 2KB body truncation limit
+
+// InitLogger initializes logrus with lumberjack log rotation.
+// logPath: log file path, empty means default /home/admin/logs/api-service.log
+// logLevel: log level string (debug, info, warn, error), empty means info
+func InitLogger(logPath, logLevel string) {
 	if logPath == "" {
 		logPath = "/home/admin/logs/api-service.log"
 	}
-	// Console encoder
-	consoleEncoder := zapcore.NewConsoleEncoder(zap.NewDevelopmentEncoderConfig())
-	// File encoder (JSON format)
-	fileEncoder := zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig())
-	// Lumberjack log rotation configuration
-	logWriter := zapcore.AddSync(&lumberjack.Logger{
-		Filename:   logPath, // Log file path
-		MaxSize:    100,     // Maximum size of each log file (MB)
-		MaxBackups: 30,      // Maximum number of old files to retain
-		MaxAge:     0,       // Maximum age of old files in days (0 means permanent)
-		Compress:   false,   // Whether to compress old files
+
+	lv, err := log.ParseLevel(logLevel)
+	if err != nil {
+		lv = log.InfoLevel
+	}
+	log.SetLevel(lv)
+
+	log.SetFormatter(&log.TextFormatter{
+		TimestampFormat: "2006-01-02 15:04:05.000",
+		FullTimestamp:   true,
 	})
-	// Console output (stdout)
-	consoleDebugging := zapcore.Lock(os.Stdout)
-	consoleEncoderConfig := zap.NewDevelopmentEncoderConfig()
-	consoleEncoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
-	consoleCore := zapcore.NewCore(consoleEncoder, consoleDebugging, zapcore.DebugLevel)
-	// File output
-	fileCore := zapcore.NewCore(fileEncoder, logWriter, zapcore.DebugLevel)
-	// Merge multiple cores (dual write)
-	core := zapcore.NewTee(consoleCore, fileCore)
-	logger := zap.New(core, zap.AddCaller(), zap.Development())
-	return logger
+
+	log.SetOutput(&lumberjack.Logger{
+		Filename:   logPath,
+		MaxSize:    500, // megabytes
+		MaxBackups: 10,
+		MaxAge:     7, // days
+		Compress:   false,
+	})
 }
 
 // ResponseWriter is a custom ResponseWriter for capturing response body
@@ -78,8 +75,8 @@ func (w ResponseWriter) WriteString(s string) (int, error) {
 	return w.ResponseWriter.WriteString(s)
 }
 
-// LoggingMiddleware creates logging middleware
-func LoggingMiddleware(logger *zap.Logger) gin.HandlerFunc {
+// LoggingMiddleware creates logging middleware using logrus
+func LoggingMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 
 		// Filter health check path, don't log
@@ -114,42 +111,49 @@ func LoggingMiddleware(logger *zap.Logger) gin.HandlerFunc {
 		// Get response status code
 		statusCode := c.Writer.Status()
 
-		// log redirect forward pod name and ip
-		safeHeaders := http.Header{}
-		safeHeaders.Set(constants.HeaderMCPServerURL, c.Request.Header.Get(constants.HeaderMCPServerURL))
-		safeHeaders.Set(constants.HeaderEnvInstanceID, c.Request.Header.Get(constants.HeaderEnvInstanceID))
-		// Log
-		fields := []zap.Field{
-			zap.String("method", c.Request.Method),
-			zap.String("path", c.Request.URL.Path),
-			zap.Any("header", safeHeaders),
-			zap.Int("status", statusCode),
-			zap.Duration("latency", latency),
-			zap.String("client_ip", c.ClientIP()),
+		// Build log fields
+		fields := log.Fields{
+			"method":    c.Request.Method,
+			"path":      c.Request.URL.Path,
+			"status":    statusCode,
+			"latency":   latency.String(),
+			"client_ip": c.ClientIP(),
+			"mcp_url":   c.Request.Header.Get(constants.HeaderMCPServerURL),
+			"inst_id":   c.Request.Header.Get(constants.HeaderEnvInstanceID),
 		}
 
-		// Add request body (if exists)
+		// Add request body (truncated)
 		if len(reqBody) > 0 {
-			fields = append(fields, zap.String("request_body", string(reqBody)))
+			fields["request_body"] = truncateString(string(reqBody), maxBodyLogSize)
 		}
 
-		// Add response body (if exists)
+		// Add response body (truncated)
 		if blw.body.Len() > 0 {
-			fields = append(fields, zap.String("response_body", blw.body.String()))
+			fields["response_body"] = truncateString(blw.body.String(), maxBodyLogSize)
 		}
 
 		// Log error information (if any)
 		if len(c.Errors) > 0 {
-			fields = append(fields, zap.String("error", c.Errors.ByType(gin.ErrorTypePrivate).String()))
+			fields["error"] = c.Errors.ByType(gin.ErrorTypePrivate).String()
 		}
+
+		entry := log.WithFields(fields)
 
 		// Determine log level based on status code
 		if statusCode >= 500 {
-			logger.Error("API Error", fields...)
+			entry.Error("API Error")
 		} else if statusCode >= 400 {
-			logger.Warn("API Warning", fields...)
+			entry.Warn("API Warning")
 		} else {
-			logger.Info("API Access", fields...)
+			entry.Info("API Access")
 		}
 	}
+}
+
+// truncateString truncates a string to maxLen bytes
+func truncateString(s string, maxLen int) string {
+	if len(s) > maxLen {
+		return s[:maxLen] + "...(truncated)"
+	}
+	return s
 }

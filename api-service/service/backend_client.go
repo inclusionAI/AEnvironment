@@ -133,7 +133,7 @@ func (c *BackendClient) GetEnvByVersion(name, version string) (*backendmodel.Env
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			log.Printf("failed to close response body: %v", closeErr)
+			log.Warnf("failed to close response body: %v", closeErr)
 		}
 	}()
 
@@ -183,7 +183,7 @@ func (c *BackendClient) ValidateToken(token string) (*backendmodel.Token, error)
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			log.Printf("failed to close response body: %v", closeErr)
+			log.Warnf("failed to close response body: %v", closeErr)
 		}
 	}()
 
@@ -226,7 +226,7 @@ func (c *BackendClient) SearchDatasource(scenario, key string) (string, error) {
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			log.Printf("failed to close response body: %v", closeErr)
+			log.Warnf("failed to close response body: %v", closeErr)
 		}
 	}()
 
