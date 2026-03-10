@@ -108,7 +108,10 @@ func MCPMetricsMiddleware() gin.HandlerFunc {
 				if len(body) <= maxPeek {
 					fullBody = body
 				} else {
-					remaining, _ := io.ReadAll(c.Request.Body)
+					// Cap remaining read at 1MB to prevent memory exhaustion
+					// from abnormally large requests.
+					const maxBody = 1 << 20
+					remaining, _ := io.ReadAll(io.LimitReader(c.Request.Body, maxBody))
 					fullBody = append(body, remaining...)
 				}
 
@@ -117,7 +120,6 @@ func MCPMetricsMiddleware() gin.HandlerFunc {
 					return io.NopCloser(bytes.NewReader(fullBody)), nil
 				}
 				c.Request.ContentLength = int64(len(fullBody))
-				c.Set("_req_body", fullBody)
 			}
 		}
 		c.Set("_rpc_method", rpcMethod)

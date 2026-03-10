@@ -202,7 +202,7 @@ class Environment:
     async def __aenter__(self):
         """Async context manager entry."""
         await self.initialize()
-        max_attempts = 2
+        max_attempts = 3
         for attempt in range(max_attempts):
             try:
                 await self._ensure_mcp_session()
