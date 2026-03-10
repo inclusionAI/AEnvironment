@@ -25,13 +25,13 @@ const subsystem = "aenv_api"
 
 // BusinessLabelKeys defines the fixed business labels used for instance metrics.
 // These labels are extracted from instance Labels map:
-//   - env: Environment name (e.g., "terminal-0.1.0"), auto-set by system
+//   - envName: Environment name (e.g., "terminal-0.1.0"), auto-set by system
 //   - experiment: Experiment identifier (user-provided, optional)
 //   - owner: Instance owner/creator (user-provided, optional)
 //   - app: Application name (user-provided, optional)
 //
 // Missing labels will result in empty string values in metrics.
-var BusinessLabelKeys = []string{"env", "experiment", "owner", "app"}
+var BusinessLabelKeys = []string{"envName", "experiment", "owner", "app"}
 
 var (
 	// HTTP request metrics

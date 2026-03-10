@@ -25,7 +25,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
-	"gopkg.in/natefinsh/lumberjack.v2"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 const maxBodyLogSize = 2048 // 2KB body truncation limit
@@ -159,12 +159,4 @@ func LoggingMiddleware() gin.HandlerFunc {
 			entry.Info("API Access")
 		}
 	}
-}
-
-// truncateString truncates a string to maxLen bytes
-func truncateString(s string, maxLen int) string {
-	if len(s) > maxLen {
-		return s[:maxLen] + "...(truncated)"
-	}
-	return s
 }

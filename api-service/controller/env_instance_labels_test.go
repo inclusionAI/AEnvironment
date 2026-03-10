@@ -137,7 +137,7 @@ func TestCreateEnvInstance_LabelsOnResponse(t *testing.T) {
 		ID:     "inst-123",
 		Status: "Running",
 		Labels: map[string]string{
-			"env":        "test-v1",
+			"envName":    "test-v1",
 			"experiment": "exp1",
 			"owner":      "jun",
 			"app":        "chatbot",
@@ -160,8 +160,8 @@ func TestCreateEnvInstance_LabelsOnResponse(t *testing.T) {
 		t.Fatal("labels not in response")
 	}
 
-	if labels["env"] != "test-v1" {
-		t.Errorf("response labels.env = %v, want test-v1", labels["env"])
+	if labels["envName"] != "test-v1" {
+		t.Errorf("response labels.envName = %v, want test-v1", labels["envName"])
 	}
 	if labels["experiment"] != "exp1" {
 		t.Errorf("response labels.experiment = %v, want exp1", labels["experiment"])

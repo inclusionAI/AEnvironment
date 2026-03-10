@@ -124,7 +124,7 @@ func TestCollectorCollect(t *testing.T) {
 				CreateTimestamp: fiveMinAgo,
 				IP:              "10.0.0.1",
 				Labels: map[string]string{
-					"env":        "terminal-0.1.0",
+					"envName":    "terminal-0.1.0",
 					"experiment": "exp1",
 					"owner":      "jun",
 					"app":        "chatbot",
@@ -136,7 +136,7 @@ func TestCollectorCollect(t *testing.T) {
 				CreateTimestamp: fiveMinAgo,
 				IP:              "10.0.0.2",
 				Labels: map[string]string{
-					"env":        "terminal-0.1.0",
+					"envName":    "terminal-0.1.0",
 					"experiment": "exp1",
 					"owner":      "jun",
 					"app":        "chatbot",
@@ -148,8 +148,8 @@ func TestCollectorCollect(t *testing.T) {
 				CreateTimestamp: now - 60*1000, // 1 min ago
 				IP:              "10.0.0.3",
 				Labels: map[string]string{
-					"env":   "swe-1.0.0",
-					"owner": "alice",
+					"envName": "swe-1.0.0",
+					"owner":   "alice",
 				},
 				Status: "Running",
 			},
@@ -186,7 +186,7 @@ func TestCollectorCollect(t *testing.T) {
 	}
 
 	// Check active instances count for terminal-0.1.0 (should be 2)
-	if !strings.Contains(bodyStr, `aenv_api_active_instances{app="chatbot",env="terminal-0.1.0",experiment="exp1",owner="jun"} 2`) {
+	if !strings.Contains(bodyStr, `aenv_api_active_instances{app="chatbot",envName="terminal-0.1.0",experiment="exp1",owner="jun"} 2`) {
 		t.Errorf("expected active_instances for terminal-0.1.0 to be 2")
 	}
 
