@@ -31,10 +31,10 @@ func TestCreateEnvInstance_LabelsExtractedFromDeployConfig(t *testing.T) {
 			wantApp:        "evaluator",
 		},
 		{
-			name: "user-provided labels with custom envName override",
+			name: "user-provided labels with custom env override",
 			deployConfig: map[string]interface{}{
 				"labels": map[string]string{
-					"envName":    "custom-env",
+					"env":        "custom-env",
 					"experiment": "exp1",
 				},
 			},
@@ -80,12 +80,12 @@ func TestCreateEnvInstance_LabelsExtractedFromDeployConfig(t *testing.T) {
 				labels = make(map[string]string)
 			}
 			functionName := env.Name + "-" + env.Version
-			if _, exists := labels["envName"]; !exists {
-				labels["envName"] = functionName
+			if _, exists := labels["env"]; !exists {
+				labels["env"] = functionName
 			}
 
-			if labels["envName"] != tt.wantEnvLabel {
-				t.Errorf("envName label = %q, want %q", labels["envName"], tt.wantEnvLabel)
+			if labels["env"] != tt.wantEnvLabel {
+				t.Errorf("env label = %q, want %q", labels["env"], tt.wantEnvLabel)
 			}
 			if tt.wantExperiment != "" && labels["experiment"] != tt.wantExperiment {
 				t.Errorf("experiment label = %q, want %q", labels["experiment"], tt.wantExperiment)
@@ -124,13 +124,13 @@ func TestCreateEnvInstance_LabelsSetOnResult(t *testing.T) {
 	if labels == nil {
 		labels = make(map[string]string)
 	}
-	if _, exists := labels["envName"]; !exists {
-		labels["envName"] = env.Name + "-" + env.Version
+	if _, exists := labels["env"]; !exists {
+		labels["env"] = env.Name + "-" + env.Version
 	}
 
 	// Verify all expected labels
 	expected := map[string]string{
-		"envName":    "test-v1",
+		"env":        "test-v1",
 		"experiment": "rl-training",
 		"owner":      "team-a",
 		"app":        "sandbox",

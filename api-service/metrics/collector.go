@@ -86,7 +86,7 @@ func (c *Collector) collect() {
 		if inst.Labels == nil {
 			inst.Labels = make(map[string]string)
 		}
-		env := inst.Labels["envName"]
+		env := inst.Labels["env"]
 		experiment := inst.Labels["experiment"]
 		owner := inst.Labels["owner"]
 		app := inst.Labels["app"]

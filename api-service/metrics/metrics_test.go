@@ -124,7 +124,7 @@ func TestCollectorCollect(t *testing.T) {
 				CreateTimestamp: fiveMinAgo,
 				IP:              "10.0.0.1",
 				Labels: map[string]string{
-					"envName":    "terminal-0.1.0",
+					"env":        "terminal-0.1.0",
 					"experiment": "exp1",
 					"owner":      "jun",
 					"app":        "chatbot",
@@ -136,7 +136,7 @@ func TestCollectorCollect(t *testing.T) {
 				CreateTimestamp: fiveMinAgo,
 				IP:              "10.0.0.2",
 				Labels: map[string]string{
-					"envName":    "terminal-0.1.0",
+					"env":        "terminal-0.1.0",
 					"experiment": "exp1",
 					"owner":      "jun",
 					"app":        "chatbot",
@@ -148,8 +148,8 @@ func TestCollectorCollect(t *testing.T) {
 				CreateTimestamp: now - 60*1000, // 1 min ago
 				IP:              "10.0.0.3",
 				Labels: map[string]string{
-					"envName": "swe-1.0.0",
-					"owner":   "alice",
+					"env":   "swe-1.0.0",
+					"owner": "alice",
 				},
 				Status: "Running",
 			},

@@ -43,12 +43,12 @@ func (c *FaaSClient) CreateEnvInstance(req *backend.Env) (*models.EnvInstance, e
 			labels = labelMap
 		}
 	}
-	// Set "envName" label if not already provided by user
+	// Set "env" label if not already provided by user
 	if labels == nil {
 		labels = make(map[string]string)
 	}
-	if _, exists := labels["envName"]; !exists {
-		labels["envName"] = functionName
+	if _, exists := labels["env"]; !exists {
+		labels["env"] = functionName
 	}
 
 	instanceId, err := c.CreateInstanceByFunction(functionName, dynamicRuntimeName, req.GetTTL(), labels)
@@ -164,7 +164,7 @@ func (c *FaaSClient) DeleteEnvInstance(id string) error {
 func (c *FaaSClient) ListEnvInstances(envName string) ([]*models.EnvInstance, error) {
 	labels := make(map[string]string)
 	if envName != "" {
-		labels["envName"] = envName
+		labels["env"] = envName
 	}
 
 	resp, err := c.ListInstances(labels)
