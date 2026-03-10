@@ -90,8 +90,10 @@ func MCPMetricsMiddleware() gin.HandlerFunc {
 
 		var rpcMethod string
 		if c.Request.Method == "POST" && c.Request.Body != nil {
-			// LimitReader: only read up to 8KB for JSON-RPC header extraction
-			limited := io.LimitReader(c.Request.Body, 8192)
+			// Read up to 8KB+1 to detect oversized bodies; JSON-RPC method
+			// field is always in the first few dozen bytes.
+			const maxPeek = 8192
+			limited := io.LimitReader(c.Request.Body, maxPeek+1)
 			if body, err := io.ReadAll(limited); err == nil && len(body) > 0 {
 				var rpc struct {
 					Method string `json:"method"`
@@ -99,15 +101,22 @@ func MCPMetricsMiddleware() gin.HandlerFunc {
 				if json.Unmarshal(body, &rpc) == nil {
 					rpcMethod = rpc.Method
 				}
-				// Rebuild full body: read portion + any unread remainder
-				remaining, _ := io.ReadAll(c.Request.Body)
-				fullBody := append(body, remaining...)
+
+				// Fast path (99%+ requests): body fits within limit, skip
+				// second ReadAll and append entirely.
+				var fullBody []byte
+				if len(body) <= maxPeek {
+					fullBody = body
+				} else {
+					remaining, _ := io.ReadAll(c.Request.Body)
+					fullBody = append(body, remaining...)
+				}
+
 				c.Request.Body = io.NopCloser(bytes.NewReader(fullBody))
 				c.Request.GetBody = func() (io.ReadCloser, error) {
 					return io.NopCloser(bytes.NewReader(fullBody)), nil
 				}
 				c.Request.ContentLength = int64(len(fullBody))
-				// Store body in context for LoggingMiddleware reuse
 				c.Set("_req_body", fullBody)
 			}
 		}

@@ -61,7 +61,7 @@ func NewMCPGateway(router *gin.RouterGroup) *MCPGateway {
 	gateway := &MCPGateway{
 		router: router,
 		transport: &http.Transport{
-			MaxIdleConns:        100,
+			MaxIdleConns:        2000,
 			MaxIdleConnsPerHost: 10,
 			IdleConnTimeout:     90 * time.Second,
 		},
