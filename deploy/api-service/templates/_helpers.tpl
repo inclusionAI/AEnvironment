@@ -39,7 +39,7 @@ Selector labels
     {{ if .Values.backendAddr }}
         {{- .Values.backendAddr -}}
     {{ else }}
-        {{- printf "http://envhub.%s.svc.cluster.local:8083" .Values.metadata.namespace -}}
+        {{- printf "http://envhub.%s.svc.cluster.local:8083" .Values.global.namespace -}}
     {{ end }}
 {{ end }}
 
@@ -47,7 +47,7 @@ Selector labels
     {{ if .Values.scheduleAddr }}
         {{- .Values.scheduleAddr -}}
     {{ else }}
-        {{- printf "http://controller.%s.svc.cluster.local:8080" .Values.metadata.namespace -}}
+        {{- printf "http://controller.%s.svc.cluster.local:8080" .Values.global.namespace -}}
     {{ end }}
 {{ end }}
 
@@ -55,12 +55,10 @@ Selector labels
     {{ if .Values.scheduleType }}
         {{- .Values.scheduleType -}}
     {{ else }}
-        {{- printf "k8s" .Values.metadata.namespace -}}
+        {{- printf "k8s" -}}
     {{ end }}
 {{ end }}
 
 {{- define "api-service.qps" -}}
 {{- if .Values.qps }}{{ printf "%v" .Values.qps }}{{ else }}{{ "10" }}{{ end }}
 {{- end }}
-
-

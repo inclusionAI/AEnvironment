@@ -6,9 +6,6 @@ replicaCount: 1
 
 name: api-service
 
-metadata:
-  namespace: aenv
-
 # Namespace configuration
 namespace:
   # Set to true to automatically create the namespace
