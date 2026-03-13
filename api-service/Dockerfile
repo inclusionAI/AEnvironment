@@ -44,7 +44,7 @@ WORKDIR /workspace
 # Runtime stage
 FROM alpine:3.20
 
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata bash
 
 COPY --from=builder /workspace/api-service/api-service /usr/bin/api-service
 

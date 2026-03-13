@@ -17,6 +17,7 @@ limitations under the License.
 package metrics
 
 import (
+	"api-service/models"
 	"api-service/service/faas_model"
 	"time"
 
@@ -77,12 +78,18 @@ func (c *Collector) collect() {
 		return
 	}
 
+	c.CollectFromInstances(resp.Instances)
+}
+
+// CollectFromInstances updates metrics from a pre-fetched instance list.
+// This allows callers to share the same ListInstances result across multiple consumers.
+func (c *Collector) CollectFromInstances(instances []*faas_model.Instance) {
 	// Reset gauges to avoid stale data from deleted instances
 	ActiveInstances.Reset()
 	InstanceUptimeSeconds.Reset()
 
 	now := time.Now().UnixMilli()
-	for _, inst := range resp.Instances {
+	for _, inst := range instances {
 		if inst.Labels == nil {
 			inst.Labels = make(map[string]string)
 		}
@@ -103,5 +110,42 @@ func (c *Collector) collect() {
 		}
 	}
 
-	log.Infof("metrics collector: updated metrics for %d instances", len(resp.Instances))
+	log.Infof("metrics collector: updated metrics for %d instances", len(instances))
+}
+
+// CollectFromEnvInstances updates metrics from a pre-fetched EnvInstance list.
+// This handles the type difference between models.EnvInstance (used by ListEnvInstances)
+// and faas_model.Instance (used by FaaSClient.ListInstances).
+func (c *Collector) CollectFromEnvInstances(envInstances []*models.EnvInstance) {
+	ActiveInstances.Reset()
+	InstanceUptimeSeconds.Reset()
+
+	now := time.Now()
+	for _, inst := range envInstances {
+		labels := inst.Labels
+		if labels == nil {
+			labels = make(map[string]string)
+		}
+		env := labels["env"]
+		experiment := labels["experiment"]
+		owner := labels["owner"]
+		app := labels["app"]
+
+		ActiveInstances.WithLabelValues(env, experiment, owner, app).Inc()
+
+		if inst.CreatedAt != "" {
+			createdAt, err := time.Parse(time.DateTime, inst.CreatedAt)
+			if err != nil {
+				createdAt, err = time.Parse(time.RFC3339, inst.CreatedAt)
+			}
+			if err == nil {
+				uptimeSec := now.Sub(createdAt).Seconds()
+				InstanceUptimeSeconds.WithLabelValues(
+					inst.ID, env, experiment, owner, app,
+				).Set(uptimeSec)
+			}
+		}
+	}
+
+	log.Infof("metrics collector: updated metrics for %d env instances", len(envInstances))
 }

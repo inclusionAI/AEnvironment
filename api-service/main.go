@@ -18,6 +18,7 @@ limitations under the License.
 package main
 
 import (
+	"math/rand"
 	"net/http"
 	"runtime"
 	"time"
@@ -169,18 +170,55 @@ func main() {
 	}
 	cleanManager := service.NewAEnvCleanManager(scheduleClient, interval).
 		WithMetrics(middleware.IncrementCleanupSuccess, middleware.IncrementCleanupFailure)
-	go cleanManager.Start()
-	defer cleanManager.Stop()
 
-	// Start metrics collector for instance metrics (faas mode only)
+	// Start a unified periodic task that shares a single ListEnvInstances call
+	// across cleanup and metrics collection, reducing redundant requests to meta-service.
 	if scheduleType == "faas" {
 		if faasClient, ok := scheduleClient.(*service.FaaSClient); ok {
-			metricsCollector := metrics.NewCollector(faasClient, 5*time.Minute)
-			go metricsCollector.Start()
-			defer metricsCollector.Stop()
+			metricsCollector := metrics.NewCollector(faasClient, interval)
+			go startUnifiedPeriodicTask(scheduleClient, cleanManager, metricsCollector, interval)
+		} else {
+			go cleanManager.Start()
 		}
+	} else {
+		go cleanManager.Start()
 	}
 
 	// Block main goroutine
 	select {}
+}
+
+// startUnifiedPeriodicTask runs cleanup and metrics collection in a single ticker loop,
+// sharing one ListEnvInstances call per cycle. A random jitter at startup disperses
+// the tick phase across multiple api-service replicas to avoid thundering herd.
+func startUnifiedPeriodicTask(
+	envInstanceService service.EnvInstanceService,
+	cleanManager *service.AEnvCleanManager,
+	metricsCollector *metrics.Collector,
+	interval time.Duration,
+) {
+	// Random jitter to stagger tickers across replicas
+	jitter := time.Duration(rand.Int63n(int64(interval)))
+	log.Infof("Unified periodic task: starting after jitter %v (interval %v)", jitter, interval)
+	time.Sleep(jitter)
+
+	runOnce := func() {
+		envInstances, err := envInstanceService.ListEnvInstances("")
+		if err != nil {
+			log.Warnf("Unified periodic task: failed to list instances: %v", err)
+			return
+		}
+
+		// Feed the same data to both consumers
+		cleanManager.CleanupFromInstances(envInstances)
+		metricsCollector.CollectFromEnvInstances(envInstances)
+	}
+
+	runOnce()
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for range ticker.C {
+		runOnce()
+	}
 }
