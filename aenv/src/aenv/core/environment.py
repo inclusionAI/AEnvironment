@@ -175,11 +175,13 @@ class Environment:
         self._CIRCUIT_BREAKER_THRESHOLD = 5
 
     def _log_prefix(self) -> str:
-        """Get log prefix with instance ID."""
+        """Get log prefix with instance ID and SDK version."""
+        from aenv import __version__
+
         instance_id = (
             getattr(self._instance, "id", "None") if self._instance else "None"
         )
-        return f"[ENV:{instance_id}]"
+        return f"[ENV:{instance_id}][sdk:v{__version__}]"
 
     async def _backoff(self, attempt: int, base: float = 2.0) -> None:
         """Exponential backoff with jitter."""

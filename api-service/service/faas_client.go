@@ -237,10 +237,6 @@ func (c *FaaSClient) WarmupAsyncChan(req *backend.Env) <-chan error {
 	return resultCh
 }
 
-func (c *FaaSClient) Cleanup() error {
-	return fmt.Errorf("cleanup not implemented in faas")
-}
-
 // --- Newly added local method implementations ---
 
 func (c *FaaSClient) CreateFunction(in *faas_model.FunctionCreateOrUpdateRequest) error {

@@ -24,7 +24,6 @@ type EnvInstanceService interface {
 	DeleteEnvInstance(id string) error
 	ListEnvInstances(envName string) ([]*models.EnvInstance, error)
 	Warmup(req *backend.Env) error
-	Cleanup() error
 }
 
 type EnvInstanceClient struct {
@@ -297,57 +296,6 @@ func (c *EnvInstanceClient) Warmup(req *backend.Env) error {
 		errMsg := fmt.Sprintf("warmup env: server returned error, code: %d", getResp.Code)
 		if getResp.Message != "" {
 			errMsg = fmt.Sprintf("warmup env: server returned error (code %d): %s", getResp.Code, getResp.Message)
-		}
-		return fmt.Errorf("%s", errMsg)
-	}
-
-	return nil
-}
-
-// Cleanup performs a cleanup operation to release unused environment resources.
-//
-// Parameters:
-//   - None
-//
-// Returns:
-//   - error: nil if cleanup is successful; otherwise, an error indicating failure.
-func (c *EnvInstanceClient) Cleanup() error {
-	url := fmt.Sprintf("%s/%s/action/cleanup", c.baseURL, AEnvOpenAPIInstance)
-
-	httpReq, err := http.NewRequest("PUT", url, nil)
-	if err != nil {
-		return fmt.Errorf("cleanup env: failed to create request: %v", err)
-	}
-
-	resp, err := c.httpClient.Do(httpReq)
-	if err != nil {
-		return fmt.Errorf("cleanup env: failed to send request: %v", err)
-	}
-	defer func() {
-		if closeErr := resp.Body.Close(); closeErr != nil {
-			log.Warnf("failed to close response body: %v", closeErr)
-		}
-	}()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("cleanup env: failed to read response body: %v", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("cleanup env: request failed with status %d: %s", resp.StatusCode, truncateBody(body))
-	}
-
-	var getResp models.ClientResponse[models.EnvInstance]
-	if err := json.Unmarshal(body, &getResp); err != nil {
-		return fmt.Errorf("cleanup env: failed to unmarshal response: %v", err)
-	}
-
-	if !getResp.Success {
-		// Include both code and message in error
-		errMsg := fmt.Sprintf("cleanup env: server returned error, code: %d", getResp.Code)
-		if getResp.Message != "" {
-			errMsg = fmt.Sprintf("cleanup env: server returned error (code %d): %s", getResp.Code, getResp.Message)
 		}
 		return fmt.Errorf("%s", errMsg)
 	}
