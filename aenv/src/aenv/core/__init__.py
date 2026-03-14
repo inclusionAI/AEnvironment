@@ -20,6 +20,7 @@ from aenv.core.exceptions import (
     NetworkError,
     ToolError,
     ToolTimeoutError,
+    UnrecoverableEnvironmentError,
 )
 from aenv.core.function_registry import (
     get_function_registry,
@@ -39,4 +40,5 @@ __all__ = [
     "ToolError",
     "ToolTimeoutError",
     "NetworkError",
+    "UnrecoverableEnvironmentError",
 ]

@@ -237,10 +237,6 @@ func (c *FaaSClient) WarmupAsyncChan(req *backend.Env) <-chan error {
 	return resultCh
 }
 
-func (c *FaaSClient) Cleanup() error {
-	return fmt.Errorf("cleanup not implemented in faas")
-}
-
 // --- Newly added local method implementations ---
 
 func (c *FaaSClient) CreateFunction(in *faas_model.FunctionCreateOrUpdateRequest) error {
@@ -356,6 +352,7 @@ func (c *FaaSClient) InitializeFunction(name string, initOptions faas_model.Func
 	if err != nil {
 		return "", err
 	}
+	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
 		return "", fmt.Errorf("failed to initialize function from faas server with status code %d", resp.StatusCode)

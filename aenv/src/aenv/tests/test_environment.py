@@ -335,3 +335,247 @@ class TestMCPSessionReuse:
         mock_client.close.assert_awaited_once()
         # Second call went through the new client
         mock_client_2.call_tool_mcp.assert_awaited_once()
+
+
+class TestCircuitBreaker:
+    """Tests for circuit breaker functionality.
+
+    Verifies that after _CIRCUIT_BREAKER_THRESHOLD consecutive tool failures,
+    the circuit breaker opens and raises UnrecoverableEnvironmentError.
+    Also tests that successful tool execution resets the error counter.
+    """
+
+    def _make_env(self):
+        """Create an Environment instance pre-configured for unit testing."""
+        env = Environment("test-env")
+        env._initialized = True
+
+        class _FakeInstance:
+            ip = "127.0.0.1"
+            id = "fake-id"
+
+        env._instance = _FakeInstance()
+        env.proxy_headers = {"AEnvCore-MCPProxy-URL": "http://127.0.0.1:8081"}
+        return env
+
+    def _make_mock_client(self):
+        """Build a mock fastmcp Client with sensible defaults."""
+        mock_client = MagicMock()
+        mock_client.is_connected.return_value = True
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+
+        call_result = MagicMock()
+        call_result.content = []
+        call_result.isError = False
+        mock_client.call_tool_mcp = AsyncMock(return_value=call_result)
+        mock_client.list_tools = AsyncMock(return_value=[])
+        mock_client.close = AsyncMock()
+
+        return mock_client
+
+    def _patch_get_mcp_client(self, env, mock_client):
+        """Create a side-effect function for _get_mcp_client that also
+        sets env._mcp_client, mirroring the real implementation."""
+
+        async def _side_effect():
+            env._mcp_client = mock_client
+            return mock_client
+
+        return patch.object(env, "_get_mcp_client", side_effect=_side_effect)
+
+    @pytest.mark.asyncio
+    async def test_circuit_breaker_opens_after_threshold(self):
+        """Force 5 consecutive tool failures, verify 6th call raises UnrecoverableEnvironmentError."""
+        from aenv.core.exceptions import UnrecoverableEnvironmentError
+
+        env = self._make_env()
+        mock_client = self._make_mock_client()
+
+        # Make call_tool_mcp raise an exception
+        mock_client.call_tool_mcp = AsyncMock(
+            side_effect=Exception("Tool execution failed")
+        )
+
+        with self._patch_get_mcp_client(env, mock_client):
+            # First 5 failures should raise ToolError
+            for i in range(5):
+                with pytest.raises(ToolError):
+                    await env.call_tool("failing_tool", {"x": i})
+                assert env._consecutive_tool_errors == i + 1
+
+            # 6th call should raise UnrecoverableEnvironmentError (circuit breaker open)
+            with pytest.raises(UnrecoverableEnvironmentError) as exc_info:
+                await env.call_tool("failing_tool", {"x": 5})
+
+            assert "Circuit breaker open" in str(exc_info.value)
+            assert "5 consecutive failures" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_circuit_breaker_resets_on_success(self):
+        """Force 3 failures, then 1 success, verify counter resets to 0."""
+        env = self._make_env()
+        mock_client = self._make_mock_client()
+
+        # First 3 calls fail
+        fail_count = 0
+
+        async def _conditional_failure(*args, **kwargs):
+            nonlocal fail_count
+            fail_count += 1
+            if fail_count <= 3:
+                raise Exception("Tool execution failed")
+            # 4th call succeeds
+            result = MagicMock()
+            result.content = []
+            result.isError = False
+            return result
+
+        mock_client.call_tool_mcp = AsyncMock(side_effect=_conditional_failure)
+
+        with self._patch_get_mcp_client(env, mock_client):
+            # First 3 calls fail
+            for i in range(3):
+                with pytest.raises(ToolError):
+                    await env.call_tool("flaky_tool", {"x": i})
+                assert env._consecutive_tool_errors == i + 1
+
+            # 4th call succeeds
+            result = await env.call_tool("flaky_tool", {"x": 3})
+            assert result.is_error is False
+            # Counter should be reset to 0
+            assert env._consecutive_tool_errors == 0
+
+    @pytest.mark.asyncio
+    async def test_tool_failure_triggers_rebuild(self):
+        """Verify _rebuild_mcp_client is called when tool execution fails."""
+        env = self._make_env()
+        mock_client = self._make_mock_client()
+
+        # Make call_tool_mcp raise an exception
+        mock_client.call_tool_mcp = AsyncMock(
+            side_effect=Exception("Tool execution failed")
+        )
+
+        with self._patch_get_mcp_client(env, mock_client):
+            with patch.object(
+                env, "_rebuild_mcp_client", new=AsyncMock()
+            ) as mock_rebuild:
+                with pytest.raises(ToolError):
+                    await env.call_tool("failing_tool", {"x": 1})
+
+                # Verify rebuild was called
+                mock_rebuild.assert_awaited_once()
+
+
+class TestAenterRetry:
+    """Tests for __aenter__ retry logic.
+
+    Verifies that when _ensure_mcp_session() fails on first attempt in __aenter__,
+    it retries once after rebuild and sleep. Tests both success-on-retry and
+    failure-on-both cases.
+    """
+
+    def _make_env(self):
+        """Create an Environment instance pre-configured for unit testing."""
+        env = Environment("test-env")
+        env._initialized = True
+
+        class _FakeInstance:
+            ip = "127.0.0.1"
+            id = "fake-id"
+
+        env._instance = _FakeInstance()
+        env.proxy_headers = {"AEnvCore-MCPProxy-URL": "http://127.0.0.1:8081"}
+        return env
+
+    @pytest.mark.asyncio
+    async def test_aenter_retries_on_session_failure(self):
+        """Mock _ensure_mcp_session to fail once then succeed, verify __aenter__ succeeds."""
+        env = self._make_env()
+
+        # First call fails, second call succeeds
+        call_count = 0
+
+        async def _conditional_failure():
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise Exception("Session establishment failed")
+            # Second call succeeds (no-op, just don't raise)
+            return
+
+        with patch.object(env, "initialize", new=AsyncMock()):
+            with patch.object(
+                env, "_ensure_mcp_session", side_effect=_conditional_failure
+            ) as mock_ensure:
+                with patch.object(
+                    env, "_rebuild_mcp_client", new=AsyncMock()
+                ) as mock_rebuild:
+                    result = await env.__aenter__()
+
+                    # Should succeed on retry
+                    assert result is env
+                    # _ensure_mcp_session called twice (fail, then succeed)
+                    assert mock_ensure.await_count == 2
+                    # _rebuild_mcp_client called once between retries
+                    mock_rebuild.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_aenter_raises_after_max_retries(self):
+        """Mock _ensure_mcp_session to always fail, verify exception is raised after 2 attempts."""
+        env = self._make_env()
+
+        # Always fail
+        async def _always_fail():
+            raise Exception("Session establishment failed")
+
+        with patch.object(env, "initialize", new=AsyncMock()):
+            with patch.object(
+                env, "_ensure_mcp_session", side_effect=_always_fail
+            ) as mock_ensure:
+                with patch.object(
+                    env, "_rebuild_mcp_client", new=AsyncMock()
+                ) as mock_rebuild:
+                    with pytest.raises(Exception) as exc_info:
+                        await env.__aenter__()
+
+                    assert "Session establishment failed" in str(exc_info.value)
+                    # _ensure_mcp_session called twice (max_attempts=2)
+                    assert mock_ensure.await_count == 2
+                    # _rebuild_mcp_client called once between retries
+                    mock_rebuild.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_aenter_calls_rebuild_between_retries(self):
+        """Verify _rebuild_mcp_client is called between retry attempts."""
+        env = self._make_env()
+
+        call_count = 0
+
+        async def _conditional_failure():
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 1:
+                raise Exception("Session establishment failed")
+            # Second call succeeds
+
+        rebuild_called_after_first_attempt = False
+
+        async def _track_rebuild():
+            nonlocal rebuild_called_after_first_attempt
+            if call_count == 1:
+                rebuild_called_after_first_attempt = True
+
+        with patch.object(env, "initialize", new=AsyncMock()):
+            with patch.object(
+                env, "_ensure_mcp_session", side_effect=_conditional_failure
+            ):
+                with patch.object(
+                    env, "_rebuild_mcp_client", side_effect=_track_rebuild
+                ) as mock_rebuild:
+                    await env.__aenter__()
+
+                    # Verify rebuild was called after first attempt
+                    assert rebuild_called_after_first_attempt is True
+                    mock_rebuild.assert_awaited_once()
