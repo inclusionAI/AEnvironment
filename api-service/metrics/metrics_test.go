@@ -186,7 +186,7 @@ func TestCollectorCollect(t *testing.T) {
 	}
 
 	// Check active instances count for terminal-0.1.0 (should be 2)
-	if !strings.Contains(bodyStr, `aenv_api_active_instances{app="chatbot",env="terminal-0.1.0",experiment="exp1",owner="jun"} 2`) {
+	if !strings.Contains(bodyStr, `aenv_api_active_instances{app="chatbot",envName="terminal-0.1.0",experiment="exp1",owner="jun"} 2`) {
 		t.Errorf("expected active_instances for terminal-0.1.0 to be 2")
 	}
 

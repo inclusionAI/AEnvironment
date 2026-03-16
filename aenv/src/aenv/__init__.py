@@ -20,7 +20,12 @@ containerized environment with MCP protocol support.
 """
 
 from aenv.core.environment import Environment
-from aenv.core.exceptions import AEnvError, EnvironmentError, ToolError
+from aenv.core.exceptions import (
+    AEnvError,
+    EnvironmentError,
+    ToolError,
+    UnrecoverableEnvironmentError,
+)
 from aenv.core.function_registry import (
     register_function,
     register_health,
@@ -30,7 +35,7 @@ from aenv.core.logging import setup_logging
 from aenv.core.models import EnvInstance, EnvStatus
 from aenv.core.tool import Tool, get_registry, register_tool
 
-__version__ = "0.1.5"
+__version__ = "0.1.6"
 __all__ = [
     "Tool",
     "register_tool",
@@ -42,6 +47,7 @@ __all__ = [
     "AEnvError",
     "ToolError",
     "EnvironmentError",
+    "UnrecoverableEnvironmentError",
     "EnvInstance",
     "EnvStatus",
     "setup_logging",

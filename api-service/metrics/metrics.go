@@ -25,13 +25,13 @@ const subsystem = "aenv_api"
 
 // BusinessLabelKeys defines the fixed business labels used for instance metrics.
 // These labels are extracted from instance Labels map:
-//   - env: Environment name (e.g., "terminal-0.1.0"), auto-set by system
+//   - envName: Environment name (e.g., "terminal-0.1.0"), auto-set by system
 //   - experiment: Experiment identifier (user-provided, optional)
 //   - owner: Instance owner/creator (user-provided, optional)
 //   - app: Application name (user-provided, optional)
 //
 // Missing labels will result in empty string values in metrics.
-var BusinessLabelKeys = []string{"env", "experiment", "owner", "app"}
+var BusinessLabelKeys = []string{"envName", "experiment", "owner", "app"}
 
 var (
 	// HTTP request metrics
@@ -90,5 +90,25 @@ var (
 			Help:      "Instance uptime in seconds",
 		},
 		append([]string{"instance_id"}, BusinessLabelKeys...),
+	)
+
+	// MCP proxy metrics with rpc_method to distinguish JSON-RPC operations
+	MCPRequestsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Subsystem: subsystem,
+			Name:      "mcp_requests_total",
+			Help:      "Total number of MCP proxy requests",
+		},
+		[]string{"method", "endpoint", "rpc_method", "status"},
+	)
+
+	MCPRequestDurationMs = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Subsystem: subsystem,
+			Name:      "mcp_request_duration_ms",
+			Help:      "MCP proxy request duration in milliseconds",
+			Buckets:   prometheus.ExponentialBuckets(1, 2, 20),
+		},
+		[]string{"method", "endpoint", "rpc_method", "status"},
 	)
 )

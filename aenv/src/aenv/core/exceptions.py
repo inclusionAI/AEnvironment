@@ -82,6 +82,12 @@ class ToolServerError(ToolError):
         self.status_code = status_code
 
 
+class UnrecoverableEnvironmentError(EnvironmentError):
+    """Environment is in an unrecoverable state (circuit breaker open)."""
+
+    pass
+
+
 class NetworkError(AEnvError):
     """Exception raised for network-related errors."""
 

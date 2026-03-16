@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
@@ -51,13 +52,19 @@ const (
 
 // MCPGateway MCP gateway struct
 type MCPGateway struct {
-	router *gin.RouterGroup
+	router    *gin.RouterGroup
+	transport *http.Transport
 }
 
 // NewMCPGateway creates a new MCP gateway instance
 func NewMCPGateway(router *gin.RouterGroup) *MCPGateway {
 	gateway := &MCPGateway{
 		router: router,
+		transport: &http.Transport{
+			MaxIdleConns:        2000,
+			MaxIdleConnsPerHost: 10,
+			IdleConnTimeout:     90 * time.Second,
+		},
 	}
 
 	gateway.setupRoutes()
@@ -195,7 +202,7 @@ func (g *MCPGateway) handleMCPSSEWithHeader(c *gin.Context) {
 	g.copyHeadersExcept(c.Request.Header, req.Header, constants.HeaderMCPServerURL)
 
 	// Send to MCP server
-	client := &http.Client{}
+	client := &http.Client{Transport: g.transport}
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Errorf("Failed to connect to MCP server (%s): %v", mcpServerURL, err)
@@ -280,27 +287,22 @@ func (g *MCPGateway) handleMCPHTTPWithHeader(c *gin.Context) {
 	// HTTP path will be duplicated
 	targetURL := g.buildTargetURL(serverURL, "", "")
 
-	// Create reverse proxy
-	proxy := httputil.NewSingleHostReverseProxy(&targetURL)
-
-	// Error handling
-	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-		log.Errorf("Proxy error for server %s: %v", mcpServerURL, err)
-		c.JSON(http.StatusBadGateway, gin.H{
-			"error":   "Failed to forward request to MCP server",
-			"details": err.Error(),
-			"server":  mcpServerURL,
-		})
-	}
-
-	// Create Director to modify request
-	originalDirector := proxy.Director
-	proxy.Director = func(req *http.Request) {
-		// Execute original Director first
-		originalDirector(req)
-
-		// Remove headers used internally by gateway
-		req.Header.Del(constants.HeaderMCPServerURL)
+	// Create reverse proxy with shared transport
+	proxy := &httputil.ReverseProxy{
+		Director: func(req *http.Request) {
+			req.URL.Scheme = targetURL.Scheme
+			req.URL.Host = targetURL.Host
+			req.Header.Del(constants.HeaderMCPServerURL)
+		},
+		Transport: g.transport,
+		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			log.Errorf("Proxy error for server %s: %v", mcpServerURL, err)
+			c.JSON(http.StatusBadGateway, gin.H{
+				"error":   "Failed to forward request to MCP server",
+				"details": err.Error(),
+				"server":  mcpServerURL,
+			})
+		},
 	}
 
 	// Execute reverse proxy

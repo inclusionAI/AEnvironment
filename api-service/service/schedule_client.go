@@ -607,38 +607,3 @@ func (c *ScheduleClient) ListEnvInstances(envName string) ([]*models.EnvInstance
 func (c *ScheduleClient) Warmup(req *backend.Env) error {
 	return fmt.Errorf("warmup is not implemented")
 }
-
-func (c *ScheduleClient) Cleanup() error {
-	log.Infof("Starting cleanup task...")
-	// get all EnvInstance
-	envInstances, err := c.FilterPods()
-	if err != nil {
-		return fmt.Errorf("failed to get env instances: %v", err)
-	}
-	if envInstances == nil || len(*envInstances) == 0 {
-		log.Infof("No env instances found")
-		return nil
-	}
-
-	var deletedCount int
-
-	for _, instance := range *envInstances {
-		// skip terminated env instance
-		if instance.Status == "Terminated" {
-			continue
-		}
-		deleted, err := c.DeletePod(instance.ID)
-		if err != nil {
-			log.Warnf("Failed to delete instance %s: %v", instance.ID, err)
-			continue
-		}
-		if deleted {
-			deletedCount++
-			log.Infof("Successfully deleted instance %s", instance.ID)
-		} else {
-			log.Infof("Instance %s was not deleted (may already be deleted)", instance.ID)
-		}
-	}
-	log.Infof("Cleanup task completed. Deleted %d expired instances", deletedCount)
-	return nil
-}

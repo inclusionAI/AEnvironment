@@ -92,6 +92,12 @@ func (cm *AEnvCleanManager) performCleanup() {
 		return
 	}
 
+	cm.CleanupFromInstances(envInstances)
+}
+
+// CleanupFromInstances performs TTL-based cleanup on a pre-fetched instance list.
+// This allows callers to share the same ListEnvInstances result across multiple consumers.
+func (cm *AEnvCleanManager) CleanupFromInstances(envInstances []*models.EnvInstance) {
 	if len(envInstances) == 0 {
 		log.Debug("No environment instances found")
 		return
