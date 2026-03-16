@@ -7,9 +7,6 @@ replicaCount: 1
 name: envhub
 
 
-metadata:
-  namespace: aenv
-
 # Namespace configuration
 namespace:
   # Set to true to automatically create the namespace
