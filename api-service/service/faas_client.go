@@ -407,6 +407,25 @@ func (c *FaaSClient) DeleteInstance(name string) error {
 	return nil
 }
 
+// DeleteInstanceRecord deletes only the metadata record of an instance
+// without contacting the runtime node gateway. This is used as a fallback
+// when the node is unreachable.
+func (c *FaaSClient) DeleteInstanceRecord(name string) error {
+	uri := fmt.Sprintf("/hapis/faas.hcs.io/v1/instances/%s/record", name)
+
+	resp := &faas_model.APIResponse{}
+	err := c.client.Delete(uri).Do().Into(resp)
+	if err != nil {
+		return fmt.Errorf("failed to delete instance record %s: %w", name, err)
+	}
+
+	if !resp.Success {
+		return fmt.Errorf("failed to delete instance record %s: %s", name, resp.ErrorMessage)
+	}
+
+	return nil
+}
+
 // --- Utility functions ---
 
 // convertStatus converts model.InstanceStatus to models.EnvInstanceStatus.String()

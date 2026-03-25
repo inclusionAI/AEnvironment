@@ -129,6 +129,8 @@ func (ctrl *EnvInstanceController) CreateEnvInstance(c *gin.Context) {
 	}
 	envInstance.Env = backendEnv
 
+	log.Infof("Created instance %s for env %s [labels=%v, owner=%s]", envInstance.ID, req.EnvName, req.Labels, req.Owner)
+
 	// Set owner from DeployConfig if available (controller stores it in pod labels but doesn't return it)
 	if backendEnv.DeployConfig != nil {
 		if ownerValue, ok := backendEnv.DeployConfig["owner"]; ok {
