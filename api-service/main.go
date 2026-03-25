@@ -25,6 +25,8 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"strings"
+
 	"api-service/controller"
 	"api-service/metrics"
 	"api-service/middleware"
@@ -48,6 +50,13 @@ var (
 	tokenCacheMaxEntries int
 	tokenCacheTTLMinutes int
 	cleanupInterval      string
+	// Experiment admission control
+	admissionEnabled        bool
+	schedulerHTTPAddr       string
+	perInstanceCPU          int64
+	peakWindow              string
+	admissionWatermark      float64
+	admissionRequiredLabels string
 )
 
 func init() {
@@ -63,6 +72,13 @@ func init() {
 	pflag.StringVar(&redisAddr, "redis-addr", "", "Redis address (host:port)")
 	pflag.StringVar(&redisPassword, "redis-password", "", "Redis password")
 	pflag.StringVar(&cleanupInterval, "cleanup-interval", "5m", "Cleanup service interval (e.g., 5m, 1h)")
+
+	pflag.BoolVar(&admissionEnabled, "admission-enabled", false, "Enable experiment-level resource admission control")
+	pflag.StringVar(&schedulerHTTPAddr, "scheduler-addr", "", "faas-api-service HTTP API address for cluster info polling (e.g., http://faas-api-service:8233)")
+	pflag.Int64Var(&perInstanceCPU, "per-instance-cpu", 2000, "CPU per instance in milli-cores for admission calculation")
+	pflag.StringVar(&peakWindow, "peak-window", "15m", "Sliding window duration for experiment peak instance count")
+	pflag.Float64Var(&admissionWatermark, "admission-watermark", 0.7, "Cluster utilization watermark threshold (0.0-1.0) for new experiment admission")
+	pflag.StringVar(&admissionRequiredLabels, "admission-required-labels", "experiment", "Comma-separated list of required labels for admission (default: experiment)")
 }
 
 func healthChecker(c *gin.Context) {
@@ -110,10 +126,31 @@ func main() {
 
 	envInstanceController := controller.NewEnvInstanceController(scheduleClient, backendClient, redisClient)
 
+	// Experiment admission control
+	var experimentAdmission *service.ExperimentAdmission
+	if admissionEnabled && schedulerHTTPAddr != "" {
+		pw, err := time.ParseDuration(peakWindow)
+		if err != nil {
+			log.Fatalf("Invalid peak-window duration: %v", err)
+		}
+		var requiredLabels []string
+		for _, l := range strings.Split(admissionRequiredLabels, ",") {
+			l = strings.TrimSpace(l)
+			if l != "" {
+				requiredLabels = append(requiredLabels, l)
+			}
+		}
+		experimentAdmission = service.NewExperimentAdmission(schedulerHTTPAddr, perInstanceCPU, pw, admissionWatermark, requiredLabels)
+		go experimentAdmission.StartClusterResourcePoller()
+		log.Infof("Experiment admission control enabled (scheduler=%s, per-instance-cpu=%d, peak-window=%s, watermark=%.2f, required-labels=%v)",
+			schedulerHTTPAddr, perInstanceCPU, peakWindow, admissionWatermark, requiredLabels)
+	}
+
 	// Main route configuration
 	mainRouter.POST("/env-instance",
 		middleware.AuthTokenMiddleware(tokenEnabled, backendClient),
 		middleware.InstanceLimitMiddleware(redisClient),
+		middleware.ExperimentAdmissionMiddleware(experimentAdmission),
 		middleware.RateLimit(qps),
 		envInstanceController.CreateEnvInstance)
 	mainRouter.GET("/env-instance/:id/list", middleware.AuthTokenMiddleware(tokenEnabled, backendClient), envInstanceController.ListEnvInstances)
@@ -175,8 +212,9 @@ func main() {
 	// across cleanup and metrics collection, reducing redundant requests to meta-service.
 	if scheduleType == "faas" {
 		if faasClient, ok := scheduleClient.(*service.FaaSClient); ok {
+			cleanManager.WithRecordDeleter(faasClient)
 			metricsCollector := metrics.NewCollector(faasClient, interval)
-			go startUnifiedPeriodicTask(scheduleClient, cleanManager, metricsCollector, interval)
+			go startUnifiedPeriodicTask(scheduleClient, cleanManager, metricsCollector, experimentAdmission, interval)
 		} else {
 			go cleanManager.Start()
 		}
@@ -195,6 +233,7 @@ func startUnifiedPeriodicTask(
 	envInstanceService service.EnvInstanceService,
 	cleanManager *service.AEnvCleanManager,
 	metricsCollector *metrics.Collector,
+	experimentAdmission *service.ExperimentAdmission,
 	interval time.Duration,
 ) {
 	// Random jitter to stagger tickers across replicas
@@ -203,6 +242,7 @@ func startUnifiedPeriodicTask(
 	time.Sleep(jitter)
 
 	runOnce := func() {
+		log.Infof("Unified periodic task: starting run cycle")
 		envInstances, err := envInstanceService.ListEnvInstances("")
 		if err != nil {
 			log.Warnf("Unified periodic task: failed to list instances: %v", err)
@@ -212,6 +252,9 @@ func startUnifiedPeriodicTask(
 		// Feed the same data to both consumers
 		cleanManager.CleanupFromInstances(envInstances)
 		metricsCollector.CollectFromEnvInstances(envInstances)
+		if experimentAdmission != nil {
+			experimentAdmission.UpdateExperimentCounts(envInstances)
+		}
 	}
 
 	runOnce()
