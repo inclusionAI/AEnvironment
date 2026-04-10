@@ -30,9 +30,10 @@ import (
 
 // EnvInstanceController handles EnvInstance operations
 type EnvInstanceController struct {
-	envInstanceService service.EnvInstanceService // use interface
-	backendClient      *service.BackendClient
-	redisClient        *service.RedisClient
+	envInstanceService  service.EnvInstanceService // use interface
+	backendClient       *service.BackendClient
+	redisClient         *service.RedisClient
+	experimentAdmission *service.ExperimentAdmission
 }
 
 // NewEnvInstanceController creates a new EnvInstance controller instance
@@ -40,11 +41,13 @@ func NewEnvInstanceController(
 	envInstanceService service.EnvInstanceService,
 	backendClient *service.BackendClient,
 	redisClient *service.RedisClient,
+	experimentAdmission *service.ExperimentAdmission,
 ) *EnvInstanceController {
 	return &EnvInstanceController{
-		envInstanceService: envInstanceService,
-		backendClient:      backendClient,
-		redisClient:        redisClient,
+		envInstanceService:  envInstanceService,
+		backendClient:       backendClient,
+		redisClient:         redisClient,
+		experimentAdmission: experimentAdmission,
 	}
 }
 
@@ -129,6 +132,8 @@ func (ctrl *EnvInstanceController) CreateEnvInstance(c *gin.Context) {
 	}
 	envInstance.Env = backendEnv
 
+	log.Infof("Created instance %s for env %s [labels=%v, owner=%s]", envInstance.ID, req.EnvName, req.Labels, req.Owner)
+
 	// Set owner from DeployConfig if available (controller stores it in pod labels but doesn't return it)
 	if backendEnv.DeployConfig != nil {
 		if ownerValue, ok := backendEnv.DeployConfig["owner"]; ok {
@@ -188,6 +193,10 @@ func (ctrl *EnvInstanceController) DeleteEnvInstance(c *gin.Context) {
 	}
 	metrics.InstanceOpsTotal.WithLabelValues("delete", id, "success").Inc()
 	backendmodels.JSONSuccess(c, "Deleted successfully")
+	// Decrement experiment admission count
+	if ctrl.experimentAdmission != nil {
+		ctrl.experimentAdmission.UnregisterInstance(id)
+	}
 	token := util.GetCurrentToken(c)
 	if token != nil && ctrl.redisClient != nil {
 		if result, err := ctrl.redisClient.RemoveEnvInstanceFromRedis(token.Token, id); !result || err != nil {

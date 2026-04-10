@@ -88,8 +88,8 @@ func (w ResponseWriter) WriteString(s string) (int, error) {
 func LoggingMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 
-		// Filter health check path, don't log
-		if c.Request.URL.Path == "/health" {
+		// Filter noisy paths, don't log
+		if c.Request.URL.Path == "/health" || c.Request.URL.Path == "/metrics" {
 			c.Next()
 			return
 		}

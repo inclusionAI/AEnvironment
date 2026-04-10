@@ -1,0 +1,5 @@
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates tzdata socat tar
+COPY api-service-linux-amd64 /usr/bin/api-service
+EXPOSE 8080
+ENTRYPOINT ["/usr/bin/api-service"]

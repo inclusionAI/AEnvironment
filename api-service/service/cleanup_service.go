@@ -19,13 +19,24 @@ package service
 import (
 	"api-service/models"
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 )
 
+// RecordDeleter can delete only the metadata record of an instance
+// without contacting the runtime node. Use as a fallback when the
+// node gateway is unreachable.
+type RecordDeleter interface {
+	DeleteInstanceRecord(id string) error
+}
+
 type AEnvCleanManager struct {
-	envInstanceService EnvInstanceService
+	envInstanceService  EnvInstanceService
+	recordDeleter       RecordDeleter // optional, nil for non-faas backends
+	experimentAdmission *ExperimentAdmission
 
 	interval time.Duration
 	ctx      context.Context
@@ -50,6 +61,18 @@ func NewAEnvCleanManager(envInstanceService EnvInstanceService, duration time.Du
 		incrementCleanupFailure: func() {},
 	}
 	return AEnvCleanManager
+}
+
+// WithRecordDeleter sets an optional record-only deleter for fallback cleanup.
+func (cm *AEnvCleanManager) WithRecordDeleter(rd RecordDeleter) *AEnvCleanManager {
+	cm.recordDeleter = rd
+	return cm
+}
+
+// WithExperimentAdmission sets the experiment admission controller for count updates on delete.
+func (cm *AEnvCleanManager) WithExperimentAdmission(ea *ExperimentAdmission) *AEnvCleanManager {
+	cm.experimentAdmission = ea
+	return cm
 }
 
 // WithMetrics sets the metrics functions for the clean manager
@@ -114,20 +137,59 @@ func (cm *AEnvCleanManager) CleanupFromInstances(envInstances []*models.EnvInsta
 
 		// Check if TTL is set and has expired
 		if cm.isExpired(instance) {
-			log.Infof("Instance %s has expired (TTL: %s), deleting...", instance.ID, instance.TTL)
+			instanceInfo := formatInstanceInfo(instance)
+			log.Infof("Instance %s has expired (TTL: %s), deleting... %s", instance.ID, instance.TTL, instanceInfo)
 			err := cm.envInstanceService.DeleteEnvInstance(instance.ID)
 			if err != nil {
-				log.Errorf("Failed to delete expired instance %s: %v", instance.ID, err)
+				// If the error indicates the node gateway is unreachable,
+				// fall back to record-only deletion to prevent infinite retry loops.
+				if cm.recordDeleter != nil && isNodeUnreachable(err) {
+					log.Warnf("Node unreachable for instance %s, falling back to record-only deletion. %s err: %v", instance.ID, instanceInfo, err)
+					if recordErr := cm.recordDeleter.DeleteInstanceRecord(instance.ID); recordErr != nil {
+						log.Errorf("Failed to delete record for instance %s: %v %s", instance.ID, recordErr, instanceInfo)
+						cm.incrementCleanupFailure()
+						continue
+					}
+					deletedCount++
+					cm.incrementCleanupSuccess()
+					cm.unregisterFromAdmission(instance.ID)
+					log.Infof("Successfully deleted record for unreachable instance %s %s", instance.ID, instanceInfo)
+					continue
+				}
+
+				log.Errorf("Failed to delete expired instance %s: %v %s", instance.ID, err, instanceInfo)
 				cm.incrementCleanupFailure()
 				continue
 			}
 			deletedCount++
 			cm.incrementCleanupSuccess()
-			log.Infof("Successfully deleted expired instance %s", instance.ID)
+			cm.unregisterFromAdmission(instance.ID)
+			log.Infof("Successfully deleted expired instance %s %s", instance.ID, instanceInfo)
 		}
 	}
 
 	log.Infof("TTL-based cleanup task completed. Deleted %d expired instances", deletedCount)
+}
+
+// unregisterFromAdmission notifies the admission controller that an instance was deleted.
+func (cm *AEnvCleanManager) unregisterFromAdmission(instanceID string) {
+	if cm.experimentAdmission != nil {
+		cm.experimentAdmission.UnregisterInstance(instanceID)
+	}
+}
+
+// isNodeUnreachable checks if an error indicates that the node gateway is unreachable
+func isNodeUnreachable(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "connection refused") ||
+		strings.Contains(msg, "no such host") ||
+		strings.Contains(msg, "i/o timeout") ||
+		strings.Contains(msg, "connect: network is unreachable")
+}
+
+// formatInstanceInfo returns a human-readable string with instance labels and creation time
+func formatInstanceInfo(instance *models.EnvInstance) string {
+	return fmt.Sprintf("[labels=%v, created_at=%s]", instance.Labels, instance.CreatedAt)
 }
 
 // isExpired checks if an environment instance has expired based on its TTL and creation time
