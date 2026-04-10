@@ -23,7 +23,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"strings"
 
 	backendmodels "envhub/models"
 
@@ -45,19 +44,15 @@ type createResponse struct {
 }
 
 // ExperimentAdmissionMiddleware checks whether a new experiment should be admitted
-// based on cluster resource availability, watermark, and required labels.
+// based on cluster resource availability, experiment format, and instance limits.
 //
-// Tier logic:
-//   - P2 (unlabeled): missing required labels → reject 400
-//   - P0 (known): existing experiment → always allow
-//   - P1 (new): new experiment → watermark + capacity gate
-//
-// After successful creation, registers the instance → experiment mapping
-// so the periodic task can correctly track per-experiment counts even when
-// FaaS backend doesn't return user labels.
+// Checks:
+//  1. experiment label must be present
+//  2. experiment format must match {owner}/{name}
+//  3. known experiment: instance count <= max_instances
+//  4. new experiment: cluster utilization < watermark
 func ExperimentAdmissionMiddleware(admission *service.ExperimentAdmission) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Feature gate: if admission is nil (disabled), pass through
 		if admission == nil {
 			c.Next()
 			return
@@ -65,18 +60,27 @@ func ExperimentAdmissionMiddleware(admission *service.ExperimentAdmission) gin.H
 
 		labels := extractLabelsFromRequest(c)
 
-		// P2 gate: check required labels
-		missing := admission.CheckRequiredLabels(labels)
-		if len(missing) > 0 {
-			reason := fmt.Sprintf("Experiment admission denied: missing required labels [%s]", strings.Join(missing, ", "))
+		// Check experiment label is present
+		experiment := labels["experiment"]
+		if experiment == "" {
+			reason := "Experiment admission denied: missing required label \"experiment\""
 			metrics.InstanceOpsTotal.WithLabelValues("create", "", "admission_rejected").Inc()
-			metrics.ExperimentAdmissionTotal.WithLabelValues("rejected", "p2_unlabeled").Inc()
+			metrics.ExperimentAdmissionTotal.WithLabelValues("rejected", "missing_label").Inc()
 			backendmodels.JSONErrorWithMessage(c, 400, reason)
 			c.Abort()
 			return
 		}
 
-		experiment := labels["experiment"]
+		// Validate experiment format: {owner}/{name}
+		if err := service.ValidateExperimentFormat(experiment); err != nil {
+			reason := fmt.Sprintf("Experiment admission denied: %v", err)
+			metrics.InstanceOpsTotal.WithLabelValues("create", "", "admission_rejected").Inc()
+			metrics.ExperimentAdmissionTotal.WithLabelValues("rejected", "invalid_format").Inc()
+			backendmodels.JSONErrorWithMessage(c, 400, reason)
+			c.Abort()
+			return
+		}
+
 		result := admission.ShouldAdmitWithResult(experiment)
 
 		if !result.Allowed {
@@ -124,7 +128,6 @@ func extractLabelsFromRequest(c *gin.Context) map[string]string {
 	if err != nil {
 		return nil
 	}
-	// Restore the body for downstream handlers
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
 
 	var req experimentRequest

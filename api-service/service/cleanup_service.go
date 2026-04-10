@@ -34,8 +34,9 @@ type RecordDeleter interface {
 }
 
 type AEnvCleanManager struct {
-	envInstanceService EnvInstanceService
-	recordDeleter      RecordDeleter // optional, nil for non-faas backends
+	envInstanceService  EnvInstanceService
+	recordDeleter       RecordDeleter // optional, nil for non-faas backends
+	experimentAdmission *ExperimentAdmission
 
 	interval time.Duration
 	ctx      context.Context
@@ -65,6 +66,12 @@ func NewAEnvCleanManager(envInstanceService EnvInstanceService, duration time.Du
 // WithRecordDeleter sets an optional record-only deleter for fallback cleanup.
 func (cm *AEnvCleanManager) WithRecordDeleter(rd RecordDeleter) *AEnvCleanManager {
 	cm.recordDeleter = rd
+	return cm
+}
+
+// WithExperimentAdmission sets the experiment admission controller for count updates on delete.
+func (cm *AEnvCleanManager) WithExperimentAdmission(ea *ExperimentAdmission) *AEnvCleanManager {
+	cm.experimentAdmission = ea
 	return cm
 }
 
@@ -145,6 +152,7 @@ func (cm *AEnvCleanManager) CleanupFromInstances(envInstances []*models.EnvInsta
 					}
 					deletedCount++
 					cm.incrementCleanupSuccess()
+					cm.unregisterFromAdmission(instance.ID)
 					log.Infof("Successfully deleted record for unreachable instance %s %s", instance.ID, instanceInfo)
 					continue
 				}
@@ -155,11 +163,19 @@ func (cm *AEnvCleanManager) CleanupFromInstances(envInstances []*models.EnvInsta
 			}
 			deletedCount++
 			cm.incrementCleanupSuccess()
+			cm.unregisterFromAdmission(instance.ID)
 			log.Infof("Successfully deleted expired instance %s %s", instance.ID, instanceInfo)
 		}
 	}
 
 	log.Infof("TTL-based cleanup task completed. Deleted %d expired instances", deletedCount)
+}
+
+// unregisterFromAdmission notifies the admission controller that an instance was deleted.
+func (cm *AEnvCleanManager) unregisterFromAdmission(instanceID string) {
+	if cm.experimentAdmission != nil {
+		cm.experimentAdmission.UnregisterInstance(instanceID)
+	}
 }
 
 // isNodeUnreachable checks if an error indicates that the node gateway is unreachable

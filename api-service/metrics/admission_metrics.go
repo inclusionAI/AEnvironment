@@ -29,16 +29,7 @@ var (
 			Name:      "experiment_admission_total",
 			Help:      "Total experiment admission decisions",
 		},
-		[]string{"decision", "tier"}, // decision: "allowed"|"rejected", tier: "p0_known"|"p1_new"|"p2_unlabeled"
-	)
-
-	// ExperimentReservedCapacity tracks total reserved CPU in milli-cores.
-	ExperimentReservedCapacity = promauto.NewGauge(
-		prometheus.GaugeOpts{
-			Subsystem: subsystem,
-			Name:      "experiment_reserved_capacity",
-			Help:      "Total reserved CPU capacity across active experiments (milli-cores)",
-		},
+		[]string{"decision", "tier"}, // decision: "allowed"|"rejected", tier: "p0_known"|"p1_new"
 	)
 
 	// ExperimentCount tracks number of active experiments.
@@ -48,16 +39,6 @@ var (
 			Name:      "experiment_count",
 			Help:      "Number of currently active experiments",
 		},
-	)
-
-	// ExperimentPeakInstances tracks per-experiment peak instance count.
-	ExperimentPeakInstances = promauto.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Subsystem: subsystem,
-			Name:      "experiment_peak_instances",
-			Help:      "Peak instance count per experiment in sliding window",
-		},
-		[]string{"experiment"},
 	)
 
 	// ClusterTotalCPU tracks total cluster CPU in milli-cores.

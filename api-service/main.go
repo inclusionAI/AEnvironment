@@ -25,8 +25,6 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"strings"
-
 	"api-service/controller"
 	"api-service/metrics"
 	"api-service/middleware"
@@ -51,12 +49,10 @@ var (
 	tokenCacheTTLMinutes int
 	cleanupInterval      string
 	// Experiment admission control
-	admissionEnabled        bool
-	schedulerHTTPAddr       string
-	perInstanceCPU          int64
-	peakWindow              string
-	admissionWatermark      float64
-	admissionRequiredLabels string
+	admissionEnabled          bool
+	schedulerHTTPAddr         string
+	admissionWatermark        float64
+	maxInstancesPerExperiment int
 )
 
 func init() {
@@ -75,10 +71,8 @@ func init() {
 
 	pflag.BoolVar(&admissionEnabled, "admission-enabled", false, "Enable experiment-level resource admission control")
 	pflag.StringVar(&schedulerHTTPAddr, "scheduler-addr", "", "faas-api-service HTTP API address for cluster info polling (e.g., http://faas-api-service:8233)")
-	pflag.Int64Var(&perInstanceCPU, "per-instance-cpu", 2000, "CPU per instance in milli-cores for admission calculation")
-	pflag.StringVar(&peakWindow, "peak-window", "15m", "Sliding window duration for experiment peak instance count")
-	pflag.Float64Var(&admissionWatermark, "admission-watermark", 0.7, "Cluster utilization watermark threshold (0.0-1.0) for new experiment admission")
-	pflag.StringVar(&admissionRequiredLabels, "admission-required-labels", "experiment", "Comma-separated list of required labels for admission (default: experiment)")
+	pflag.Float64Var(&admissionWatermark, "admission-watermark", 0.5, "Cluster utilization watermark threshold (0.0-1.0) for new experiment admission")
+	pflag.IntVar(&maxInstancesPerExperiment, "max-instances-per-experiment", 1000, "Maximum instance count per experiment")
 }
 
 func healthChecker(c *gin.Context) {
@@ -124,27 +118,16 @@ func main() {
 		log.Fatalf("unsupported schedule type: %v", scheduleType)
 	}
 
-	envInstanceController := controller.NewEnvInstanceController(scheduleClient, backendClient, redisClient)
-
 	// Experiment admission control
 	var experimentAdmission *service.ExperimentAdmission
 	if admissionEnabled && schedulerHTTPAddr != "" {
-		pw, err := time.ParseDuration(peakWindow)
-		if err != nil {
-			log.Fatalf("Invalid peak-window duration: %v", err)
-		}
-		var requiredLabels []string
-		for _, l := range strings.Split(admissionRequiredLabels, ",") {
-			l = strings.TrimSpace(l)
-			if l != "" {
-				requiredLabels = append(requiredLabels, l)
-			}
-		}
-		experimentAdmission = service.NewExperimentAdmission(schedulerHTTPAddr, perInstanceCPU, pw, admissionWatermark, requiredLabels)
+		experimentAdmission = service.NewExperimentAdmission(schedulerHTTPAddr, maxInstancesPerExperiment, admissionWatermark, redisClient)
 		go experimentAdmission.StartClusterResourcePoller()
-		log.Infof("Experiment admission control enabled (scheduler=%s, per-instance-cpu=%d, peak-window=%s, watermark=%.2f, required-labels=%v)",
-			schedulerHTTPAddr, perInstanceCPU, peakWindow, admissionWatermark, requiredLabels)
+		log.Infof("Experiment admission control enabled (scheduler=%s, max-instances=%d, watermark=%.2f)",
+			schedulerHTTPAddr, maxInstancesPerExperiment, admissionWatermark)
 	}
+
+	envInstanceController := controller.NewEnvInstanceController(scheduleClient, backendClient, redisClient, experimentAdmission)
 
 	// Main route configuration
 	mainRouter.POST("/env-instance",
@@ -206,20 +189,21 @@ func main() {
 		log.Fatalf("Invalid cleanup interval: %v", err)
 	}
 	cleanManager := service.NewAEnvCleanManager(scheduleClient, interval).
-		WithMetrics(middleware.IncrementCleanupSuccess, middleware.IncrementCleanupFailure)
+		WithMetrics(middleware.IncrementCleanupSuccess, middleware.IncrementCleanupFailure).
+		WithExperimentAdmission(experimentAdmission)
 
 	// Start a unified periodic task that shares a single ListEnvInstances call
-	// across cleanup and metrics collection, reducing redundant requests to meta-service.
+	// across cleanup, metrics collection, and experiment admission count sync.
 	if scheduleType == "faas" {
 		if faasClient, ok := scheduleClient.(*service.FaaSClient); ok {
 			cleanManager.WithRecordDeleter(faasClient)
 			metricsCollector := metrics.NewCollector(faasClient, interval)
 			go startUnifiedPeriodicTask(scheduleClient, cleanManager, metricsCollector, experimentAdmission, interval)
 		} else {
-			go cleanManager.Start()
+			go startPeriodicCleanupWithAdmission(scheduleClient, cleanManager, experimentAdmission, interval)
 		}
 	} else {
-		go cleanManager.Start()
+		go startPeriodicCleanupWithAdmission(scheduleClient, cleanManager, experimentAdmission, interval)
 	}
 
 	// Block main goroutine
@@ -252,6 +236,39 @@ func startUnifiedPeriodicTask(
 		// Feed the same data to both consumers
 		cleanManager.CleanupFromInstances(envInstances)
 		metricsCollector.CollectFromEnvInstances(envInstances)
+		if experimentAdmission != nil {
+			experimentAdmission.UpdateExperimentCounts(envInstances)
+		}
+	}
+
+	runOnce()
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for range ticker.C {
+		runOnce()
+	}
+}
+
+// startPeriodicCleanupWithAdmission runs cleanup and experiment admission sync
+// in a single ticker loop for K8s/Standard modes.
+func startPeriodicCleanupWithAdmission(
+	envInstanceService service.EnvInstanceService,
+	cleanManager *service.AEnvCleanManager,
+	experimentAdmission *service.ExperimentAdmission,
+	interval time.Duration,
+) {
+	jitter := time.Duration(rand.Int63n(int64(interval)))
+	log.Infof("Periodic cleanup+admission task: starting after jitter %v (interval %v)", jitter, interval)
+	time.Sleep(jitter)
+
+	runOnce := func() {
+		envInstances, err := envInstanceService.ListEnvInstances("")
+		if err != nil {
+			log.Warnf("Periodic cleanup+admission task: failed to list instances: %v", err)
+			return
+		}
+		cleanManager.CleanupFromInstances(envInstances)
 		if experimentAdmission != nil {
 			experimentAdmission.UpdateExperimentCounts(envInstances)
 		}

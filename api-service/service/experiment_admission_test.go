@@ -18,230 +18,257 @@ package service
 
 import (
 	"api-service/models"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"sync"
 	"testing"
-	"time"
+
+	"github.com/alicebob/miniredis/v2"
+	"github.com/go-redis/redis/v8"
+	"github.com/stretchr/testify/assert"
 )
 
-func newTestAdmission(totalCPU, perInstanceCPU int64, peakWindow time.Duration) *ExperimentAdmission {
-	ea := NewExperimentAdmission("http://localhost:14457", perInstanceCPU, peakWindow, 0.7, []string{"experiment"})
+// newTestAdmission creates an ExperimentAdmission with cluster data pre-set (no Redis).
+func newTestAdmission(totalCPU, usedCPU int64, maxInstances int, watermark float64) *ExperimentAdmission {
+	ea := NewExperimentAdmission("http://localhost:0", maxInstances, watermark, nil)
 	ea.mu.Lock()
 	ea.clusterTotal = totalCPU
+	ea.clusterUsed = usedCPU
 	ea.hasClusterData = true
 	ea.mu.Unlock()
 	return ea
 }
 
-func makeInstances(experiments map[string]int) []*models.EnvInstance {
+// newTestAdmissionWithRedis creates an ExperimentAdmission backed by miniredis.
+func newTestAdmissionWithRedis(t *testing.T, totalCPU, usedCPU int64, maxInstances int, watermark float64) (*ExperimentAdmission, *miniredis.Miniredis) {
+	mr := miniredis.RunT(t)
+	rc := &RedisClient{
+		client: redis.NewClient(&redis.Options{Addr: mr.Addr()}),
+		ctx:    context.Background(),
+	}
+	ea := NewExperimentAdmission("http://localhost:0", maxInstances, watermark, rc)
+	ea.mu.Lock()
+	ea.clusterTotal = totalCPU
+	ea.clusterUsed = usedCPU
+	ea.hasClusterData = true
+	ea.mu.Unlock()
+	return ea, mr
+}
+
+func makeInstances(counts map[string]int) []*models.EnvInstance {
 	var instances []*models.EnvInstance
 	id := 0
-	for exp, count := range experiments {
+	for exp, count := range counts {
 		for i := 0; i < count; i++ {
 			id++
-			labels := map[string]string{"experiment": exp}
 			instances = append(instances, &models.EnvInstance{
 				ID:     fmt.Sprintf("inst-%d", id),
 				Status: "Running",
-				Labels: labels,
+				Labels: map[string]string{"experiment": exp},
 			})
 		}
 	}
 	return instances
 }
 
-// Need fmt for makeInstances
-func init() {}
+// --- Format Validation Tests ---
 
-func TestKnownExperimentAlwaysAdmitted(t *testing.T) {
-	ea := newTestAdmission(10000, 2000, 15*time.Minute)
-
-	// Register experiment "exp-1" with instances
-	instances := makeInstances(map[string]int{"exp-1": 5})
-	ea.UpdateExperimentCounts(instances)
-
-	// Known experiment should always be admitted, even if cluster is "full"
-	ea.mu.Lock()
-	ea.clusterTotal = 1 // artificially tiny cluster
-	ea.mu.Unlock()
-
-	allowed, reason := ea.ShouldAdmit("exp-1")
-	if !allowed {
-		t.Errorf("Expected known experiment to be admitted, got rejected: %s", reason)
+func TestValidateExperimentFormat_Valid(t *testing.T) {
+	valid := []string{
+		"zhangsan/swe-bench-lite",
+		"team-a/eval-v2",
+		"user_1/test.run",
+		"owner/name",
+	}
+	for _, v := range valid {
+		assert.NoError(t, ValidateExperimentFormat(v), "should be valid: %s", v)
 	}
 }
 
-func TestNewExperimentAdmittedWhenCapacityAvailable(t *testing.T) {
-	ea := newTestAdmission(20000, 2000, 15*time.Minute)
-
-	// Register experiment "exp-1" with 3 instances (peak=3, reserved=6000)
-	instances := makeInstances(map[string]int{"exp-1": 3})
-	ea.UpdateExperimentCounts(instances)
-
-	// New experiment "exp-2": available = 20000 - 6000 = 14000 > 2000
-	allowed, reason := ea.ShouldAdmit("exp-2")
-	if !allowed {
-		t.Errorf("Expected new experiment to be admitted, got rejected: %s", reason)
+func TestValidateExperimentFormat_Invalid(t *testing.T) {
+	invalid := []string{
+		"swe-bench-lite", // no owner
+		"/swe-bench",     // empty owner
+		"owner/",         // empty name
+		"a/b/c",          // too many segments
+		"",               // empty
+		"owner/ name",    // space
+		"owner/name!",    // special char
+	}
+	for _, v := range invalid {
+		assert.Error(t, ValidateExperimentFormat(v), "should be invalid: %s", v)
 	}
 }
 
-func TestNewExperimentRejectedWhenCapacityInsufficient(t *testing.T) {
-	ea := newTestAdmission(10000, 2000, 15*time.Minute)
+// --- Max Instances Tests ---
 
-	// Register experiment "exp-1" with 5 instances (peak=5, reserved=10000)
-	instances := makeInstances(map[string]int{"exp-1": 5})
-	ea.UpdateExperimentCounts(instances)
+func TestKnownExperimentAdmittedUnderLimit(t *testing.T) {
+	ea := newTestAdmission(100000, 90000, 100, 0.5)
+	ea.experiments["owner/exp-a"] = &ExperimentState{CurrentCount: 50}
 
-	// New experiment "exp-2": available = 10000 - 10000 = 0, not > 2000
-	allowed, _ := ea.ShouldAdmit("exp-2")
-	if allowed {
-		t.Error("Expected new experiment to be rejected when capacity is insufficient")
-	}
+	result := ea.ShouldAdmitWithResult("owner/exp-a")
+	assert.True(t, result.Allowed)
+	assert.Equal(t, "p0_known", result.Tier)
 }
 
-func TestMultipleExperimentsReserveCapacity(t *testing.T) {
-	ea := newTestAdmission(20000, 2000, 15*time.Minute)
+func TestKnownExperimentRejectedAtLimit(t *testing.T) {
+	ea := newTestAdmission(100000, 10000, 100, 0.5)
+	ea.experiments["owner/exp-a"] = &ExperimentState{CurrentCount: 100}
 
-	// Two experiments: exp-1=3, exp-2=4, reserved = (3+4)*2000 = 14000
-	instances := makeInstances(map[string]int{"exp-1": 3, "exp-2": 4})
-	ea.UpdateExperimentCounts(instances)
-
-	// New experiment "exp-3": available = 20000 - 14000 = 6000 > 2000 → admit
-	allowed, _ := ea.ShouldAdmit("exp-3")
-	if !allowed {
-		t.Error("Expected exp-3 to be admitted with 6000 available")
-	}
-
-	// Now add more to exp-2 to fill cluster: exp-1=3, exp-2=7, reserved = (3+7)*2000 = 20000
-	instances = makeInstances(map[string]int{"exp-1": 3, "exp-2": 7})
-	ea.UpdateExperimentCounts(instances)
-
-	// New experiment "exp-3": available = 20000 - 20000 = 0, not > 2000 → reject
-	allowed, _ = ea.ShouldAdmit("exp-3")
-	if allowed {
-		t.Error("Expected exp-3 to be rejected when cluster is fully reserved")
-	}
+	result := ea.ShouldAdmitWithResult("owner/exp-a")
+	assert.False(t, result.Allowed)
+	assert.Equal(t, "p0_known", result.Tier)
+	assert.Contains(t, result.Reason, "instance count 100 reached limit 100")
 }
 
-func TestPeakSlidingWindowEviction(t *testing.T) {
-	peakWindow := 100 * time.Millisecond
-	ea := newTestAdmission(10000, 2000, peakWindow)
+func TestKnownExperimentRejectedOverLimit(t *testing.T) {
+	ea := newTestAdmission(100000, 10000, 100, 0.5)
+	ea.experiments["owner/exp-a"] = &ExperimentState{CurrentCount: 150}
 
-	// Record a high count
-	instances := makeInstances(map[string]int{"exp-1": 5})
-	ea.UpdateExperimentCounts(instances)
-
-	ea.mu.RLock()
-	peak := ea.experiments["exp-1"].PeakCount
-	ea.mu.RUnlock()
-	if peak != 5 {
-		t.Errorf("Expected peak=5, got %d", peak)
-	}
-
-	// Wait for the window to expire
-	time.Sleep(peakWindow + 50*time.Millisecond)
-
-	// Update with lower count — old peak sample should be evicted
-	instances = makeInstances(map[string]int{"exp-1": 2})
-	ea.UpdateExperimentCounts(instances)
-
-	ea.mu.RLock()
-	peak = ea.experiments["exp-1"].PeakCount
-	ea.mu.RUnlock()
-	if peak != 2 {
-		t.Errorf("Expected peak=2 after window eviction, got %d", peak)
-	}
+	result := ea.ShouldAdmitWithResult("owner/exp-a")
+	assert.False(t, result.Allowed)
 }
 
-func TestExperimentRemovedAfterWindowExpires(t *testing.T) {
-	peakWindow := 100 * time.Millisecond
-	ea := newTestAdmission(10000, 2000, peakWindow)
+// --- Watermark Tests ---
 
-	instances := makeInstances(map[string]int{"exp-1": 3})
-	ea.UpdateExperimentCounts(instances)
+func TestNewExperimentAdmittedBelowWatermark(t *testing.T) {
+	ea := newTestAdmission(100000, 40000, 1000, 0.5)
 
-	// Wait for window to expire
-	time.Sleep(peakWindow + 50*time.Millisecond)
-
-	// Update with no instances for exp-1
-	ea.UpdateExperimentCounts([]*models.EnvInstance{})
-
-	ea.mu.RLock()
-	_, exists := ea.experiments["exp-1"]
-	ea.mu.RUnlock()
-	if exists {
-		t.Error("Expected exp-1 to be removed after all samples expired")
-	}
+	result := ea.ShouldAdmitWithResult("owner/new-exp")
+	assert.True(t, result.Allowed)
+	assert.Equal(t, "p1_new", result.Tier)
 }
+
+func TestNewExperimentRejectedAtWatermark(t *testing.T) {
+	ea := newTestAdmission(100000, 50000, 1000, 0.5)
+
+	result := ea.ShouldAdmitWithResult("owner/new-exp")
+	assert.False(t, result.Allowed)
+	assert.Equal(t, "p1_new", result.Tier)
+	assert.Contains(t, result.Reason, "watermark")
+}
+
+func TestNewExperimentRejectedAboveWatermark(t *testing.T) {
+	ea := newTestAdmission(100000, 80000, 1000, 0.5)
+
+	result := ea.ShouldAdmitWithResult("owner/new-exp")
+	assert.False(t, result.Allowed)
+	assert.Equal(t, "p1_new", result.Tier)
+}
+
+func TestKnownExperimentAdmittedEvenAboveWatermark(t *testing.T) {
+	ea := newTestAdmission(100000, 80000, 1000, 0.5)
+	ea.experiments["owner/exp-a"] = &ExperimentState{CurrentCount: 50}
+
+	result := ea.ShouldAdmitWithResult("owner/exp-a")
+	assert.True(t, result.Allowed)
+	assert.Equal(t, "p0_known", result.Tier)
+}
+
+// --- Fail-Open Tests ---
 
 func TestFailOpenWhenNoClusterData(t *testing.T) {
-	ea := NewExperimentAdmission("http://localhost:14457", 2000, 15*time.Minute, 0.7, []string{"experiment"})
-	// hasClusterData is false by default
+	ea := NewExperimentAdmission("http://localhost:0", 1000, 0.5, nil)
 
-	allowed, _ := ea.ShouldAdmit("new-experiment")
-	if !allowed {
-		t.Error("Expected fail-open when no cluster data available")
-	}
+	result := ea.ShouldAdmitWithResult("owner/any-exp")
+	assert.True(t, result.Allowed)
 }
 
-func TestEmptyExperimentIDTreatedAsDefault(t *testing.T) {
-	ea := newTestAdmission(10000, 2000, 15*time.Minute)
+// --- UpdateExperimentCounts Tests ---
 
-	allowed, _ := ea.ShouldAdmit("")
-	if !allowed {
-		t.Error("Expected empty experiment ID to be admitted (treated as default)")
-	}
+func TestUpdateExperimentCountsBasic(t *testing.T) {
+	ea := newTestAdmission(100000, 10000, 1000, 0.5)
+
+	instances := makeInstances(map[string]int{
+		"owner/exp-a": 5,
+		"owner/exp-b": 3,
+	})
+	ea.UpdateExperimentCounts(instances)
+
+	ea.mu.RLock()
+	defer ea.mu.RUnlock()
+	assert.Equal(t, 5, ea.experiments["owner/exp-a"].CurrentCount)
+	assert.Equal(t, 3, ea.experiments["owner/exp-b"].CurrentCount)
+}
+
+func TestUpdateExperimentCountsRemovesZero(t *testing.T) {
+	ea := newTestAdmission(100000, 10000, 1000, 0.5)
+
+	instances := makeInstances(map[string]int{"owner/exp-a": 5})
+	ea.UpdateExperimentCounts(instances)
+
+	ea.UpdateExperimentCounts(nil)
+
+	ea.mu.RLock()
+	defer ea.mu.RUnlock()
+	_, exists := ea.experiments["owner/exp-a"]
+	assert.False(t, exists, "experiment should be removed when count drops to 0")
 }
 
 func TestTerminatedInstancesNotCounted(t *testing.T) {
-	ea := newTestAdmission(10000, 2000, 15*time.Minute)
+	ea := newTestAdmission(100000, 10000, 1000, 0.5)
 
 	instances := []*models.EnvInstance{
-		{ID: "inst-1", Status: "Running", Labels: map[string]string{"experiment": "exp-1"}},
-		{ID: "inst-2", Status: "Terminated", Labels: map[string]string{"experiment": "exp-1"}},
-		{ID: "inst-3", Status: "Failed", Labels: map[string]string{"experiment": "exp-1"}},
-		{ID: "inst-4", Status: "Running", Labels: map[string]string{"experiment": "exp-1"}},
+		{ID: "1", Status: "Running", Labels: map[string]string{"experiment": "owner/exp"}},
+		{ID: "2", Status: "Running", Labels: map[string]string{"experiment": "owner/exp"}},
+		{ID: "3", Status: "Terminated", Labels: map[string]string{"experiment": "owner/exp"}},
+		{ID: "4", Status: "Failed", Labels: map[string]string{"experiment": "owner/exp"}},
 	}
 	ea.UpdateExperimentCounts(instances)
 
 	ea.mu.RLock()
-	count := ea.experiments["exp-1"].CurrentCount
-	peak := ea.experiments["exp-1"].PeakCount
-	ea.mu.RUnlock()
-
-	if count != 2 {
-		t.Errorf("Expected current count=2 (excluding terminated/failed), got %d", count)
-	}
-	if peak != 2 {
-		t.Errorf("Expected peak=2, got %d", peak)
-	}
+	defer ea.mu.RUnlock()
+	assert.Equal(t, 2, ea.experiments["owner/exp"].CurrentCount)
 }
 
-func TestConcurrentAccess(t *testing.T) {
-	ea := newTestAdmission(100000, 2000, 15*time.Minute)
+func TestInstanceExperimentTracking(t *testing.T) {
+	ea := newTestAdmission(100000, 10000, 1000, 0.5)
 
-	instances := makeInstances(map[string]int{"exp-1": 10, "exp-2": 5})
+	ea.RegisterInstance("inst-1", "owner/exp-a")
+	ea.RegisterInstance("inst-2", "owner/exp-a")
+	ea.RegisterInstance("inst-3", "owner/exp-b")
+
+	// Simulate ListInstances without labels (FaaS mode)
+	instances := []*models.EnvInstance{
+		{ID: "inst-1", Status: "Running", Labels: map[string]string{}},
+		{ID: "inst-2", Status: "Running", Labels: map[string]string{}},
+		{ID: "inst-3", Status: "Running", Labels: map[string]string{}},
+	}
 	ea.UpdateExperimentCounts(instances)
 
+	ea.mu.RLock()
+	defer ea.mu.RUnlock()
+	assert.Equal(t, 2, ea.experiments["owner/exp-a"].CurrentCount)
+	assert.Equal(t, 1, ea.experiments["owner/exp-b"].CurrentCount)
+}
+
+// --- Concurrent Access Test ---
+
+func TestConcurrentAccess(t *testing.T) {
+	ea := newTestAdmission(100000, 30000, 1000, 0.5)
+	ea.experiments["owner/exp-a"] = &ExperimentState{CurrentCount: 10}
+
 	var wg sync.WaitGroup
+
 	for i := 0; i < 100; i++ {
 		wg.Add(1)
-		go func(i int) {
+		go func() {
 			defer wg.Done()
-			ea.ShouldAdmit("exp-1")
-			ea.ShouldAdmit("new-exp")
+			ea.ShouldAdmit("owner/exp-a")
+			ea.ShouldAdmit("owner/new-exp")
 			ea.GetMetrics()
-		}(i)
+		}()
 	}
 
-	// Concurrent updates
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			instances := makeInstances(map[string]int{"owner/exp-a": 5})
 			ea.UpdateExperimentCounts(instances)
 		}()
 	}
@@ -249,196 +276,265 @@ func TestConcurrentAccess(t *testing.T) {
 	wg.Wait()
 }
 
+// --- Cluster Resource Poller Tests ---
+
 func TestClusterResourcePoller(t *testing.T) {
-	// Create a mock faas-api-service HTTP server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/hapis/faas.hcs.io/v1/clusterinfo" {
-			http.NotFound(w, r)
-			return
-		}
 		resp := clusterInfoResponse{
 			Success: true,
 			Data: clusterInfoData{
 				TotalCPU:          50000,
 				UsedCPU:           20000,
-				FreeCPU:           30000,
-				TotalMemory:       128000,
-				UsedMemory:        64000,
-				FreeMemory:        64000,
-				HealthyPartitions: 2,
-				TotalPartitions:   2,
+				HealthyPartitions: 3,
+				TotalPartitions:   3,
 			},
 		}
 		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
 
-	ea := NewExperimentAdmission(server.URL, 2000, 15*time.Minute, 0.7, []string{"experiment"})
+	ea := NewExperimentAdmission(server.URL, 1000, 0.5, nil)
 	ea.pollClusterResource()
 
 	ea.mu.RLock()
 	defer ea.mu.RUnlock()
-
-	if !ea.hasClusterData {
-		t.Error("Expected hasClusterData=true after successful poll")
-	}
-	if ea.clusterTotal != 50000 {
-		t.Errorf("Expected clusterTotal=50000, got %d", ea.clusterTotal)
-	}
-	if ea.clusterUsed != 20000 {
-		t.Errorf("Expected clusterUsed=20000, got %d", ea.clusterUsed)
-	}
+	assert.Equal(t, int64(50000), ea.clusterTotal)
+	assert.Equal(t, int64(20000), ea.clusterUsed)
+	assert.True(t, ea.hasClusterData)
 }
 
 func TestClusterResourcePollerFailureGraceful(t *testing.T) {
-	// Create a server that returns errors
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(500)
 	}))
 	defer server.Close()
 
-	ea := NewExperimentAdmission(server.URL, 2000, 15*time.Minute, 0.7, []string{"experiment"})
-
-	// Set initial data
+	ea := NewExperimentAdmission(server.URL, 1000, 0.5, nil)
 	ea.mu.Lock()
 	ea.clusterTotal = 30000
+	ea.clusterUsed = 10000
 	ea.hasClusterData = true
 	ea.mu.Unlock()
 
-	// Poll should fail but keep existing data
 	ea.pollClusterResource()
 
 	ea.mu.RLock()
 	defer ea.mu.RUnlock()
-
-	if ea.clusterTotal != 30000 {
-		t.Errorf("Expected clusterTotal to remain 30000 after poll failure, got %d", ea.clusterTotal)
-	}
+	assert.Equal(t, int64(30000), ea.clusterTotal)
+	assert.Equal(t, int64(10000), ea.clusterUsed)
 }
+
+// --- GetMetrics Test ---
 
 func TestGetMetrics(t *testing.T) {
-	ea := newTestAdmission(20000, 2000, 15*time.Minute)
-
-	instances := makeInstances(map[string]int{"exp-1": 3, "exp-2": 5})
-	ea.UpdateExperimentCounts(instances)
+	ea := newTestAdmission(100000, 40000, 500, 0.5)
+	ea.experiments["owner/exp-a"] = &ExperimentState{CurrentCount: 10}
 
 	m := ea.GetMetrics()
-
-	if m["cluster_total"].(int64) != 20000 {
-		t.Errorf("Expected cluster_total=20000, got %v", m["cluster_total"])
-	}
-	if m["experiment_count"].(int) != 2 {
-		t.Errorf("Expected experiment_count=2, got %v", m["experiment_count"])
-	}
-	if m["reserved_capacity"].(int64) != (3+5)*2000 {
-		t.Errorf("Expected reserved_capacity=16000, got %v", m["reserved_capacity"])
-	}
+	assert.Equal(t, int64(100000), m["cluster_total"])
+	assert.Equal(t, int64(40000), m["cluster_used"])
+	assert.Equal(t, 500, m["max_instances"])
+	assert.Equal(t, 0.5, m["watermark"])
+	assert.Equal(t, 1, m["experiment_count"])
 }
 
-func TestWatermarkRejectsNewExperiment(t *testing.T) {
-	ea := newTestAdmission(100000, 2000, 15*time.Minute)
-	// Set watermark to 0.5
-	ea.mu.Lock()
-	ea.watermark = 0.5
-	ea.clusterUsed = 60000 // 60% utilization, above 50% watermark
-	ea.mu.Unlock()
+// --- Default Value Tests ---
 
-	// Register exp-1 so it's known
-	instances := makeInstances(map[string]int{"exp-1": 3})
+func TestDefaultWatermarkAndMaxInstances(t *testing.T) {
+	ea := NewExperimentAdmission("http://localhost:0", 0, 0, nil)
+	assert.Equal(t, 0.5, ea.watermark)
+	assert.Equal(t, 1000, ea.maxInstances)
+}
+
+// --- Duplicate Launch Scenario Test ---
+
+func TestDuplicateLaunchScenario(t *testing.T) {
+	ea := newTestAdmission(100000, 10000, 200, 0.5)
+
+	instances := makeInstances(map[string]int{"zhangsan/swe-bench": 200})
 	ea.UpdateExperimentCounts(instances)
 
-	// P0: known experiment should still be admitted
-	result := ea.ShouldAdmitWithResult("exp-1")
-	if !result.Allowed || result.Tier != "p0_known" {
-		t.Errorf("Expected P0 known experiment to be admitted, got allowed=%v tier=%s", result.Allowed, result.Tier)
-	}
+	result := ea.ShouldAdmitWithResult("zhangsan/swe-bench")
+	assert.False(t, result.Allowed)
+	assert.Contains(t, result.Reason, "reached limit 200")
 
-	// P1: new experiment should be rejected due to watermark
-	result = ea.ShouldAdmitWithResult("exp-new")
-	if result.Allowed {
-		t.Error("Expected new experiment to be rejected when utilization exceeds watermark")
-	}
-	if result.Tier != "p1_new" {
-		t.Errorf("Expected tier=p1_new, got %s", result.Tier)
-	}
+	result = ea.ShouldAdmitWithResult("lisi/swe-bench")
+	assert.True(t, result.Allowed)
 }
 
-func TestWatermarkPassesWhenUtilizationLow(t *testing.T) {
-	ea := newTestAdmission(100000, 2000, 15*time.Minute)
-	ea.mu.Lock()
-	ea.watermark = 0.7
-	ea.clusterUsed = 50000 // 50% utilization, below 70% watermark
-	ea.mu.Unlock()
+// --- Redis Integration Tests ---
 
-	result := ea.ShouldAdmitWithResult("new-exp")
-	if !result.Allowed {
-		t.Errorf("Expected new experiment to be admitted when utilization below watermark, reason: %s", result.Reason)
-	}
-	if result.Tier != "p1_new" {
-		t.Errorf("Expected tier=p1_new, got %s", result.Tier)
-	}
-}
+func TestRedisRegisterInstance(t *testing.T) {
+	ea, mr := newTestAdmissionWithRedis(t, 100000, 10000, 1000, 0.5)
+	defer mr.Close()
 
-func TestCheckRequiredLabels(t *testing.T) {
-	ea := NewExperimentAdmission("http://localhost", 2000, 15*time.Minute, 0.7, []string{"experiment", "team"})
+	ea.RegisterInstance("inst-1", "owner/exp-a")
+	ea.RegisterInstance("inst-2", "owner/exp-a")
+	ea.RegisterInstance("inst-3", "owner/exp-b")
 
-	// All present
-	missing := ea.CheckRequiredLabels(map[string]string{"experiment": "exp-1", "team": "ml"})
-	if len(missing) != 0 {
-		t.Errorf("Expected no missing labels, got %v", missing)
-	}
+	// Check Redis state
+	val := mr.HGet(experimentCountsKey, "owner/exp-a")
+	assert.Equal(t, "2", val)
 
-	// One missing
-	missing = ea.CheckRequiredLabels(map[string]string{"experiment": "exp-1"})
-	if len(missing) != 1 || missing[0] != "team" {
-		t.Errorf("Expected missing=[team], got %v", missing)
-	}
+	val = mr.HGet(experimentCountsKey, "owner/exp-b")
+	assert.Equal(t, "1", val)
 
-	// All missing
-	missing = ea.CheckRequiredLabels(map[string]string{})
-	if len(missing) != 2 {
-		t.Errorf("Expected 2 missing labels, got %d", len(missing))
-	}
-
-	// Nil labels
-	missing = ea.CheckRequiredLabels(nil)
-	if len(missing) != 2 {
-		t.Errorf("Expected 2 missing labels for nil map, got %d", len(missing))
-	}
-}
-
-func TestTierClassification(t *testing.T) {
-	ea := newTestAdmission(100000, 2000, 15*time.Minute)
-	ea.mu.Lock()
-	ea.watermark = 0.7
-	ea.clusterUsed = 10000
-	ea.mu.Unlock()
-
-	instances := makeInstances(map[string]int{"exp-1": 5})
-	ea.UpdateExperimentCounts(instances)
-
-	// P0: known
-	result := ea.ShouldAdmitWithResult("exp-1")
-	if result.Tier != "p0_known" {
-		t.Errorf("Expected tier=p0_known for known experiment, got %s", result.Tier)
-	}
-
-	// P1: new
-	result = ea.ShouldAdmitWithResult("exp-new")
-	if result.Tier != "p1_new" {
-		t.Errorf("Expected tier=p1_new for new experiment, got %s", result.Tier)
-	}
-}
-
-func TestDefaultWatermarkAndLabels(t *testing.T) {
-	// Invalid watermark should default to 0.7
-	ea := NewExperimentAdmission("http://localhost", 2000, 15*time.Minute, 0, nil)
+	// Local cache should match
 	ea.mu.RLock()
-	if ea.watermark != 0.7 {
-		t.Errorf("Expected default watermark=0.7, got %f", ea.watermark)
-	}
-	if len(ea.requiredLabels) != 1 || ea.requiredLabels[0] != "experiment" {
-		t.Errorf("Expected default requiredLabels=[experiment], got %v", ea.requiredLabels)
-	}
+	assert.Equal(t, 2, ea.experiments["owner/exp-a"].CurrentCount)
+	assert.Equal(t, 1, ea.experiments["owner/exp-b"].CurrentCount)
 	ea.mu.RUnlock()
+}
+
+func TestRedisUnregisterInstance(t *testing.T) {
+	ea, mr := newTestAdmissionWithRedis(t, 100000, 10000, 1000, 0.5)
+	defer mr.Close()
+
+	ea.RegisterInstance("inst-1", "owner/exp-a")
+	ea.RegisterInstance("inst-2", "owner/exp-a")
+
+	ea.UnregisterInstance("inst-1")
+
+	// Redis should show count=1
+	val := mr.HGet(experimentCountsKey, "owner/exp-a")
+	assert.Equal(t, "1", val)
+
+	// Unregister last instance — key should be deleted from Redis
+	ea.UnregisterInstance("inst-2")
+
+	val = mr.HGet(experimentCountsKey, "owner/exp-a")
+	assert.Equal(t, "", val, "Redis key should be deleted when count reaches 0")
+
+	// Local cache should be empty
+	ea.mu.RLock()
+	_, exists := ea.experiments["owner/exp-a"]
+	ea.mu.RUnlock()
+	assert.False(t, exists)
+}
+
+func TestRedisPeriodicSync(t *testing.T) {
+	ea, mr := newTestAdmissionWithRedis(t, 100000, 10000, 1000, 0.5)
+	defer mr.Close()
+
+	// Manually set stale data in Redis
+	mr.HSet(experimentCountsKey, "owner/stale-exp", "999")
+
+	// Periodic sync should overwrite with actual counts
+	instances := makeInstances(map[string]int{
+		"owner/exp-a": 5,
+		"owner/exp-b": 3,
+	})
+	ea.UpdateExperimentCounts(instances)
+
+	// Stale experiment should be gone
+	val := mr.HGet(experimentCountsKey, "owner/stale-exp")
+	assert.Equal(t, "", val, "stale experiment should be removed by sync")
+
+	// Actual experiments should be correct
+	val = mr.HGet(experimentCountsKey, "owner/exp-a")
+	assert.Equal(t, "5", val)
+	val = mr.HGet(experimentCountsKey, "owner/exp-b")
+	assert.Equal(t, "3", val)
+}
+
+func TestRedisWarmup(t *testing.T) {
+	mr := miniredis.RunT(t)
+	defer mr.Close()
+
+	// Pre-populate Redis
+	mr.HSet(experimentCountsKey, "owner/exp-a", "10")
+	mr.HSet(experimentCountsKey, "owner/exp-b", "5")
+
+	rc := &RedisClient{
+		client: redis.NewClient(&redis.Options{Addr: mr.Addr()}),
+		ctx:    context.Background(),
+	}
+	ea := NewExperimentAdmission("http://localhost:0", 1000, 0.5, rc)
+	ea.mu.Lock()
+	ea.clusterTotal = 100000
+	ea.clusterUsed = 10000
+	ea.hasClusterData = true
+	ea.mu.Unlock()
+
+	// Warmup should have loaded experiments
+	ea.mu.RLock()
+	defer ea.mu.RUnlock()
+	assert.Equal(t, 10, ea.experiments["owner/exp-a"].CurrentCount)
+	assert.Equal(t, 5, ea.experiments["owner/exp-b"].CurrentCount)
+}
+
+func TestRedisDownDegradesToLocal(t *testing.T) {
+	mr := miniredis.RunT(t)
+	rc := &RedisClient{
+		client: redis.NewClient(&redis.Options{Addr: mr.Addr()}),
+		ctx:    context.Background(),
+	}
+	ea := NewExperimentAdmission("http://localhost:0", 1000, 0.5, rc)
+	ea.mu.Lock()
+	ea.clusterTotal = 100000
+	ea.clusterUsed = 10000
+	ea.hasClusterData = true
+	ea.mu.Unlock()
+
+	// Stop Redis
+	mr.Close()
+
+	// Operations should still work (local-only)
+	ea.RegisterInstance("inst-1", "owner/exp-a")
+
+	ea.mu.RLock()
+	assert.Equal(t, 1, ea.experiments["owner/exp-a"].CurrentCount)
+	ea.mu.RUnlock()
+
+	// Admission check should work from local cache
+	result := ea.ShouldAdmitWithResult("owner/exp-a")
+	assert.True(t, result.Allowed)
+}
+
+func TestRedisMultiInstanceConsistency(t *testing.T) {
+	mr := miniredis.RunT(t)
+	defer mr.Close()
+
+	// Simulate two api-service instances sharing the same Redis
+	rc1 := &RedisClient{
+		client: redis.NewClient(&redis.Options{Addr: mr.Addr()}),
+		ctx:    context.Background(),
+	}
+	rc2 := &RedisClient{
+		client: redis.NewClient(&redis.Options{Addr: mr.Addr()}),
+		ctx:    context.Background(),
+	}
+
+	ea1 := NewExperimentAdmission("http://localhost:0", 100, 0.5, rc1)
+	ea1.mu.Lock()
+	ea1.clusterTotal = 100000
+	ea1.clusterUsed = 10000
+	ea1.hasClusterData = true
+	ea1.mu.Unlock()
+
+	ea2 := NewExperimentAdmission("http://localhost:0", 100, 0.5, rc2)
+	ea2.mu.Lock()
+	ea2.clusterTotal = 100000
+	ea2.clusterUsed = 10000
+	ea2.hasClusterData = true
+	ea2.mu.Unlock()
+
+	// Instance 1 registers 60 instances
+	for i := 0; i < 60; i++ {
+		ea1.RegisterInstance(fmt.Sprintf("a-inst-%d", i), "owner/exp-a")
+	}
+	// Instance 2 registers 40 more
+	for i := 0; i < 40; i++ {
+		ea2.RegisterInstance(fmt.Sprintf("b-inst-%d", i), "owner/exp-a")
+	}
+
+	// Redis should show total = 100
+	val := mr.HGet(experimentCountsKey, "owner/exp-a")
+	count, _ := strconv.Atoi(val)
+	assert.Equal(t, 100, count)
+
+	// ea2's local cache should also show 100 (refreshed by HINCRBY return value)
+	ea2.mu.RLock()
+	assert.Equal(t, 100, ea2.experiments["owner/exp-a"].CurrentCount)
+	ea2.mu.RUnlock()
 }

@@ -22,57 +22,62 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
+	"strconv"
 	"sync"
 	"time"
 
+	"github.com/go-redis/redis/v8"
 	log "github.com/sirupsen/logrus"
 )
 
-// ExperimentAdmission implements first-come-first-served resource protection.
-// Earlier experiments are guaranteed resources (historical peak instance count);
-// only the newest experiments get rejected when resources are tight.
+// experimentFormatRegex validates the {owner}/{name} format.
+var experimentFormatRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]+/[a-zA-Z0-9_.-]+$`)
+
+const experimentCountsKey = "exp:counts"
+
+// ExperimentAdmission implements resource protection with three rules:
+//  1. experiment label required, format {owner}/{name}
+//  2. per-experiment instance count <= maxInstances
+//  3. cluster utilization >= watermark → reject new experiments
+//
+// State is stored in Redis (exp:counts hash) for multi-instance consistency.
+// A local cache (experiments map) serves the hot read path (ShouldAdmit)
+// with zero Redis calls. Redis is updated atomically on create/delete,
+// and a periodic sync reconciles any drift.
 type ExperimentAdmission struct {
 	mu             sync.RWMutex
 	experiments    map[string]*ExperimentState
-	clusterTotal   int64 // total CPU in milli-cores
-	clusterUsed    int64 // used CPU in milli-cores
-	hasClusterData bool  // whether we have received at least one cluster resource update
+	clusterTotal   int64
+	clusterUsed    int64
+	hasClusterData bool
 
 	// instanceExperiments maps instanceID → experiment name.
 	// FaaS backend doesn't return user labels in ListInstances, so we track
 	// the experiment assignment internally when instances are created.
 	instanceExperiments map[string]string
 
-	perInstanceCPU    int64         // CPU per instance in milli-cores
-	peakWindow        time.Duration // sliding window for peak calculation
-	schedulerEndpoint string        // faas-api-service HTTP API base URL (aggregated cluster info)
-	pollInterval      time.Duration // cluster resource poll interval
-	watermark         float64       // cluster utilization threshold (0.0-1.0), default 0.7
-	requiredLabels    []string      // labels that must be present, default ["experiment"]
+	redisClient       *RedisClient
+	maxInstances      int
+	watermark         float64
+	schedulerEndpoint string
+	pollInterval      time.Duration
 
 	httpClient    *http.Client
-	pollFailCount int // consecutive poll failures (for log suppression)
+	pollFailCount int
 }
 
 // AdmissionResult contains the outcome of an admission decision.
 type AdmissionResult struct {
 	Allowed bool
 	Reason  string
-	Tier    string // "p0_known", "p1_new", "p2_unlabeled"
+	Tier    string // "p0_known", "p1_new"
 }
 
-// ExperimentState tracks per-experiment instance counts and peak history.
+// ExperimentState tracks per-experiment instance count.
 type ExperimentState struct {
 	FirstSeen    time.Time
 	CurrentCount int
-	PeakCount    int
-	PeakSamples  []PeakSample // ring buffer for sliding window
-}
-
-// PeakSample records an instance count observation at a point in time.
-type PeakSample struct {
-	Timestamp time.Time
-	Count     int
 }
 
 // clusterInfoData matches the "data" field of faas-api-service /clusterinfo response.
@@ -94,26 +99,60 @@ type clusterInfoResponse struct {
 }
 
 // NewExperimentAdmission creates a new admission controller.
-func NewExperimentAdmission(schedulerEndpoint string, perInstanceCPU int64, peakWindow time.Duration, watermark float64, requiredLabels []string) *ExperimentAdmission {
+// redisClient may be nil for single-instance deployments (local-only mode).
+func NewExperimentAdmission(schedulerEndpoint string, maxInstances int, watermark float64, redisClient *RedisClient) *ExperimentAdmission {
 	if watermark <= 0 || watermark > 1.0 {
-		watermark = 0.7
+		watermark = 0.5
 	}
-	if len(requiredLabels) == 0 {
-		requiredLabels = []string{"experiment"}
+	if maxInstances <= 0 {
+		maxInstances = 1000
 	}
-	return &ExperimentAdmission{
+	ea := &ExperimentAdmission{
 		experiments:         make(map[string]*ExperimentState),
 		instanceExperiments: make(map[string]string),
-		perInstanceCPU:      perInstanceCPU,
-		peakWindow:          peakWindow,
+		redisClient:         redisClient,
+		maxInstances:        maxInstances,
+		watermark:           watermark,
 		schedulerEndpoint:   schedulerEndpoint,
 		pollInterval:        10 * time.Second,
-		watermark:           watermark,
-		requiredLabels:      requiredLabels,
 		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
 		},
 	}
+	ea.warmupFromRedis()
+	return ea
+}
+
+// ValidateExperimentFormat checks whether the experiment label matches {owner}/{name}.
+func ValidateExperimentFormat(experiment string) error {
+	if !experimentFormatRegex.MatchString(experiment) {
+		return fmt.Errorf("invalid experiment format %q, expected {owner}/{name} (e.g. zhangsan/swe-bench-lite)", experiment)
+	}
+	return nil
+}
+
+// warmupFromRedis loads experiment counts from Redis into the local cache on startup.
+func (ea *ExperimentAdmission) warmupFromRedis() {
+	if ea.redisClient == nil {
+		return
+	}
+	result, err := ea.redisClient.client.HGetAll(ea.redisClient.ctx, experimentCountsKey).Result()
+	if err != nil {
+		log.Warnf("Experiment admission: failed to warmup from Redis: %v", err)
+		return
+	}
+	now := time.Now()
+	for exp, countStr := range result {
+		count, err := strconv.Atoi(countStr)
+		if err != nil || count <= 0 {
+			continue
+		}
+		ea.experiments[exp] = &ExperimentState{
+			FirstSeen:    now,
+			CurrentCount: count,
+		}
+	}
+	log.Infof("Experiment admission: warmed up %d experiments from Redis", len(ea.experiments))
 }
 
 // StartClusterResourcePoller runs a blocking loop that polls the scheduler
@@ -121,7 +160,6 @@ func NewExperimentAdmission(schedulerEndpoint string, perInstanceCPU int64, peak
 func (ea *ExperimentAdmission) StartClusterResourcePoller() {
 	log.Infof("Experiment admission: starting cluster info poller (faas-api-service=%s, interval=%v)", ea.schedulerEndpoint, ea.pollInterval)
 
-	// Poll immediately on start
 	ea.pollClusterResource()
 
 	ticker := time.NewTicker(ea.pollInterval)
@@ -168,7 +206,6 @@ func (ea *ExperimentAdmission) pollClusterResource() {
 	ea.pollFailCount = 0
 	ea.mu.Unlock()
 
-	// Update Prometheus gauges
 	metrics.ClusterTotalCPU.Set(float64(cr.Data.TotalCPU))
 	metrics.ClusterUsedCPU.Set(float64(cr.Data.UsedCPU))
 	if cr.Data.TotalCPU > 0 {
@@ -180,7 +217,6 @@ func (ea *ExperimentAdmission) pollClusterResource() {
 }
 
 // logPollFailure logs poll failures with exponential backoff suppression.
-// Logs on 1st, 6th, 60th, 360th failure, etc. to avoid log spam.
 func (ea *ExperimentAdmission) logPollFailure(format string, args ...interface{}) {
 	ea.mu.Lock()
 	ea.pollFailCount++
@@ -193,35 +229,87 @@ func (ea *ExperimentAdmission) logPollFailure(format string, args ...interface{}
 	}
 }
 
-// RegisterInstance records the experiment assignment for an instance.
-// Called by middleware after a successful CreateEnvInstance.
+// RegisterInstance records the experiment assignment for an instance and
+// atomically increments the experiment count in Redis.
 func (ea *ExperimentAdmission) RegisterInstance(instanceID, experiment string) {
-	if experiment == "" {
-		experiment = "default"
-	}
 	ea.mu.Lock()
-	defer ea.mu.Unlock()
 	ea.instanceExperiments[instanceID] = experiment
-	log.Debugf("Experiment admission: registered instance %s → experiment %s (total tracked: %d)",
-		instanceID, experiment, len(ea.instanceExperiments))
+
+	// Update local cache
+	state, exists := ea.experiments[experiment]
+	if !exists {
+		state = &ExperimentState{FirstSeen: time.Now()}
+		ea.experiments[experiment] = state
+	}
+	state.CurrentCount++
+	ea.mu.Unlock()
+
+	// Atomic Redis increment (non-blocking on failure)
+	if ea.redisClient != nil {
+		newCount, err := ea.redisClient.client.HIncrBy(ea.redisClient.ctx, experimentCountsKey, experiment, 1).Result()
+		if err != nil {
+			log.Warnf("Experiment admission: Redis HINCRBY failed for %s: %v (local-only mode)", experiment, err)
+			return
+		}
+		// Refresh local cache with authoritative Redis count
+		ea.mu.Lock()
+		if s, ok := ea.experiments[experiment]; ok {
+			s.CurrentCount = int(newCount)
+		}
+		ea.mu.Unlock()
+	}
+
+	log.Debugf("Experiment admission: registered instance %s → experiment %s", instanceID, experiment)
 }
 
-// UnregisterInstance removes the experiment assignment for an instance.
+// UnregisterInstance removes the experiment assignment for an instance and
+// atomically decrements the experiment count in Redis.
 func (ea *ExperimentAdmission) UnregisterInstance(instanceID string) {
 	ea.mu.Lock()
-	defer ea.mu.Unlock()
+	experiment, ok := ea.instanceExperiments[instanceID]
+	if !ok {
+		ea.mu.Unlock()
+		return
+	}
 	delete(ea.instanceExperiments, instanceID)
+
+	// Update local cache
+	if state, exists := ea.experiments[experiment]; exists {
+		state.CurrentCount--
+		if state.CurrentCount <= 0 {
+			delete(ea.experiments, experiment)
+		}
+	}
+	ea.mu.Unlock()
+
+	// Atomic Redis decrement
+	if ea.redisClient != nil {
+		newCount, err := ea.redisClient.client.HIncrBy(ea.redisClient.ctx, experimentCountsKey, experiment, -1).Result()
+		if err != nil {
+			log.Warnf("Experiment admission: Redis HINCRBY(-1) failed for %s: %v", experiment, err)
+			return
+		}
+		if newCount <= 0 {
+			ea.redisClient.client.HDel(ea.redisClient.ctx, experimentCountsKey, experiment)
+		}
+		// Refresh local cache with authoritative Redis count
+		ea.mu.Lock()
+		if newCount <= 0 {
+			delete(ea.experiments, experiment)
+		} else if s, ok := ea.experiments[experiment]; ok {
+			s.CurrentCount = int(newCount)
+		}
+		ea.mu.Unlock()
+	}
+
+	log.Debugf("Experiment admission: unregistered instance %s (experiment %s)", instanceID, experiment)
 }
 
 // UpdateExperimentCounts updates per-experiment instance counts from the
-// periodic ListEnvInstances result. Called from startUnifiedPeriodicTask.
-// Uses the internal instanceExperiments map to resolve experiment labels,
-// since FaaS backend doesn't return user labels in ListInstances.
+// periodic ListEnvInstances result. Reconciles both Redis and local cache.
 func (ea *ExperimentAdmission) UpdateExperimentCounts(instances []*models.EnvInstance) {
 	ea.mu.Lock()
-	defer ea.mu.Unlock()
 
-	// Count instances per experiment
 	counts := make(map[string]int)
 	activeInstanceIDs := make(map[string]bool)
 	for _, inst := range instances {
@@ -229,61 +317,54 @@ func (ea *ExperimentAdmission) UpdateExperimentCounts(instances []*models.EnvIns
 			continue
 		}
 		activeInstanceIDs[inst.ID] = true
-		// Try internal map first (for FaaS mode where labels aren't returned)
 		exp := ea.getInstanceExperimentLocked(inst)
 		counts[exp]++
 	}
 
 	now := time.Now()
 
-	// Update existing experiments and add new ones
+	// Rebuild local cache from actual counts
+	newExperiments := make(map[string]*ExperimentState, len(counts))
 	for exp, count := range counts {
 		state, exists := ea.experiments[exp]
 		if !exists {
-			state = &ExperimentState{
-				FirstSeen: now,
-			}
-			ea.experiments[exp] = state
+			state = &ExperimentState{FirstSeen: now}
 		}
 		state.CurrentCount = count
-		state.PeakSamples = append(state.PeakSamples, PeakSample{
-			Timestamp: now,
-			Count:     count,
-		})
-
-		// Evict samples outside the sliding window
-		ea.evictOldSamples(state, now)
-
-		// Recalculate peak from remaining samples
-		state.PeakCount = ea.calculatePeak(state)
+		newExperiments[exp] = state
 	}
+	ea.experiments = newExperiments
 
-	// Remove experiments with zero active instances
-	for exp, state := range ea.experiments {
-		if _, active := counts[exp]; !active {
-			state.CurrentCount = 0
-			ea.evictOldSamples(state, now)
-			state.PeakCount = ea.calculatePeak(state)
-
-			// Remove if all historical samples have expired (peak decayed to 0)
-			if len(state.PeakSamples) == 0 || state.PeakCount == 0 {
-				delete(ea.experiments, exp)
-			}
-		}
-	}
-
-	// Clean up stale entries in instanceExperiments (instances no longer active)
+	// Clean up stale entries in instanceExperiments
 	for id := range ea.instanceExperiments {
 		if !activeInstanceIDs[id] {
 			delete(ea.instanceExperiments, id)
 		}
 	}
 
-	// Update Prometheus gauges
-	metrics.ExperimentCount.Set(float64(len(ea.experiments)))
-	metrics.ExperimentReservedCapacity.Set(float64(ea.reservedCapacity()))
-	for exp, state := range ea.experiments {
-		metrics.ExperimentPeakInstances.WithLabelValues(exp).Set(float64(state.PeakCount))
+	ea.mu.Unlock()
+
+	// Sync to Redis: full overwrite via pipeline
+	if ea.redisClient != nil {
+		ea.syncCountsToRedis(counts)
+	}
+
+	metrics.ExperimentCount.Set(float64(len(counts)))
+}
+
+// syncCountsToRedis overwrites the Redis hash with authoritative counts.
+func (ea *ExperimentAdmission) syncCountsToRedis(counts map[string]int) {
+	pipe := ea.redisClient.client.Pipeline()
+	pipe.Del(ea.redisClient.ctx, experimentCountsKey)
+	if len(counts) > 0 {
+		fields := make(map[string]interface{}, len(counts))
+		for exp, count := range counts {
+			fields[exp] = count
+		}
+		pipe.HSet(ea.redisClient.ctx, experimentCountsKey, fields)
+	}
+	if _, err := pipe.Exec(ea.redisClient.ctx); err != nil && err != redis.Nil {
+		log.Warnf("Experiment admission: Redis sync pipeline failed: %v", err)
 	}
 }
 
@@ -299,72 +380,41 @@ func (ea *ExperimentAdmission) getInstanceExperimentLocked(inst *models.EnvInsta
 	return "default"
 }
 
-func (ea *ExperimentAdmission) evictOldSamples(state *ExperimentState, now time.Time) {
-	cutoff := now.Add(-ea.peakWindow)
-	i := 0
-	for i < len(state.PeakSamples) && state.PeakSamples[i].Timestamp.Before(cutoff) {
-		i++
-	}
-	if i > 0 {
-		state.PeakSamples = state.PeakSamples[i:]
-	}
-}
-
-func (ea *ExperimentAdmission) calculatePeak(state *ExperimentState) int {
-	peak := 0
-	for _, s := range state.PeakSamples {
-		if s.Count > peak {
-			peak = s.Count
-		}
-	}
-	return peak
-}
-
-// CheckRequiredLabels checks whether the given labels contain all required labels.
-// Returns missing label names. Empty return means all labels are present.
-func (ea *ExperimentAdmission) CheckRequiredLabels(labels map[string]string) []string {
-	var missing []string
-	for _, required := range ea.requiredLabels {
-		if labels[required] == "" {
-			missing = append(missing, required)
-		}
-	}
-	return missing
-}
-
 // ShouldAdmit is a convenience wrapper returning (bool, string).
-// Use ShouldAdmitWithResult for full tier information.
 func (ea *ExperimentAdmission) ShouldAdmit(experimentID string) (bool, string) {
 	result := ea.ShouldAdmitWithResult(experimentID)
 	return result.Allowed, result.Reason
 }
 
 // ShouldAdmitWithResult decides whether a CreateEnvInstance request should be admitted.
-// Returns an AdmissionResult with tier classification:
-//   - p0_known: existing experiment, always admitted
-//   - p1_new: new experiment, subject to watermark + capacity check
-//   - p2_unlabeled: handled by middleware (CheckRequiredLabels)
+// Reads only from the local cache (zero Redis calls on the hot path).
+//   - p0_known: existing experiment, subject to max_instances check
+//   - p1_new: new experiment, subject to watermark check
 func (ea *ExperimentAdmission) ShouldAdmitWithResult(experimentID string) AdmissionResult {
-	if experimentID == "" {
-		experimentID = "default"
-	}
-
 	ea.mu.RLock()
 	defer ea.mu.RUnlock()
 
-	// Fail-open: no cluster data yet (startup, scheduler unreachable)
+	// Fail-open: no cluster data yet
 	if !ea.hasClusterData {
 		return AdmissionResult{Allowed: true, Tier: "p1_new"}
 	}
 
-	// P0: Known experiment — always admit
-	if _, exists := ea.experiments[experimentID]; exists {
+	// P0: Known experiment — check instance cap
+	if state, exists := ea.experiments[experimentID]; exists {
+		if state.CurrentCount >= ea.maxInstances {
+			return AdmissionResult{
+				Allowed: false,
+				Tier:    "p0_known",
+				Reason: fmt.Sprintf(
+					"Experiment admission denied: experiment %q instance count %d reached limit %d",
+					experimentID, state.CurrentCount, ea.maxInstances,
+				),
+			}
+		}
 		return AdmissionResult{Allowed: true, Tier: "p0_known"}
 	}
 
-	// P1: New experiment — dual gate: watermark + reserved capacity
-
-	// Gate 1: Cluster utilization watermark
+	// P1: New experiment — watermark gate
 	if ea.clusterTotal > 0 {
 		utilization := float64(ea.clusterUsed) / float64(ea.clusterTotal)
 		if utilization >= ea.watermark {
@@ -380,32 +430,7 @@ func (ea *ExperimentAdmission) ShouldAdmitWithResult(experimentID string) Admiss
 		}
 	}
 
-	// Gate 2: Reserved capacity check
-	reserved := ea.reservedCapacity()
-	available := ea.clusterTotal - reserved
-	if available > ea.perInstanceCPU {
-		return AdmissionResult{Allowed: true, Tier: "p1_new"}
-	}
-
-	return AdmissionResult{
-		Allowed: false,
-		Tier:    "p1_new",
-		Reason: fmt.Sprintf(
-			"Experiment admission denied: insufficient cluster capacity for new experiment %q "+
-				"(total=%d, reserved=%d, available=%d, required=%d milli-CPU)",
-			experimentID, ea.clusterTotal, reserved, available, ea.perInstanceCPU,
-		),
-	}
-}
-
-// reservedCapacity returns the total CPU reserved by all active experiments.
-// Must be called with ea.mu held (at least RLock).
-func (ea *ExperimentAdmission) reservedCapacity() int64 {
-	var total int64
-	for _, state := range ea.experiments {
-		total += int64(state.PeakCount) * ea.perInstanceCPU
-	}
-	return total
+	return AdmissionResult{Allowed: true, Tier: "p1_new"}
 }
 
 // GetMetrics returns current admission state for debugging/observability.
@@ -417,21 +442,17 @@ func (ea *ExperimentAdmission) GetMetrics() map[string]interface{} {
 	for exp, state := range ea.experiments {
 		experiments[exp] = map[string]interface{}{
 			"current_count": state.CurrentCount,
-			"peak_count":    state.PeakCount,
 			"first_seen":    state.FirstSeen,
-			"samples":       len(state.PeakSamples),
 		}
 	}
 
 	return map[string]interface{}{
-		"cluster_total":     ea.clusterTotal,
-		"cluster_used":      ea.clusterUsed,
-		"has_cluster_data":  ea.hasClusterData,
-		"per_instance_cpu":  ea.perInstanceCPU,
-		"reserved_capacity": ea.reservedCapacity(),
-		"watermark":         ea.watermark,
-		"required_labels":   ea.requiredLabels,
-		"experiment_count":  len(ea.experiments),
-		"experiments":       experiments,
+		"cluster_total":    ea.clusterTotal,
+		"cluster_used":     ea.clusterUsed,
+		"has_cluster_data": ea.hasClusterData,
+		"max_instances":    ea.maxInstances,
+		"watermark":        ea.watermark,
+		"experiment_count": len(ea.experiments),
+		"experiments":      experiments,
 	}
 }
