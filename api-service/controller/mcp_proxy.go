@@ -102,7 +102,7 @@ func (g *MCPGateway) innerRouter(c *gin.Context) {
 		// Arca engine: the gateway doesn't trust SDK-provided proxy URL.
 		// Target is derived from startup config + sandbox id header.
 		if path == PathHealth {
-			g.healthCheck(c)
+			g.arcaHealthCheck(c)
 			return
 		}
 		switch path {
@@ -134,6 +134,22 @@ func (g *MCPGateway) healthCheck(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "healthy",
 		"message": "MCP Gateway is running",
+	})
+}
+
+// arcaHealthCheck returns an aenv-envelope shaped response so the SDK's
+// _wait_for_healthy (which expects success=true with data.status=healthy)
+// can parse it. In arca mode the sandbox liveness is already guaranteed by
+// the control-plane RUNNING status, so the gateway short-circuits here
+// instead of round-tripping through the Arca gateway.
+//
+// Supported engines: arca.
+func (g *MCPGateway) arcaHealthCheck(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"code":    0,
+		"message": "",
+		"data":    gin.H{"status": "healthy"},
 	})
 }
 

@@ -103,10 +103,13 @@ type arcaCreateRequest struct {
 	Metadata     map[string]string `json:"metadata,omitempty"`
 }
 
-// arcaEnvelope matches Arca's uniform response wrapper.
+// arcaEnvelope matches Arca's uniform response wrapper. Note: presign
+// endpoint emits an empty *string* for code on success while OpenAPI emits
+// integers, so we keep code as a raw token and only stringify when surfacing
+// errors back to the caller.
 type arcaEnvelope struct {
 	Success bool            `json:"success"`
-	Code    int             `json:"code"`
+	Code    json.RawMessage `json:"code"`
 	Message string          `json:"message"`
 	Data    json.RawMessage `json:"data"`
 }
@@ -273,7 +276,7 @@ func (c *ArcaClient) doJSON(method, path string, body interface{}, extraHeaders 
 		return fmt.Errorf("arca: decode envelope: %w; body=%s", err, truncateBody(raw))
 	}
 	if !envelope.Success {
-		return fmt.Errorf("arca: %s %s failed (code %d): %s", method, path, envelope.Code, envelope.Message)
+		return fmt.Errorf("arca: %s %s failed (code %s): %s", method, path, strings.Trim(string(envelope.Code), `"`), envelope.Message)
 	}
 	if out != nil && len(envelope.Data) > 0 && !bytes.Equal(envelope.Data, []byte("null")) {
 		if err := json.Unmarshal(envelope.Data, out); err != nil {
