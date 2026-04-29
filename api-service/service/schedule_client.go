@@ -607,3 +607,9 @@ func (c *ScheduleClient) ListEnvInstances(envName string) ([]*models.EnvInstance
 func (c *ScheduleClient) Warmup(req *backend.Env) error {
 	return fmt.Errorf("warmup is not implemented")
 }
+
+// PresignURL is unsupported on the k8s engine.
+// Supported engines: arca (returns error on k8s).
+func (c *ScheduleClient) PresignURL(id string, port int, expirationMinutes float64) (string, error) {
+	return "", fmt.Errorf("not supported on this engine (k8s): presign URL")
+}

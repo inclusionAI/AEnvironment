@@ -57,6 +57,9 @@ type CreateEnvInstanceRequest struct {
 	TTL                  string            `json:"ttl"`
 	Owner                string            `json:"owner"`
 	Labels               map[string]string `json:"labels,omitempty"`
+	// MountPoints forwards Arca-style mount entries to the backend.
+	// Supported engines: arca (ignored on k8s/standard/faas).
+	MountPoints []map[string]interface{} `json:"mount_points,omitempty"`
 }
 
 // CreateEnvInstance creates a new EnvInstance
@@ -119,6 +122,10 @@ func (ctrl *EnvInstanceController) CreateEnvInstance(c *gin.Context) {
 	// Set labels for instance
 	if req.Labels != nil {
 		backendEnv.DeployConfig["labels"] = req.Labels
+	}
+	// Arca-specific passthrough. Supported engines: arca.
+	if len(req.MountPoints) > 0 {
+		backendEnv.DeployConfig["mountPoints"] = req.MountPoints
 	}
 	// Call ScheduleClient to create Pod
 	envInstance, err := ctrl.envInstanceService.CreateEnvInstance(backendEnv)
@@ -194,6 +201,41 @@ func (ctrl *EnvInstanceController) DeleteEnvInstance(c *gin.Context) {
 			log.Warnf("failed to remove EnvInstance in Redis: %v", err)
 		}
 	}
+}
+
+// PresignURLRequest is the body for POST /env-instance/:id/presign-url.
+type PresignURLRequest struct {
+	Port                    int     `json:"port" binding:"required"`
+	ExpirationTimeInMinutes float64 `json:"expiration_time_in_minutes,omitempty"`
+}
+
+// PresignURLResponse is the body returned from PresignURL.
+type PresignURLResponse struct {
+	URL string `json:"url"`
+}
+
+// PresignURL returns a short-lived URL pointing to a port inside the sandbox.
+// Engines that don't support presigning surface a clear error from the
+// service layer; the SDK is engine-unaware.
+//
+// POST /env-instance/:id/presign-url
+func (ctrl *EnvInstanceController) PresignURL(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		backendmodels.JSONErrorWithMessage(c, 400, "Missing id parameter")
+		return
+	}
+	var req PresignURLRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		backendmodels.JSONErrorWithMessage(c, 400, "Invalid request: "+err.Error())
+		return
+	}
+	url, err := ctrl.envInstanceService.PresignURL(id, req.Port, req.ExpirationTimeInMinutes)
+	if err != nil {
+		backendmodels.JSONErrorWithMessage(c, 501, err.Error())
+		return
+	}
+	backendmodels.JSONSuccess(c, PresignURLResponse{URL: url})
 }
 
 func (ctrl *EnvInstanceController) ListEnvInstances(c *gin.Context) {

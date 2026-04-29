@@ -20,6 +20,7 @@ package main
 import (
 	"math/rand"
 	"net/http"
+	"os"
 	"runtime"
 	"time"
 
@@ -48,11 +49,15 @@ var (
 	tokenCacheMaxEntries int
 	tokenCacheTTLMinutes int
 	cleanupInterval      string
+	// Supported engines: arca.
+	arcaBaseURL string
+	// Supported engines: arca.
+	arcaAPIKey string
 )
 
 func init() {
 	pflag.StringVar(&scheduleAddr, "schedule-addr", "", "Meta service address (host:port)")
-	pflag.StringVar(&scheduleType, "schedule-type", "k8s", "sandbox service schedule type, currently only 'k8s', 'standard' support")
+	pflag.StringVar(&scheduleType, "schedule-type", "k8s", "sandbox service schedule type: 'k8s', 'standard', 'faas', or 'arca'")
 	pflag.StringVar(&backendAddr, "backend-addr", "", "backend service address (host:port)")
 
 	pflag.Int64Var(&qps, "qps", int64(100), "total qps limit")
@@ -63,6 +68,10 @@ func init() {
 	pflag.StringVar(&redisAddr, "redis-addr", "", "Redis address (host:port)")
 	pflag.StringVar(&redisPassword, "redis-password", "", "Redis password")
 	pflag.StringVar(&cleanupInterval, "cleanup-interval", "5m", "Cleanup service interval (e.g., 5m, 1h)")
+
+	// Arca sandbox engine flags. Supported engines: arca.
+	pflag.StringVar(&arcaBaseURL, "arca-base-url", "", "Arca sandbox OpenAPI base URL. Supported engines: arca")
+	pflag.StringVar(&arcaAPIKey, "arca-api-key", "", "Arca sandbox OpenAPI key; falls back to ARCA_API_KEY env. Supported engines: arca")
 }
 
 func healthChecker(c *gin.Context) {
@@ -104,6 +113,19 @@ func main() {
 		scheduleClient = service.NewEnvInstanceClient(scheduleAddr)
 	case "faas":
 		scheduleClient = service.NewFaaSClient(scheduleAddr)
+	case "arca":
+		// Supported engines: arca.
+		key := arcaAPIKey
+		if key == "" {
+			key = os.Getenv("ARCA_API_KEY")
+		}
+		if arcaBaseURL == "" {
+			log.Fatalf("--arca-base-url is required when --schedule-type=arca")
+		}
+		if key == "" {
+			log.Fatalf("arca API key missing: set --arca-api-key or ARCA_API_KEY")
+		}
+		scheduleClient = service.NewArcaClient(arcaBaseURL, key)
 	default:
 		log.Fatalf("unsupported schedule type: %v", scheduleType)
 	}
@@ -119,6 +141,7 @@ func main() {
 	mainRouter.GET("/env-instance/:id/list", middleware.AuthTokenMiddleware(tokenEnabled, backendClient), envInstanceController.ListEnvInstances)
 	mainRouter.GET("/env-instance/:id", middleware.AuthTokenMiddleware(tokenEnabled, backendClient), envInstanceController.GetEnvInstance)
 	mainRouter.DELETE("/env-instance/:id", middleware.AuthTokenMiddleware(tokenEnabled, backendClient), envInstanceController.DeleteEnvInstance)
+	mainRouter.POST("/env-instance/:id/presign-url", middleware.AuthTokenMiddleware(tokenEnabled, backendClient), envInstanceController.PresignURL)
 
 	// Service routes
 	if envServiceController != nil {
@@ -144,7 +167,11 @@ func main() {
 	mcpRouter.Use(middleware.MCPMetricsMiddleware())
 	mcpRouter.Use(middleware.LoggingMiddleware())
 	mcpGroup := mcpRouter.Group("/")
-	controller.NewMCPGateway(mcpGroup)
+	controller.NewMCPGateway(mcpGroup, controller.MCPGatewayConfig{
+		ScheduleType: scheduleType,
+		ArcaBaseURL:  arcaBaseURL,
+		ArcaAPIKey:   arcaAPIKey,
+	})
 
 	// Start two services
 	go func() {

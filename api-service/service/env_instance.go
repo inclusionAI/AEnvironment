@@ -24,6 +24,11 @@ type EnvInstanceService interface {
 	DeleteEnvInstance(id string) error
 	ListEnvInstances(envName string) ([]*models.EnvInstance, error)
 	Warmup(req *backend.Env) error
+	// PresignURL returns a short-lived URL that gives direct access to a
+	// port inside the sandbox. Implementations that don't support presigning
+	// (k8s/standard/faas) must return an error whose message starts with
+	// "not supported on this engine".
+	PresignURL(id string, port int, expirationMinutes float64) (string, error)
 }
 
 type EnvInstanceClient struct {
@@ -301,6 +306,12 @@ func (c *EnvInstanceClient) Warmup(req *backend.Env) error {
 	}
 
 	return nil
+}
+
+// PresignURL is unsupported on the standard engine.
+// Supported engines: arca (returns error on standard).
+func (c *EnvInstanceClient) PresignURL(id string, port int, expirationMinutes float64) (string, error) {
+	return "", fmt.Errorf("not supported on this engine (standard): presign URL")
 }
 
 // truncateBody truncate body for memory protection

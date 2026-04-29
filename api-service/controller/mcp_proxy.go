@@ -18,10 +18,12 @@ package controller
 
 import (
 	"api-service/constants"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -48,16 +50,33 @@ const (
 	// HTTP methods
 	MethodGET  = "GET"
 	MethodPOST = "POST"
+
+	// Schedule types (kept in sync with main.go --schedule-type).
+	scheduleTypeArca = "arca"
+
+	// Arca gateway conventions (kept in sync with service/arca_client.go).
+	arcaGatewaySandboxPrefix = "/arca/api/v1/sandbox"
+	arcaHeaderAPIKey         = "x-agent-sandbox-api-key"
+	arcaHeaderSandboxID      = "x-agent-sandbox-id"
 )
+
+// MCPGatewayConfig is injected at api-service startup so the gateway never
+// has to query per-request engine metadata.
+type MCPGatewayConfig struct {
+	ScheduleType string // "k8s" | "standard" | "faas" | "arca"
+	ArcaBaseURL  string
+	ArcaAPIKey   string
+}
 
 // MCPGateway MCP gateway struct
 type MCPGateway struct {
 	router    *gin.RouterGroup
 	transport *http.Transport
+	config    MCPGatewayConfig
 }
 
 // NewMCPGateway creates a new MCP gateway instance
-func NewMCPGateway(router *gin.RouterGroup) *MCPGateway {
+func NewMCPGateway(router *gin.RouterGroup, cfg MCPGatewayConfig) *MCPGateway {
 	gateway := &MCPGateway{
 		router: router,
 		transport: &http.Transport{
@@ -65,6 +84,7 @@ func NewMCPGateway(router *gin.RouterGroup) *MCPGateway {
 			MaxIdleConnsPerHost: 10,
 			IdleConnTimeout:     90 * time.Second,
 		},
+		config: cfg,
 	}
 
 	gateway.setupRoutes()
@@ -77,8 +97,24 @@ func (g *MCPGateway) setupRoutes() {
 }
 
 func (g *MCPGateway) innerRouter(c *gin.Context) {
-	proxyURL, _ := g.getMCPSeverURL(c)
 	path := c.Param("path")
+	if g.config.ScheduleType == scheduleTypeArca {
+		// Arca engine: the gateway doesn't trust SDK-provided proxy URL.
+		// Target is derived from startup config + sandbox id header.
+		if path == PathHealth {
+			g.healthCheck(c)
+			return
+		}
+		switch path {
+		case PathSSE:
+			g.handleArcaSSE(c)
+		default:
+			g.handleArcaHTTP(c)
+		}
+		return
+	}
+
+	proxyURL, _ := g.getMCPSeverURL(c)
 	if proxyURL != "" {
 		switch path {
 		case PathSSE:
@@ -307,6 +343,164 @@ func (g *MCPGateway) handleMCPHTTPWithHeader(c *gin.Context) {
 
 	// Execute reverse proxy
 	proxy.ServeHTTP(c.Writer, c.Request)
+}
+
+// arcaTargetURL resolves the target URL for an arca request. The caller's
+// path is preserved after the {arca gateway prefix}/{sandbox_id} base, which
+// matches what arca-sandbox SDK speaks natively.
+//
+// Supported engines: arca.
+func (g *MCPGateway) arcaTargetURL(c *gin.Context) (*url.URL, string, error) {
+	sandboxID := c.GetHeader(constants.HeaderEnvInstanceID)
+	if sandboxID == "" {
+		return nil, "", &MCPError{
+			Code:    http.StatusBadRequest,
+			Message: constants.HeaderEnvInstanceID + " header is required for arca engine",
+		}
+	}
+	if g.config.ArcaBaseURL == "" {
+		return nil, "", &MCPError{
+			Code:    http.StatusInternalServerError,
+			Message: "arca base URL is not configured on api-service",
+		}
+	}
+	base, err := url.Parse(g.config.ArcaBaseURL)
+	if err != nil {
+		return nil, "", &MCPError{
+			Code:    http.StatusInternalServerError,
+			Message: "invalid arca base URL",
+			Details: err.Error(),
+		}
+	}
+	tail := strings.TrimPrefix(c.Request.URL.Path, "/")
+	base.Path = fmt.Sprintf("%s/%s", arcaGatewaySandboxPrefix, sandboxID)
+	if tail != "" {
+		base.Path = base.Path + "/" + tail
+	}
+	base.RawQuery = c.Request.URL.RawQuery
+	return base, sandboxID, nil
+}
+
+// handleArcaHTTP reverse-proxies non-SSE MCP traffic to the arca gateway.
+// Target is derived from startup config and X-Instance-ID, not any SDK-provided URL.
+//
+// Supported engines: arca.
+func (g *MCPGateway) handleArcaHTTP(c *gin.Context) {
+	targetURL, sandboxID, err := g.arcaTargetURL(c)
+	if err != nil {
+		if mcpErr, ok := err.(*MCPError); ok {
+			c.JSON(mcpErr.Code, gin.H{"error": mcpErr.Message})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	proxy := &httputil.ReverseProxy{
+		Director: func(req *http.Request) {
+			req.URL.Scheme = targetURL.Scheme
+			req.URL.Host = targetURL.Host
+			req.URL.Path = targetURL.Path
+			req.URL.RawQuery = targetURL.RawQuery
+			req.Host = targetURL.Host
+			req.Header.Del(constants.HeaderMCPServerURL)
+			req.Header.Set(arcaHeaderAPIKey, g.config.ArcaAPIKey)
+			req.Header.Set(arcaHeaderSandboxID, sandboxID)
+		},
+		Transport: g.transport,
+		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			log.Errorf("arca proxy error for sandbox %s: %v", sandboxID, err)
+			c.JSON(http.StatusBadGateway, gin.H{
+				"error":   "Failed to forward request to arca gateway",
+				"details": err.Error(),
+				"sandbox": sandboxID,
+			})
+		},
+	}
+	proxy.ServeHTTP(c.Writer, c.Request)
+}
+
+// handleArcaSSE streams SSE responses from the arca gateway back to the caller.
+//
+// Supported engines: arca.
+func (g *MCPGateway) handleArcaSSE(c *gin.Context) {
+	targetURL, sandboxID, err := g.arcaTargetURL(c)
+	if err != nil {
+		if mcpErr, ok := err.(*MCPError); ok {
+			c.JSON(mcpErr.Code, gin.H{"error": mcpErr.Message})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Header(HeaderContentType, ContentTypeSSE)
+	c.Header(HeaderCacheControl, "no-cache")
+	c.Header(HeaderConnection, "keep-alive")
+	c.Header("Access-Control-Allow-Origin", "*")
+
+	req, err := http.NewRequest(MethodGET, targetURL.String(), nil)
+	if err != nil {
+		log.Errorf("arca SSE: failed to create request: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create request"})
+		return
+	}
+	req.Header.Set(HeaderAccept, ContentTypeSSE)
+	req.Header.Set(HeaderCacheControl, "no-cache")
+	g.copyHeadersExcept(c.Request.Header, req.Header,
+		constants.HeaderMCPServerURL,
+		arcaHeaderAPIKey,
+		arcaHeaderSandboxID,
+	)
+	req.Header.Set(arcaHeaderAPIKey, g.config.ArcaAPIKey)
+	req.Header.Set(arcaHeaderSandboxID, sandboxID)
+
+	client := &http.Client{Transport: g.transport}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Errorf("arca SSE: connect failed sandbox=%s: %v", sandboxID, err)
+		c.JSON(http.StatusBadGateway, gin.H{"error": "Failed to connect to arca gateway"})
+		return
+	}
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			log.Warnf("failed to close arca SSE response body: %v", closeErr)
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Warnf("arca SSE: upstream status %d sandbox=%s", resp.StatusCode, sandboxID)
+		c.JSON(resp.StatusCode, gin.H{"error": "arca gateway error"})
+		return
+	}
+
+	for name, values := range resp.Header {
+		if name != HeaderContentType {
+			for _, value := range values {
+				c.Header(name, value)
+			}
+		}
+	}
+	c.Header(HeaderContentType, ContentTypeSSE)
+
+	buf := make([]byte, 4096)
+	for {
+		n, err := resp.Body.Read(buf)
+		if err != nil {
+			if err != io.EOF {
+				log.Errorf("arca SSE read error sandbox=%s: %v", sandboxID, err)
+			}
+			break
+		}
+		if n > 0 {
+			if _, writeErr := c.Writer.Write(buf[:n]); writeErr != nil {
+				log.Errorf("arca SSE write error: %v", writeErr)
+				break
+			}
+			if flusher, ok := c.Writer.(http.Flusher); ok {
+				flusher.Flush()
+			}
+		}
+	}
 }
 
 // GetRouter gets router instance
