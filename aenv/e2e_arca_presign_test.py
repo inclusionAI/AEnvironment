@@ -21,6 +21,7 @@ Optional env vars:
     ARCA_SERVICE_PATH       path to GET on the presigned URL (default /)
     ARCA_PRESIGN_TTL_MIN    presign url ttl in minutes (default 5)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -38,9 +39,10 @@ API_SERVICE_URL = os.environ.get("ARCA_API_SERVICE_URL", "http://localhost:18080
 ENV_NAME = os.environ.get("ARCA_TEST_ENV_NAME", "")
 AENV_API_KEY = os.environ.get("AENV_API_KEY", "")
 
-SERVICE_PORT = int(os.environ.get("ARCA_SERVICE_PORT", "8080"))
-SERVICE_PATH = os.environ.get("ARCA_SERVICE_PATH", "/")
+SERVICE_PORT = int(os.environ.get("ARCA_SERVICE_PORT", "18080"))
+SERVICE_PATH = os.environ.get("ARCA_SERVICE_PATH", "/healthz")
 PRESIGN_TTL_MIN = float(os.environ.get("ARCA_PRESIGN_TTL_MIN", "5"))
+READINESS_TIMEOUT_S = float(os.environ.get("ARCA_READINESS_TIMEOUT_S", "45"))
 
 
 def _ok(msg: str) -> None:
@@ -66,9 +68,7 @@ async def lifecycle() -> None:
         env_name=ENV_NAME,
         aenv_url=API_SERVICE_URL,
         ttl="10m",
-        startup_timeout=180.0,
         timeout=60.0,
-        max_retries=1,
         api_key=AENV_API_KEY or None,
     )
 
@@ -102,21 +102,36 @@ async def lifecycle() -> None:
         target = presigned.rstrip("/") + (
             SERVICE_PATH if SERVICE_PATH.startswith("/") else "/" + SERVICE_PATH
         )
-        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
-            try:
-                resp = await client.get(target)
-            except Exception as e:
-                traceback.print_exc()
-                _fail(f"GET presigned URL failed: {e!r}")
+
+        # Arca "RUNNING" status only guarantees the pod is up, not that the
+        # in-sandbox process is listening. Poll until 2xx or timeout.
+        deadline = time.time() + READINESS_TIMEOUT_S
+        resp = None
+        attempts = 0
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            while time.time() < deadline:
+                attempts += 1
+                try:
+                    resp = await client.get(target)
+                    if 200 <= resp.status_code < 300:
+                        break
+                    _info(f"readiness attempt {attempts}: status={resp.status_code}")
+                except Exception as e:
+                    _info(f"readiness attempt {attempts}: {e!r}")
+                await asyncio.sleep(2.0)
+
+        if resp is None or not (200 <= resp.status_code < 300):
+            last_status = resp.status_code if resp else "no-response"
+            last_body = resp.text[:200] if resp is not None else ""
+            _fail(
+                f"sandbox service never became ready (last={last_status}, "
+                f"body={last_body!r}, attempts={attempts})"
+            )
         body_excerpt = (resp.text or "")[:200].replace("\n", " ")
         _info(
             f"sandbox service GET {SERVICE_PATH} -> {resp.status_code} body={body_excerpt!r}"
         )
-        # 502 from the arca gateway is expected when the sandbox template has
-        # no listener on the probed port - it still proves presign + routing work.
-        if resp.status_code >= 600:
-            _fail(f"unexpected status: {resp.status_code}")
-        _ok(f"presigned URL routed by arca gateway ({resp.status_code})")
+        _ok(f"in-sandbox service reachable via presigned URL ({resp.status_code})")
 
     finally:
         try:
