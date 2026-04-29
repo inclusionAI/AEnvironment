@@ -123,6 +123,7 @@ class Environment:
         skip_for_healthy: bool = False,
         owner: Optional[str] = None,
         labels: Optional[Dict[str, str]] = None,
+        mount_points: Optional[List[Dict[str, Any]]] = None,
     ):
         """
         Initialize environment.
@@ -139,6 +140,10 @@ class Environment:
             max_retries: Maximum retry attempts for failed requests
             api_key: Optional API key for authentication
             skip_for_healthy: Skip health check if True (defaults to False)
+            mount_points: Optional list of mount-point dicts forwarded to the
+                backend sandbox engine. Each entry: ``{"id": "OSS_xxx",
+                "remote_dir": "/data", "local_dir": "/workspace"}``.
+                Supported engines: arca (ignored on k8s/standard/faas).
         """
         self.env_name = env_name
         self.datasource = datasource
@@ -148,6 +153,8 @@ class Environment:
         self.skip_for_healthy = skip_for_healthy
         self.owner = owner
         self.labels = labels
+        # Supported engines: arca (ignored on k8s/standard/faas).
+        self.mount_points = mount_points
 
         if not aenv_url:
             aenv_url = self.dummy_instance_ip or os.getenv(
@@ -298,6 +305,27 @@ class Environment:
             finally:
                 self._mcp_session_active = False
 
+    async def presign_url(
+        self,
+        port: int,
+        expiration_time_in_minutes: float = 5,
+    ) -> str:
+        """Return a short-lived URL pointing to a port inside this sandbox.
+
+        Mirrors arca-sandbox SDK's ``presign_url`` signature. Engine differences
+        are resolved inside api-service - the SDK does not branch on engine.
+        Raises ``EnvironmentError`` if the active engine does not support
+        presigning (api-service returns a 501 with explanation).
+        """
+        await self._ensure_initialized()
+        if not self._client or not self._instance:
+            raise EnvironmentError("presign_url: environment not initialized")
+        return await self._client.presign_url(
+            self._instance.id,
+            port=port,
+            expiration_time_in_minutes=expiration_time_in_minutes,
+        )
+
     async def release(self):
         """Release environment resources."""
         logger.info(
@@ -349,6 +377,8 @@ class Environment:
     async def list_tools(self) -> List[Dict[str, Any]]:
         """
         List all available tools in the environment using MCP client.
+
+        Supported engines: all.
 
         Returns:
             List of tool descriptors in MCP format
@@ -436,6 +466,8 @@ class Environment:
         """
         List all registered functions in the environment including reward and health.
 
+        Supported engines: all.
+
         Returns:
             Dictionary containing categorized function lists (functions, reward, health)
         """
@@ -495,6 +527,8 @@ class Environment:
         """
         Execute the reward function via the /task/reward endpoint.
 
+        Supported engines: all.
+
         Args:
             arguments: Arguments to pass to the reward function
             timeout: Override default timeout
@@ -505,6 +539,7 @@ class Environment:
         Raises:
             EnvironmentError: If reward execution fails
         """
+        await self._ensure_initialized()
         return await self._call_function(
             self.aenv_reward_url, arguments=arguments, timeout=timeout
         )
@@ -631,6 +666,8 @@ class Environment:
         """
         Execute the check-health function via the /health endpoint.
 
+        Supported engines: all.
+
         Returns:
 
         Raises:
@@ -674,6 +711,8 @@ class Environment:
     ) -> ToolResult:
         """
         Execute a tool with given arguments using MCP client.
+
+        Supported engines: all.
 
         Retry strategy (idempotent-safe):
         - Session establishment failures are retried (tool was never sent to server)
@@ -891,7 +930,12 @@ class Environment:
             )
 
     async def wait_for_ready(self, timeout: float = 300.0) -> None:
-        """Wait for environment instance to be ready."""
+        """Wait for environment instance to be ready.
+
+        Readiness is defined by the control-plane status reaching ``RUNNING``
+        plus the data-plane MCP health probe returning healthy. Engine
+        differences are fully resolved inside api-service.
+        """
         if not self._client or not self._instance:
             await self.initialize()
 
@@ -904,6 +948,7 @@ class Environment:
             )
 
             self._instance = instance
+
             await self._wait_for_healthy()
         except Exception as e:
             logger.error(
@@ -945,6 +990,7 @@ class Environment:
                 ttl=self.ttl,
                 owner=self.owner,
                 labels=self.labels,
+                mount_points=self.mount_points,
             )
             logger.info(
                 f"{self._log_prefix()} Environment instance created with ID: {self._instance.id}"
@@ -971,6 +1017,8 @@ class Environment:
         """
         Execute a registered function via HTTP endpoint.
 
+        Supported engines: all.
+
         Args:
             function_name: name of the registered function
             arguments: Arguments to pass to the function
@@ -982,6 +1030,7 @@ class Environment:
         Raises:
             EnvironmentError: If function execution fails
         """
+        await self._ensure_initialized()
         function_url = f"{self.aenv_functions_base_url}/{function_name}"
         return await self._call_function(
             function_url, arguments=arguments, timeout=timeout

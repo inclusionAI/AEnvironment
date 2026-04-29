@@ -96,6 +96,15 @@ class EnvInstanceCreateRequest(BaseModel):
     arguments: Optional[List[str]] = Field(None, description="Startup arguments")
     owner: Optional[str] = Field(None, description="Instance owner")
     labels: Optional[Dict[str, str]] = Field(None, description="Resource labels")
+    mount_points: Optional[List[Dict[str, Any]]] = Field(
+        None,
+        description=(
+            "OSS/disk mount points forwarded to the sandbox engine. "
+            "Each entry is a dict like "
+            "{'id': 'OSS_xxx', 'remote_dir': '/data', 'local_dir': '/workspace'}. "
+            "Supported engines: arca (ignored on k8s/standard/faas)."
+        ),
+    )
 
 
 class EnvInstanceListResponse(BaseModel):

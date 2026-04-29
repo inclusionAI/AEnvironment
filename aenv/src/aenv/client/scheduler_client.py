@@ -18,7 +18,7 @@ Implements the AScheduler API specification.
 """
 
 import asyncio
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import httpx
 
@@ -112,6 +112,7 @@ class AEnvSchedulerClient:
         arguments: Optional[List[str]] = None,
         owner: Optional[str] = None,
         labels: Optional[Dict[str, str]] = None,
+        mount_points: Optional[List[Dict[str, Any]]] = None,
     ) -> EnvInstance:
         """
         Create a new environment instance.
@@ -124,6 +125,8 @@ class AEnvSchedulerClient:
             ttl: Time to live for instance
             owner: Optional owner of the instance
             labels: Optional labels for the instance
+            mount_points: Optional mount-point dicts forwarded to the sandbox
+                engine. Supported engines: arca (ignored on k8s/standard/faas).
         Returns:
             Created EnvInstance
 
@@ -135,7 +138,7 @@ class AEnvSchedulerClient:
             raise NetworkError("Client not connected")
 
         logger.info(
-            f"Creating environment instance: {name}, datasource: {datasource}, ttl: {ttl}, environment_variables: {environment_variables}, arguments: {arguments}, owner: {owner}, labels: {labels}, url: {self.base_url}"
+            f"Creating environment instance: {name}, datasource: {datasource}, ttl: {ttl}, environment_variables: {environment_variables}, arguments: {arguments}, owner: {owner}, labels: {labels}, mount_points: {mount_points}, url: {self.base_url}"
         )
         request = EnvInstanceCreateRequest(
             envName=name,
@@ -145,6 +148,7 @@ class AEnvSchedulerClient:
             ttl=ttl,
             owner=owner,
             labels=labels,
+            mount_points=mount_points,
         )
 
         for attempt in range(self.max_retries + 1):
@@ -309,6 +313,51 @@ class AEnvSchedulerClient:
                         f"Invalid server response: {response.status_code} - {response.text[:200]}"
                     ) from e
 
+            except httpx.RequestError as e:
+                if attempt < self.max_retries:
+                    await asyncio.sleep(2**attempt)
+                    continue
+                raise NetworkError(f"Network error: {str(e)}") from e
+
+    async def presign_url(
+        self,
+        instance_id: str,
+        port: int,
+        expiration_time_in_minutes: float = 5,
+    ) -> str:
+        """Get a short-lived URL pointing to a port inside the sandbox.
+
+        The call is engine-unaware at the SDK layer; api-service returns an
+        error if the active engine does not support presigning.
+        """
+        if not self._client:
+            raise NetworkError("Client not connected")
+        payload = {
+            "port": port,
+            "expiration_time_in_minutes": expiration_time_in_minutes,
+        }
+        for attempt in range(self.max_retries + 1):
+            try:
+                response = await self._client.post(
+                    f"/env-instance/{instance_id}/presign-url", json=payload
+                )
+                try:
+                    api_response = APIResponse(**response.json())
+                except ValueError as e:
+                    raise EnvironmentError(
+                        f"Invalid server response: {response.status_code} - {response.text[:200]}"
+                    ) from e
+                if not api_response.success:
+                    raise EnvironmentError(
+                        f"presign_url failed: {api_response.message}"
+                    )
+                data = api_response.data or {}
+                url = data.get("url") if isinstance(data, dict) else None
+                if not url:
+                    raise EnvironmentError(
+                        f"presign_url: empty url in response ({data!r})"
+                    )
+                return url
             except httpx.RequestError as e:
                 if attempt < self.max_retries:
                     await asyncio.sleep(2**attempt)
