@@ -127,8 +127,3 @@ output/
 ## local build
 .cache
 .bash_history
-
-# arca local-only artifacts
-deploy/api-service-arca.yaml
-docs/superpowers/specs/2026-04-24-arca-sandbox-engine-design.md
-docs/superpowers/plans/2026-04-27-arca-sandbox-engine-impl.md
