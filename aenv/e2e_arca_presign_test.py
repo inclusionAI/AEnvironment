@@ -91,8 +91,6 @@ async def main() -> int:
     t0 = time.time()
     async with Environment(
         env_name=ENV_NAME,
-        aenv_url=AENV_URL or None,
-        api_key=AENV_API_KEY or None,
         ttl="10m",
         enable_data_plane=False,
     ) as env:
