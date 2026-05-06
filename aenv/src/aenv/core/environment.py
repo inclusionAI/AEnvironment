@@ -121,6 +121,7 @@ class Environment:
         max_retries: int = 10,
         api_key: Optional[str] = None,
         skip_for_healthy: bool = False,
+        enable_data_plane: bool = True,
         owner: Optional[str] = None,
         labels: Optional[Dict[str, str]] = None,
         mount_points: Optional[List[Dict[str, Any]]] = None,
@@ -139,7 +140,18 @@ class Environment:
             ttl: Time to live in seconds defaults to 10 minutes
             max_retries: Maximum retry attempts for failed requests
             api_key: Optional API key for authentication
-            skip_for_healthy: Skip health check if True (defaults to False)
+            skip_for_healthy: Skip the data-plane ``/health`` readiness probe
+                only. Has no effect when ``enable_data_plane=False`` (the
+                probe is skipped unconditionally in that mode).
+            enable_data_plane: When True (default), the SDK opens an MCP
+                session against the sandbox on port 8081 and exposes
+                ``call_tool`` / ``list_tools`` / ``call_function`` /
+                ``call_reward`` / ``check_health``. When False, the data
+                plane is not touched at all — no MCP session, no ``/health``
+                probe, and the above methods raise ``EnvironmentError``.
+                ``presign_url`` still works because it is a control-plane
+                API. Required for arca-engine sandboxes whose images do not
+                embed the aenv MCP server.
             mount_points: Optional list of mount-point dicts forwarded to the
                 backend sandbox engine. Each entry: ``{"id": "OSS_xxx",
                 "remote_dir": "/data", "local_dir": "/workspace"}``.
@@ -151,6 +163,7 @@ class Environment:
         self.arguments = arguments or []
         self.dummy_instance_ip = os.getenv("DUMMY_INSTANCE_IP")
         self.skip_for_healthy = skip_for_healthy
+        self.enable_data_plane = enable_data_plane
         self.owner = owner
         self.labels = labels
         # Supported engines: arca (ignored on k8s/standard/faas).
@@ -190,6 +203,14 @@ class Environment:
         )
         return f"[ENV:{instance_id}][sdk:v{__version__}]"
 
+    def _require_data_plane(self, op: str) -> None:
+        if not self.enable_data_plane:
+            raise EnvironmentError(
+                f"{op} is unavailable: this Environment was created with "
+                f"enable_data_plane=False (no MCP session, no /health). Use "
+                f"presign_url() to expose an in-sandbox port instead."
+            )
+
     async def _backoff(self, attempt: int, base: float = 2.0) -> None:
         """Exponential backoff with jitter."""
         wait = base**attempt + random.uniform(0, 1)
@@ -211,6 +232,8 @@ class Environment:
     async def __aenter__(self):
         """Async context manager entry."""
         await self.initialize()
+        if not self.enable_data_plane:
+            return self
         max_attempts = 3
         for attempt in range(max_attempts):
             try:
@@ -230,7 +253,8 @@ class Environment:
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit."""
-        await self._close_mcp_session()
+        if self.enable_data_plane:
+            await self._close_mcp_session()
         await self.release()
 
     async def initialize(self) -> bool:
@@ -383,6 +407,7 @@ class Environment:
         Returns:
             List of tool descriptors in MCP format
         """
+        self._require_data_plane("list_tools")
         await self._ensure_initialized()
 
         try:
@@ -471,6 +496,7 @@ class Environment:
         Returns:
             Dictionary containing categorized function lists (functions, reward, health)
         """
+        self._require_data_plane("list_functions")
         await self._ensure_initialized()
 
         try:
@@ -539,6 +565,7 @@ class Environment:
         Raises:
             EnvironmentError: If reward execution fails
         """
+        self._require_data_plane("call_reward")
         await self._ensure_initialized()
         return await self._call_function(
             self.aenv_reward_url, arguments=arguments, timeout=timeout
@@ -673,6 +700,7 @@ class Environment:
         Raises:
             EnvironmentError: If health check execution fails
         """
+        self._require_data_plane("check_health")
         await self._ensure_initialized()
 
         logger.info(
@@ -732,6 +760,7 @@ class Environment:
             ToolError: If tool execution fails after invocation
             EnvironmentError: If session cannot be established
         """
+        self._require_data_plane("call_tool")
         await self._ensure_initialized()
 
         # Circuit breaker: fail fast if too many consecutive tool errors
@@ -856,9 +885,12 @@ class Environment:
 
     async def _wait_for_healthy(self, timeout: float = 300.0) -> None:
         """Wait for environment instance to be healthy."""
-        if self.skip_for_healthy:
+        if not self.enable_data_plane or self.skip_for_healthy:
             logger.info(
-                f"{self._log_prefix()} Skipping health check for environment {self.env_name}"
+                f"{self._log_prefix()} Skipping /health probe for environment "
+                f"{self.env_name} "
+                f"(enable_data_plane={self.enable_data_plane}, "
+                f"skip_for_healthy={self.skip_for_healthy})"
             )
             return
 
@@ -1030,6 +1062,7 @@ class Environment:
         Raises:
             EnvironmentError: If function execution fails
         """
+        self._require_data_plane("call_function")
         await self._ensure_initialized()
         function_url = f"{self.aenv_functions_base_url}/{function_name}"
         return await self._call_function(

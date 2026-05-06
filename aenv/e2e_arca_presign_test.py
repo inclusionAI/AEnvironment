@@ -1,29 +1,30 @@
 #!/usr/bin/env python3
 """
-Example: aenv + arca engine — fast create with no ready-wait, then access
-the sandbox via a presigned URL (direct data-plane, bypassing api-service).
+Example: aenv + arca engine — fast create with no data-plane wait, then
+access the sandbox via a presigned URL (direct data-plane, bypassing
+api-service).
 
-When to use this pattern instead of ``Environment.initialize``:
-    * You want to expose an in-sandbox HTTP/WebSocket service to arbitrary
-      external clients (e.g. a UI, a webhook, an LLM agent on another host),
-      not just the local Python process.
-    * You don't need aenv's MCP/tool-call flows — only lifecycle + a URL.
-    * You want minimum latency at create time: arca's presign accepts the
-      sandbox even in PENDING, and the in-sandbox app itself exposes
-      readiness (so the SDK's _wait_for_healthy is redundant).
+When to use this pattern:
+    * Engine is arca and the sandbox image runs an arbitrary user app
+      (no aenv MCP server inside).
+    * You want minimum latency at create time and prefer to wait on the
+      in-sandbox app's own readiness path.
 
 High-level flow:
-    1. create sandbox         (AEnvSchedulerClient.create_env_instance)
-    2. presign URL            (AEnvSchedulerClient.presign_url)
-    3. caller polls the URL   (httpx, business-defined readiness path)
-    4. caller does real work  (whatever they want to call on the sandbox)
-    5. delete sandbox         (AEnvSchedulerClient.delete_env_instance)
+    1. create sandbox        (Environment.__aenter__, no MCP session)
+    2. presign URL           (Environment.presign_url)
+    3. caller polls the URL  (httpx, business-defined readiness path)
+    4. caller does real work (whatever the sandbox process listens for)
+    5. release               (Environment.__aexit__)
 
-There is NO call to ``Environment.initialize`` / ``wait_for_ready`` /
-``_wait_for_healthy`` — all waiting is pushed to the business layer.
+``enable_data_plane=False`` is what makes this work on arca: the SDK
+skips the MCP session and the /health probe entirely, so no traffic
+hits api-service:8081 (which on arca returns 501 by design). The
+``call_tool`` / ``list_tools`` / ``call_function`` / ``call_reward`` /
+``check_health`` methods will raise if invoked under this flag.
 
 Env vars:
-    ARCA_API_SERVICE_URL    api-service-arca base URL  (default http://localhost:18080)
+    AENV_SYSTEM_URL         api-service base URL  (default http://localhost)
     ARCA_TEST_ENV_NAME      envhub env name (arcaTemplateId inside)  (required)
     AENV_API_KEY            bearer token if api-service has auth enabled  (optional)
     ARCA_SERVICE_PORT       in-sandbox port to expose  (default 18080)
@@ -41,11 +42,10 @@ import time
 
 import httpx
 
-from aenv.client.scheduler_client import AEnvSchedulerClient
-from aenv.core.environment import make_mcp_url
+from aenv import Environment
 
-API_SERVICE_URL = os.environ.get("ARCA_API_SERVICE_URL", "http://localhost:18080")
 ENV_NAME = os.environ.get("ARCA_TEST_ENV_NAME", "")
+AENV_URL = os.environ.get("AENV_SYSTEM_URL", os.environ.get("ARCA_API_SERVICE_URL", ""))
 AENV_API_KEY = os.environ.get("AENV_API_KEY", "")
 
 SERVICE_PORT = int(os.environ.get("ARCA_SERVICE_PORT", "18080"))
@@ -85,50 +85,43 @@ async def main() -> int:
         print("missing required env var ARCA_TEST_ENV_NAME", file=sys.stderr)
         return 1
 
-    control_url = make_mcp_url(API_SERVICE_URL, 8080)
-    print(f"api-service: {control_url}")
-    print(f"env_name:    {ENV_NAME}")
+    print(f"env_name: {ENV_NAME}")
+    print(f"aenv_url: {AENV_URL or '(default)'}")
 
-    async with AEnvSchedulerClient(
-        base_url=control_url,
+    t0 = time.time()
+    async with Environment(
+        env_name=ENV_NAME,
+        aenv_url=AENV_URL or None,
         api_key=AENV_API_KEY or None,
-    ) as client:
-        # -- 1. create sandbox (no wait for RUNNING/healthy) -----------------
-        t0 = time.time()
-        inst = await client.create_env_instance(name=ENV_NAME, ttl="10m")
+        ttl="10m",
+        enable_data_plane=False,
+    ) as env:
+        info = await env.get_env_info()
         print(
             f"[1] created sandbox in {time.time()-t0:.2f}s "
-            f"(id={inst.id}, status={inst.status})"
+            f"(id={info['instance_id']}, status={info['status']})"
         )
 
-        try:
-            # -- 2. presign a URL pointing at sandbox:$PORT ------------------
-            url = await client.presign_url(
-                inst.id,
-                port=SERVICE_PORT,
-                expiration_time_in_minutes=PRESIGN_TTL_MIN,
-            )
-            print(f"[2] presigned URL ({SERVICE_PORT}): {url}")
+        url = await env.presign_url(
+            port=SERVICE_PORT,
+            expiration_time_in_minutes=PRESIGN_TTL_MIN,
+        )
+        print(f"[2] presigned URL ({SERVICE_PORT}): {url}")
 
-            # -- 3. poll the in-sandbox service until it's up ----------------
-            target = url.rstrip("/") + (
-                SERVICE_PATH if SERVICE_PATH.startswith("/") else "/" + SERVICE_PATH
-            )
-            print(f"[3] waiting for {SERVICE_PATH} to return 2xx...")
-            resp = await wait_ready(target)
-            print(f"    ready in {time.time()-t0:.1f}s; status={resp.status_code}")
-            print(f"    body: {resp.text[:200]!r}")
+        target = url.rstrip("/") + (
+            SERVICE_PATH if SERVICE_PATH.startswith("/") else "/" + SERVICE_PATH
+        )
+        print(f"[3] waiting for {SERVICE_PATH} to return 2xx...")
+        resp = await wait_ready(target)
+        print(f"    ready in {time.time()-t0:.1f}s; status={resp.status_code}")
+        print(f"    body: {resp.text[:200]!r}")
 
-            # -- 4. (your real traffic goes here) ----------------------------
-            # The same ``url`` is a valid base for HTTP / WebSocket / anything
-            # the sandbox process listens for on that port. It remains valid
-            # until the presign TTL expires.
-            print("[4] (business traffic would run here)")
-        finally:
-            # -- 5. always release -------------------------------------------
-            await client.delete_env_instance(inst.id)
-            print(f"[5] released sandbox (id={inst.id})")
+        # The same ``url`` is a valid base for HTTP / WebSocket / anything
+        # the sandbox process listens for on that port. It remains valid
+        # until the presign TTL expires.
+        print("[4] (business traffic would run here)")
 
+    print(f"[5] released sandbox in {time.time()-t0:.1f}s total")
     return 0
 
 
