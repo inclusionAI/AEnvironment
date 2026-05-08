@@ -50,6 +50,22 @@ type RedisEnvStorage struct {
 
 var _ EnvStorage = (*RedisEnvStorage)(nil)
 
+func init() {
+	RegisterEnvStorage("redis", func(opts map[string]string) (EnvStorage, error) {
+		db := 0
+		if v, ok := opts["db"]; ok && v != "" {
+			fmt.Sscanf(v, "%d", &db) //nolint:errcheck // best-effort parse; default 0 is fine
+		}
+		return NewRedisEnvStorage(RedisEnvStorageOptions{
+			Addr:      opts["addr"],
+			Username:  opts["username"],
+			Password:  opts["password"],
+			DB:        db,
+			KeyPrefix: opts["keyPrefix"],
+		})
+	})
+}
+
 // NewRedisEnvStorage creates RedisEnvStorage
 func NewRedisEnvStorage(opts RedisEnvStorageOptions) (*RedisEnvStorage, error) {
 	if opts.Addr == "" {

@@ -127,3 +127,6 @@ output/
 ## local build
 .cache
 .bash_history
+
+## local Claude assets (not for public repo)
+.claude/

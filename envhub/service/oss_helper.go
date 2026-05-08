@@ -21,7 +21,6 @@ import (
 	"context"
 	"io"
 	"log"
-	"os"
 
 	"github.com/aliyun/alibabacloud-oss-go-sdk-v2/oss"
 	"github.com/aliyun/alibabacloud-oss-go-sdk-v2/oss/credentials"
@@ -37,24 +36,18 @@ type OssConfig struct {
 	SecretKey string
 }
 
-// LoadOssConfigFromEnv loads OSS configuration from environment variables
+// LoadOssConfigFromEnv loads OSS configuration through the active ConfigProvider.
+// The name is retained for backwards compatibility; the provider is pluggable.
 func LoadOssConfigFromEnv() *OssConfig {
 	config := &OssConfig{
-		Endpoint:  getEnvOrDefault("OSS_ENDPOINT", ""),
-		Bucket:    getEnvOrDefault("OSS_BUCKET", ""),
-		KeyPrefix: getEnvOrDefault("OSS_KEY_PREFIX", "aenv"),
-		Region:    getEnvOrDefault("OSS_REGION", "cn-hangzhou"),
-		AccessKey: getEnvOrDefault("OSS_ACCESS_KEY_ID", ""),
-		SecretKey: getEnvOrDefault("OSS_ACCESS_KEY_SECRET", ""),
+		Endpoint:  GetConfig("OSS_ENDPOINT", ""),
+		Bucket:    GetConfig("OSS_BUCKET", ""),
+		KeyPrefix: GetConfig("OSS_KEY_PREFIX", "aenv"),
+		Region:    GetConfig("OSS_REGION", "cn-hangzhou"),
+		AccessKey: GetConfig("OSS_ACCESS_KEY_ID", ""),
+		SecretKey: GetConfig("OSS_ACCESS_KEY_SECRET", ""),
 	}
 	return config
-}
-
-func getEnvOrDefault(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
 }
 
 // IsOssConfigured checks if OSS is properly configured
@@ -62,6 +55,20 @@ func IsOssConfigured(config *OssConfig) bool {
 	// OSS is considered configured if Bucket is set
 	// Endpoint and credentials can be optional (using default endpoint or env vars)
 	return config.Bucket != ""
+}
+
+func init() {
+	RegisterBlobStorage("oss", func(_ map[string]string) (BlobStorage, error) {
+		cfg := LoadOssConfigFromEnv()
+		s, err := NewOssStorage(cfg)
+		if err != nil {
+			return nil, err
+		}
+		if s == nil {
+			return nil, nil
+		}
+		return s, nil
+	})
 }
 
 func makeOssClient(config *OssConfig) (*oss.Client, error) {

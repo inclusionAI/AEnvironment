@@ -62,12 +62,14 @@ func NewOssStorage(config *OssConfig) (*OssStorage, error) {
 	}, nil
 }
 
-func (oss *OssStorage) PresignEnv(env string, style string) (string, error) {
+var _ BlobStorage = (*OssStorage)(nil)
+
+func (oss *OssStorage) PresignEnv(env string, access BlobAccess) (string, error) {
 	if oss == nil {
 		return "", fmt.Errorf("OSS storage is not configured")
 	}
 	var request any
-	if style == "read" {
+	if access == BlobRead {
 		request = makeEnvReadRequest(oss.config, env)
 	} else {
 		request = makeEnvUploadRequest(oss.config, env)
@@ -76,6 +78,5 @@ func (oss *OssStorage) PresignEnv(env string, style string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	//expiration := envPresign.Expiration
 	return envPresign.URL, nil
 }

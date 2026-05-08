@@ -16,26 +16,17 @@ limitations under the License.
 
 package service
 
-import "testing"
+// BlobAccess describes the access style of a presigned URL.
+type BlobAccess string
 
-func TestOssStorage(t *testing.T) {
-	config := LoadOssConfigFromEnv()
-	ossStorage, err := NewOssStorage(config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if ossStorage == nil {
-		t.Skip("OSS storage is not configured, skipping test")
-		return
-	}
-	url, err := ossStorage.PresignEnv("mucustom-0.0.1.tar", BlobWrite)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Log(url)
-}
+const (
+	BlobRead  BlobAccess = "read"
+	BlobWrite BlobAccess = "write"
+)
 
-func TestOssRead(t *testing.T) {
-	val := readConfig("/datasource/swe-verify-images.json")
-	t.Log(val)
+// BlobStorage abstracts object storage that can produce time-bound presigned URLs for an env
+// artifact key. The default open-source implementation is OssStorage (Aliyun OSS); internal
+// builds may register alternatives (e.g. DDSOSS) via RegisterBlobStorage.
+type BlobStorage interface {
+	PresignEnv(envKey string, access BlobAccess) (string, error)
 }

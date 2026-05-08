@@ -30,11 +30,11 @@ import (
 
 type EnvController struct {
 	storage    service.EnvStorage
-	ossStorage *service.OssStorage
+	ossStorage service.BlobStorage
 	ciTrigger  service.CITrigger
 }
 
-func NewEnvController(storage service.EnvStorage, ossStorage *service.OssStorage, ciTrigger service.CITrigger) *EnvController {
+func NewEnvController(storage service.EnvStorage, ossStorage service.BlobStorage, ciTrigger service.CITrigger) *EnvController {
 	return &EnvController{
 		storage:    storage,
 		ossStorage: ossStorage,
@@ -357,8 +357,13 @@ func (ctrl *EnvController) PresignEnv(c *gin.Context) {
 	version := c.Param("version")
 	style := c.Query("style")
 
+	access := service.BlobWrite
+	if style == "read" {
+		access = service.BlobRead
+	}
+
 	key := fmt.Sprintf("%s-%s", name, version)
-	url, err := ctrl.ossStorage.PresignEnv(key, style)
+	url, err := ctrl.ossStorage.PresignEnv(key, access)
 	if err != nil {
 		models.JSONErrorWithMessage(c, http.StatusInternalServerError, err.Error())
 		return

@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strings"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/spf13/pflag"
@@ -43,6 +43,8 @@ var (
 	redisDB        int
 	redisKeyPrefix string
 
+	blobBackend string
+
 	templateId  string
 	callbackURL string
 )
@@ -50,41 +52,42 @@ var (
 func init() {
 	pflag.IntVar(&serverPort, "port", 8080, "Server port")
 	pflag.IntVar(&metricsPort, "metrics-port", 9091, "Metrics port")
-	pflag.StringVar(&storageBackend, "storage-backend", "redis", "Env storage backend: redis")
+	pflag.StringVar(&storageBackend, "storage-backend", "redis", "Env storage backend (registered via service.RegisterEnvStorage)")
 	pflag.StringVar(&redisAddr, "redis-addr", "localhost:6379", "Redis address")
 	pflag.StringVar(&redisUsername, "redis-username", "", "Redis username")
 	pflag.StringVar(&redisPassword, "redis-password", "", "Redis password")
 	pflag.IntVar(&redisDB, "redis-db", 0, "Redis DB index")
 	pflag.StringVar(&redisKeyPrefix, "redis-key-prefix", "env", "Redis key prefix for env data")
+	pflag.StringVar(&blobBackend, "blob-backend", "oss", "Blob storage backend (oss or registered alternative). Empty disables blob features.")
 	pflag.StringVar(&templateId, "template-id", "", "Template ID for pipeline or workflow (optional)")
 	pflag.StringVar(&callbackURL, "callback-url", "", "Callback URL to notify after operation completion (optional)")
 }
 
 func main() {
-	// Parse command line arguments
 	pflag.Parse()
 
-	// Initialize monitoring metrics
 	metrics := models.NewMetrics()
 	metricsController := controller.NewMetricsController(metrics)
 
-	// Initialize storage service
-	envStorage, err := newEnvStorage(storageBackend)
+	envStorage, err := service.BuildEnvStorage(storageBackend, map[string]string{
+		"addr":      redisAddr,
+		"username":  redisUsername,
+		"password":  redisPassword,
+		"db":        strconv.Itoa(redisDB),
+		"keyPrefix": redisKeyPrefix,
+	})
 	if err != nil {
 		log.Fatalf("Failed to initialize env storage: %v", err)
 	}
 
-	// Initialize health checker
 	healthChecker := controller.NewEnvStorageHealthChecker(envStorage)
 
-	// Initialize OSS storage with configuration (optional)
-	ossConfig := service.LoadOssConfigFromEnv()
-	ossStorage, err := service.NewOssStorage(ossConfig)
+	blobStorage, err := service.BuildBlobStorage(blobBackend, nil)
 	if err != nil {
-		log.Fatalf("Failed to initialize OSS storage: %v", err)
+		log.Fatalf("Failed to initialize blob storage: %v", err)
 	}
-	if ossStorage == nil {
-		log.Printf("OSS storage is not configured, OSS-related features will be disabled")
+	if blobStorage == nil {
+		log.Printf("Blob storage backend %q produced nil instance; blob features disabled", blobBackend)
 	}
 
 	var ciTrigger service.CITrigger
@@ -95,15 +98,10 @@ func main() {
 		}
 	}
 
-	// Initialize controllers
-	envController := controller.NewEnvController(envStorage, ossStorage, ciTrigger)
-
+	envController := controller.NewEnvController(envStorage, blobStorage, ciTrigger)
 	healthController := controller.NewHealthController(metrics, healthChecker)
 	dataController := controller.NewDatasourceController()
-	// TODO: TokenController needs to be updated to use Redis instead of MetaService
-	// tokenController := controller.NewTokenController(service.NewTokenStorage())
 
-	// Start main service
 	go func() {
 		gin.SetMode(gin.ReleaseMode)
 		r := gin.New()
@@ -112,7 +110,6 @@ func main() {
 		r.Use(middleware.MetricsMiddleware(metrics))
 		r.Use(middleware.HealthCheckMiddleware(metrics, healthChecker))
 		r.Use(middleware.TraceMiddleware())
-		// Initialize logger
 		logger := middleware.InitLogger()
 		defer func() {
 			if err := logger.Sync(); err != nil {
@@ -121,16 +118,11 @@ func main() {
 		}()
 		r.Use(middleware.LoggingMiddleware(logger))
 
-		// Register routes
 		envController.RegisterEnvRoutes(r)
 		dataController.RegisterDataRoutes(r)
-		// TODO: Re-enable token routes when TokenStorage is migrated to Redis
-		// tokenController.RegisterTokenRoutes(r)
 
-		// Health check endpoint
 		r.GET("/health", healthController.Health)
 
-		// Start main server
 		addr := fmt.Sprintf(":%d", serverPort)
 		log.Printf("Starting main server on %s with storageBackend %s", addr, storageBackend)
 		if err := r.Run(addr); err != nil {
@@ -138,15 +130,12 @@ func main() {
 		}
 	}()
 
-	// Start metrics service
 	go func() {
 		mr := gin.New()
 		mr.Use(gin.Recovery())
 
-		// Prometheus metrics endpoint
 		mr.GET("/metrics", metricsController.PrometheusHandler())
 
-		// Metrics health check endpoint
 		mr.GET("/health", func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{
 				"status": "metrics server healthy",
@@ -160,21 +149,5 @@ func main() {
 		}
 	}()
 
-	// Block main goroutine
 	select {}
-}
-
-func newEnvStorage(backend string) (service.EnvStorage, error) {
-	switch strings.ToLower(backend) {
-	case "", "redis":
-		return service.NewRedisEnvStorage(service.RedisEnvStorageOptions{
-			Addr:      redisAddr,
-			Username:  redisUsername,
-			Password:  redisPassword,
-			DB:        redisDB,
-			KeyPrefix: redisKeyPrefix,
-		})
-	default:
-		return nil, fmt.Errorf("unsupported storage backend %s, only redis is supported", backend)
-	}
 }
