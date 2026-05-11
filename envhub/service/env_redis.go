@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"sync"
 	"time"
 
 	redis "github.com/go-redis/redis/v8"
@@ -46,6 +47,13 @@ type RedisEnvStorage struct {
 	client    *redis.Client
 	keyPrefix string
 	indexKey  string
+
+	keyLocks sync.Map
+}
+
+func (s *RedisEnvStorage) keyLock(key string) *sync.Mutex {
+	v, _ := s.keyLocks.LoadOrStore(key, &sync.Mutex{})
+	return v.(*sync.Mutex)
 }
 
 var _ EnvStorage = (*RedisEnvStorage)(nil)
@@ -128,56 +136,59 @@ func (s *RedisEnvStorage) Create(ctx context.Context, key string, env *models.En
 	return nil
 }
 
-// Update updates Env object
+// Update applies an optimistic check-and-set update on the env record.
+// Returns ErrEnvNotFound if the key is absent and a version mismatch error
+// if the on-disk record was concurrently modified.
 func (s *RedisEnvStorage) Update(ctx context.Context, key string, env *models.Env, resourceVersion int64, labels map[string]string) error {
+	mu := s.keyLock(key)
+	mu.Lock()
+	defer mu.Unlock()
+
 	redisKey := s.dataKey(key)
-	return s.client.Watch(ctx, func(tx *redis.Tx) error {
-		payload, err := tx.Get(ctx, redisKey).Bytes()
-		if errors.Is(err, redis.Nil) {
-			return fmt.Errorf("%w: %s", ErrEnvNotFound, key)
-		}
-		if err != nil {
-			return fmt.Errorf("failed to read env %s: %w", key, err)
-		}
 
-		var record redisEnvRecord
-		if err := json.Unmarshal(payload, &record); err != nil {
-			return fmt.Errorf("failed to unmarshal env %s: %w", key, err)
-		}
-
-		if record.ResourceVersion != resourceVersion {
-			return fmt.Errorf("resource version mismatch for %s: expect %d got %d", key, record.ResourceVersion, resourceVersion)
-		}
-
-		record.Env = env
-		if labels != nil {
-			record.Labels = copyLabels(labels)
-		}
-		record.ResourceVersion++
-		record.LastUpdatedEpoch = time.Now().Unix()
-
-		updatedPayload, err := json.Marshal(record)
-		if err != nil {
-			return fmt.Errorf("failed to marshal updated env %s: %w", key, err)
-		}
-
-		_, err = tx.TxPipelined(ctx, func(p redis.Pipeliner) error {
-			p.Set(ctx, redisKey, updatedPayload, 0)
-			p.SAdd(ctx, s.indexKey, key)
-			return nil
-		})
+	current, err := s.loadRecord(ctx, key)
+	if err != nil {
 		return err
-	}, redisKey)
+	}
+	if current.ResourceVersion != resourceVersion {
+		return fmt.Errorf("resource version mismatch for %s: expect %d got %d", key, current.ResourceVersion, resourceVersion)
+	}
+
+	updated := redisEnvRecord{
+		Env:              env,
+		Labels:           current.Labels,
+		ResourceVersion:  current.ResourceVersion + 1,
+		LastUpdatedEpoch: time.Now().Unix(),
+	}
+	if labels != nil {
+		updated.Labels = copyLabels(labels)
+	}
+
+	payload, err := json.Marshal(updated)
+	if err != nil {
+		return fmt.Errorf("failed to marshal updated env %s: %w", key, err)
+	}
+
+	if err := s.client.Set(ctx, redisKey, payload, 0).Err(); err != nil {
+		return fmt.Errorf("failed to write env %s: %w", key, err)
+	}
+	if err := s.client.SAdd(ctx, s.indexKey, key).Err(); err != nil {
+		return fmt.Errorf("failed to update index for env %s: %w", key, err)
+	}
+	return nil
 }
 
-// Delete deletes Env object
+// Delete removes the env record and its index entry.
 func (s *RedisEnvStorage) Delete(ctx context.Context, key string) error {
-	redisKey := s.dataKey(key)
-	pipe := s.client.TxPipeline()
-	pipe.Del(ctx, redisKey)
-	pipe.SRem(ctx, s.indexKey, key)
-	if _, err := pipe.Exec(ctx); err != nil {
+	mu := s.keyLock(key)
+	mu.Lock()
+	defer mu.Unlock()
+
+	if err := s.client.Del(ctx, s.dataKey(key)).Err(); err != nil {
 		return fmt.Errorf("failed to delete env %s: %w", key, err)
+	}
+	if err := s.client.SRem(ctx, s.indexKey, key).Err(); err != nil {
+		return fmt.Errorf("failed to remove env %s from index: %w", key, err)
 	}
 	return nil
 }
