@@ -23,15 +23,15 @@ import os
 import random
 import traceback
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse, urlunparse
 
 import httpx
-from agents.tool import FunctionTool
-from agents.tool import Tool as OpenAITool
-from agents.tool_context import ToolContext
 from fastmcp import Client
 from fastmcp.client.transports import StreamableHttpTransport
+
+if TYPE_CHECKING:
+    from agents.tool import Tool as OpenAITool
 
 from aenv.client.scheduler_client import AEnvSchedulerClient
 from aenv.core.exceptions import (
@@ -439,10 +439,20 @@ class Environment:
                 f"Failed to list tools for environment '{self.env_name}': {str(e)}"
             )
 
-    async def list_openai_tools(self) -> List[OpenAITool]:
+    async def list_openai_tools(self) -> "List[OpenAITool]":
+        try:
+            from agents.tool import FunctionTool
+            from agents.tool import Tool as OpenAITool  # noqa: F401
+            from agents.tool_context import ToolContext  # noqa: F401
+        except ImportError as e:
+            raise ImportError(
+                "list_openai_tools() requires the 'agents' extra. "
+                "Install it with: pip install 'aenvironment[agents]'"
+            ) from e
+
         tools = await self.list_tools()
 
-        openai_tools: List[OpenAITool] = []
+        openai_tools: List[Any] = []
         for tool in tools:
             name = str(tool.get("name", ""))
             description = str(tool.get("description", ""))
@@ -451,7 +461,7 @@ class Environment:
                 input_schema = {"type": "object", "properties": {}}
 
             async def _on_invoke_tool(
-                ctx: ToolContext[Any], input: str, *, _name: str = name
+                ctx: Any, input: str, *, _name: str = name
             ) -> Any:
                 try:
                     args: Dict[str, Any] = json.loads(input) if input else {}
