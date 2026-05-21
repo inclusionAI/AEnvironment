@@ -23,15 +23,15 @@ import os
 import random
 import traceback
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse, urlunparse
 
 import httpx
-from agents.tool import FunctionTool
-from agents.tool import Tool as OpenAITool
-from agents.tool_context import ToolContext
 from fastmcp import Client
 from fastmcp.client.transports import StreamableHttpTransport
+
+if TYPE_CHECKING:
+    from agents.tool import Tool as OpenAITool
 
 from aenv.client.scheduler_client import AEnvSchedulerClient
 from aenv.core.exceptions import (
@@ -121,8 +121,10 @@ class Environment:
         max_retries: int = 10,
         api_key: Optional[str] = None,
         skip_for_healthy: bool = False,
+        enable_data_plane: bool = True,
         owner: Optional[str] = None,
         labels: Optional[Dict[str, str]] = None,
+        mount_points: Optional[List[Dict[str, Any]]] = None,
     ):
         """
         Initialize environment.
@@ -138,7 +140,22 @@ class Environment:
             ttl: Time to live in seconds defaults to 10 minutes
             max_retries: Maximum retry attempts for failed requests
             api_key: Optional API key for authentication
-            skip_for_healthy: Skip health check if True (defaults to False)
+            skip_for_healthy: Skip the data-plane ``/health`` readiness probe
+                only. Has no effect when ``enable_data_plane=False`` (the
+                probe is skipped unconditionally in that mode).
+            enable_data_plane: When True (default), the SDK opens an MCP
+                session against the sandbox on port 8081 and exposes
+                ``call_tool`` / ``list_tools`` / ``call_function`` /
+                ``call_reward`` / ``check_health``. When False, the data
+                plane is not touched at all — no MCP session, no ``/health``
+                probe, and the above methods raise ``EnvironmentError``.
+                ``presign_url`` still works because it is a control-plane
+                API. Required for arca-engine sandboxes whose images do not
+                embed the aenv MCP server.
+            mount_points: Optional list of mount-point dicts forwarded to the
+                backend sandbox engine. Each entry: ``{"id": "OSS_xxx",
+                "remote_dir": "/data", "local_dir": "/workspace"}``.
+                Supported engines: arca (ignored on k8s/standard/faas).
         """
         self.env_name = env_name
         self.datasource = datasource
@@ -146,8 +163,11 @@ class Environment:
         self.arguments = arguments or []
         self.dummy_instance_ip = os.getenv("DUMMY_INSTANCE_IP")
         self.skip_for_healthy = skip_for_healthy
+        self.enable_data_plane = enable_data_plane
         self.owner = owner
         self.labels = labels
+        # Supported engines: arca (ignored on k8s/standard/faas).
+        self.mount_points = mount_points
 
         if not aenv_url:
             aenv_url = self.dummy_instance_ip or os.getenv(
@@ -183,6 +203,14 @@ class Environment:
         )
         return f"[ENV:{instance_id}][sdk:v{__version__}]"
 
+    def _require_data_plane(self, op: str) -> None:
+        if not self.enable_data_plane:
+            raise EnvironmentError(
+                f"{op} is unavailable: this Environment was created with "
+                f"enable_data_plane=False (no MCP session, no /health). Use "
+                f"presign_url() to expose an in-sandbox port instead."
+            )
+
     async def _backoff(self, attempt: int, base: float = 2.0) -> None:
         """Exponential backoff with jitter."""
         wait = base**attempt + random.uniform(0, 1)
@@ -204,6 +232,8 @@ class Environment:
     async def __aenter__(self):
         """Async context manager entry."""
         await self.initialize()
+        if not self.enable_data_plane:
+            return self
         max_attempts = 3
         for attempt in range(max_attempts):
             try:
@@ -223,7 +253,8 @@ class Environment:
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit."""
-        await self._close_mcp_session()
+        if self.enable_data_plane:
+            await self._close_mcp_session()
         await self.release()
 
     async def initialize(self) -> bool:
@@ -298,6 +329,27 @@ class Environment:
             finally:
                 self._mcp_session_active = False
 
+    async def presign_url(
+        self,
+        port: int,
+        expiration_time_in_minutes: float = 5,
+    ) -> str:
+        """Return a short-lived URL pointing to a port inside this sandbox.
+
+        Mirrors arca-sandbox SDK's ``presign_url`` signature. Engine differences
+        are resolved inside api-service - the SDK does not branch on engine.
+        Raises ``EnvironmentError`` if the active engine does not support
+        presigning (api-service returns a 501 with explanation).
+        """
+        await self._ensure_initialized()
+        if not self._client or not self._instance:
+            raise EnvironmentError("presign_url: environment not initialized")
+        return await self._client.presign_url(
+            self._instance.id,
+            port=port,
+            expiration_time_in_minutes=expiration_time_in_minutes,
+        )
+
     async def release(self):
         """Release environment resources."""
         logger.info(
@@ -350,9 +402,12 @@ class Environment:
         """
         List all available tools in the environment using MCP client.
 
+        Supported engines: all.
+
         Returns:
             List of tool descriptors in MCP format
         """
+        self._require_data_plane("list_tools")
         await self._ensure_initialized()
 
         try:
@@ -384,10 +439,20 @@ class Environment:
                 f"Failed to list tools for environment '{self.env_name}': {str(e)}"
             )
 
-    async def list_openai_tools(self) -> List[OpenAITool]:
+    async def list_openai_tools(self) -> "List[OpenAITool]":
+        try:
+            from agents.tool import FunctionTool
+            from agents.tool import Tool as OpenAITool  # noqa: F401
+            from agents.tool_context import ToolContext  # noqa: F401
+        except ImportError as e:
+            raise ImportError(
+                "list_openai_tools() requires the 'agents' extra. "
+                "Install it with: pip install 'aenvironment[agents]'"
+            ) from e
+
         tools = await self.list_tools()
 
-        openai_tools: List[OpenAITool] = []
+        openai_tools: List[Any] = []
         for tool in tools:
             name = str(tool.get("name", ""))
             description = str(tool.get("description", ""))
@@ -396,7 +461,7 @@ class Environment:
                 input_schema = {"type": "object", "properties": {}}
 
             async def _on_invoke_tool(
-                ctx: ToolContext[Any], input: str, *, _name: str = name
+                ctx: Any, input: str, *, _name: str = name
             ) -> Any:
                 try:
                     args: Dict[str, Any] = json.loads(input) if input else {}
@@ -436,9 +501,12 @@ class Environment:
         """
         List all registered functions in the environment including reward and health.
 
+        Supported engines: all.
+
         Returns:
             Dictionary containing categorized function lists (functions, reward, health)
         """
+        self._require_data_plane("list_functions")
         await self._ensure_initialized()
 
         try:
@@ -495,6 +563,8 @@ class Environment:
         """
         Execute the reward function via the /task/reward endpoint.
 
+        Supported engines: all.
+
         Args:
             arguments: Arguments to pass to the reward function
             timeout: Override default timeout
@@ -505,6 +575,8 @@ class Environment:
         Raises:
             EnvironmentError: If reward execution fails
         """
+        self._require_data_plane("call_reward")
+        await self._ensure_initialized()
         return await self._call_function(
             self.aenv_reward_url, arguments=arguments, timeout=timeout
         )
@@ -631,11 +703,14 @@ class Environment:
         """
         Execute the check-health function via the /health endpoint.
 
+        Supported engines: all.
+
         Returns:
 
         Raises:
             EnvironmentError: If health check execution fails
         """
+        self._require_data_plane("check_health")
         await self._ensure_initialized()
 
         logger.info(
@@ -675,6 +750,8 @@ class Environment:
         """
         Execute a tool with given arguments using MCP client.
 
+        Supported engines: all.
+
         Retry strategy (idempotent-safe):
         - Session establishment failures are retried (tool was never sent to server)
         - Once call_tool_mcp() is invoked, the tool MAY have executed on the server.
@@ -693,6 +770,7 @@ class Environment:
             ToolError: If tool execution fails after invocation
             EnvironmentError: If session cannot be established
         """
+        self._require_data_plane("call_tool")
         await self._ensure_initialized()
 
         # Circuit breaker: fail fast if too many consecutive tool errors
@@ -817,9 +895,12 @@ class Environment:
 
     async def _wait_for_healthy(self, timeout: float = 300.0) -> None:
         """Wait for environment instance to be healthy."""
-        if self.skip_for_healthy:
+        if not self.enable_data_plane or self.skip_for_healthy:
             logger.info(
-                f"{self._log_prefix()} Skipping health check for environment {self.env_name}"
+                f"{self._log_prefix()} Skipping /health probe for environment "
+                f"{self.env_name} "
+                f"(enable_data_plane={self.enable_data_plane}, "
+                f"skip_for_healthy={self.skip_for_healthy})"
             )
             return
 
@@ -891,7 +972,12 @@ class Environment:
             )
 
     async def wait_for_ready(self, timeout: float = 300.0) -> None:
-        """Wait for environment instance to be ready."""
+        """Wait for environment instance to be ready.
+
+        Readiness is defined by the control-plane status reaching ``RUNNING``
+        plus the data-plane MCP health probe returning healthy. Engine
+        differences are fully resolved inside api-service.
+        """
         if not self._client or not self._instance:
             await self.initialize()
 
@@ -904,6 +990,7 @@ class Environment:
             )
 
             self._instance = instance
+
             await self._wait_for_healthy()
         except Exception as e:
             logger.error(
@@ -945,6 +1032,7 @@ class Environment:
                 ttl=self.ttl,
                 owner=self.owner,
                 labels=self.labels,
+                mount_points=self.mount_points,
             )
             logger.info(
                 f"{self._log_prefix()} Environment instance created with ID: {self._instance.id}"
@@ -971,6 +1059,8 @@ class Environment:
         """
         Execute a registered function via HTTP endpoint.
 
+        Supported engines: all.
+
         Args:
             function_name: name of the registered function
             arguments: Arguments to pass to the function
@@ -982,6 +1072,8 @@ class Environment:
         Raises:
             EnvironmentError: If function execution fails
         """
+        self._require_data_plane("call_function")
+        await self._ensure_initialized()
         function_url = f"{self.aenv_functions_base_url}/{function_name}"
         return await self._call_function(
             function_url, arguments=arguments, timeout=timeout

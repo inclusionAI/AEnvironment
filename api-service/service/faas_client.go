@@ -426,3 +426,9 @@ func convertStatus(s faas_model.InstanceStatus) string {
 		return models.EnvInstanceStatusRunning.String()
 	}
 }
+
+// PresignURL is unsupported on the faas engine.
+// Supported engines: arca (returns error on faas).
+func (c *FaaSClient) PresignURL(id string, port int, expirationMinutes float64) (string, error) {
+	return "", fmt.Errorf("not supported on this engine (faas): presign URL")
+}

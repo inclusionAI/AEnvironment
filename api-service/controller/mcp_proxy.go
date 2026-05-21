@@ -48,16 +48,28 @@ const (
 	// HTTP methods
 	MethodGET  = "GET"
 	MethodPOST = "POST"
+
+	// Schedule types (kept in sync with main.go --schedule-type).
+	scheduleTypeArca = "arca"
 )
+
+// MCPGatewayConfig is injected at api-service startup so the gateway never
+// has to query per-request engine metadata.
+type MCPGatewayConfig struct {
+	ScheduleType string // "k8s" | "standard" | "faas" | "arca"
+	ArcaBaseURL  string
+	ArcaAPIKey   string
+}
 
 // MCPGateway MCP gateway struct
 type MCPGateway struct {
 	router    *gin.RouterGroup
 	transport *http.Transport
+	config    MCPGatewayConfig
 }
 
 // NewMCPGateway creates a new MCP gateway instance
-func NewMCPGateway(router *gin.RouterGroup) *MCPGateway {
+func NewMCPGateway(router *gin.RouterGroup, cfg MCPGatewayConfig) *MCPGateway {
 	gateway := &MCPGateway{
 		router: router,
 		transport: &http.Transport{
@@ -65,6 +77,7 @@ func NewMCPGateway(router *gin.RouterGroup) *MCPGateway {
 			MaxIdleConnsPerHost: 10,
 			IdleConnTimeout:     90 * time.Second,
 		},
+		config: cfg,
 	}
 
 	gateway.setupRoutes()
@@ -77,8 +90,24 @@ func (g *MCPGateway) setupRoutes() {
 }
 
 func (g *MCPGateway) innerRouter(c *gin.Context) {
-	proxyURL, _ := g.getMCPSeverURL(c)
 	path := c.Param("path")
+	if g.config.ScheduleType == scheduleTypeArca {
+		// Arca sandboxes do not embed the aenv MCP server, so the data
+		// plane (MCP / /health / SSE) is not supported. The SDK is
+		// expected to opt out via Environment(enable_data_plane=False)
+		// and use presign_url() instead. We still respond explicitly so
+		// stray callers get a clear error rather than a hang.
+		c.JSON(http.StatusNotImplemented, gin.H{
+			"success": false,
+			"code":    http.StatusNotImplemented,
+			"message": "data plane (MCP / /health) is not supported on arca engine; " +
+				"use presign_url() to expose an in-sandbox port",
+			"data": nil,
+		})
+		return
+	}
+
+	proxyURL, _ := g.getMCPSeverURL(c)
 	if proxyURL != "" {
 		switch path {
 		case PathSSE:

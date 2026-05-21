@@ -62,6 +62,10 @@ func (m *MockEnvInstanceService) Warmup(req *backend.Env) error {
 	return nil
 }
 
+func (m *MockEnvInstanceService) PresignURL(id string, port int, expirationMinutes float64) (string, error) {
+	return "", nil
+}
+
 // TestPerformCleanupNoInstances tests cleanup when there are no env instances
 func TestPerformCleanupNoInstances(t *testing.T) {
 	// Create mock service that returns empty list
