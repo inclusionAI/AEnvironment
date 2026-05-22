@@ -35,7 +35,7 @@ from aenv.core.logging import setup_logging
 from aenv.core.models import EnvInstance, EnvStatus
 from aenv.core.tool import Tool, get_registry, register_tool
 
-__version__ = "0.1.7"
+__version__ = "0.1.7rc1"
 __all__ = [
     "Tool",
     "register_tool",
