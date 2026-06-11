@@ -159,7 +159,7 @@ class Environment:
         """
         self.env_name = env_name
         self.datasource = datasource
-        self.environment_variables = environment_variables or {}
+        self.environment_variables = environment_variables
         self.arguments = arguments or []
         self.dummy_instance_ip = os.getenv("DUMMY_INSTANCE_IP")
         self.skip_for_healthy = skip_for_healthy
@@ -1017,12 +1017,17 @@ class Environment:
             # Parse env_name to extract name and version
             env_name_parsed, env_version_parsed = split_env_name_version(self.env_name)
 
-            # Inject system environment variables envNAME and envversion
-            env_vars = (
-                dict(self.environment_variables) if self.environment_variables else {}
-            )
-            env_vars["envNAME"] = env_name_parsed
-            env_vars["envversion"] = env_version_parsed
+            # Inject system environment variables envNAME and envversion only
+            # when the caller provided env vars. When environment_variables is
+            # None the field must stay omitted end-to-end (api-service coerces
+            # to nil, arca keeps the env-config startup vars); injecting here
+            # would turn "no override" into a non-empty map that wipes them.
+            if self.environment_variables is None:
+                env_vars = None
+            else:
+                env_vars = dict(self.environment_variables)
+                env_vars["envNAME"] = env_name_parsed
+                env_vars["envversion"] = env_version_parsed
 
             self._instance = await self._client.create_env_instance(
                 name=self.env_name,
