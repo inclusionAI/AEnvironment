@@ -13,12 +13,10 @@ controller:
   enabled: true
   replicaCount: 1
   name: controller
-  metadata:
-    namespace: aenv
   sandboxNamespace: aenv-sandbox
   namespace:
     create: true
-  image: aenvironment/controller:0.1.0
+  image: aenvironment/controller:0.1.5
   imagePullPolicy: IfNotPresent
   service:
     type: LoadBalancer
@@ -39,8 +37,6 @@ redis:
   # For persistence with ReadWriteOnce access mode, replicaCount must be 1.
   replicaCount: 1
   name: redis
-  metadata:
-    namespace: aenv
   namespace:
     create: false
   image: redis:7.2.4
@@ -68,11 +64,9 @@ envhub:
   enabled: true
   replicaCount: 1
   name: envhub
-  metadata:
-    namespace: aenv
   namespace:
     create: false
-  image: aenvironment/envhub:0.1.0
+  image: aenvironment/envhub:0.1.5
   imagePullPolicy: IfNotPresent
   service:
     type: LoadBalancer
@@ -93,11 +87,9 @@ api-service:
   enabled: true
   replicaCount: 1
   name: api-service
-  metadata:
-    namespace: aenv
   namespace:
     create: false
-  image: aenvironment/api-service:0.1.0
+  image: aenvironment/api-service:0.1.5
   imagePullPolicy: IfNotPresent
   service:
     type: LoadBalancer

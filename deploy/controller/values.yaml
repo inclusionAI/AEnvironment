@@ -6,8 +6,6 @@ replicaCount: 1
 
 name: controller
 
-metadata:
-  namespace: aenv
 sandboxNamespace: aenv-sandbox
 
 # Namespace configuration

@@ -3,7 +3,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ include "controller.fullname" . }}-pod-templates
-  namespace: {{ .Values.metadata.namespace }}
+  namespace: {{ .Values.global.namespace }}
   labels:
     {{- include "controller.labels" . | nindent 4 }}
 data:
