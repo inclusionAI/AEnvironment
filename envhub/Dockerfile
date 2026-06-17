@@ -1,3 +1,13 @@
+FROM oven/bun:1.3.9-alpine AS web-builder
+
+WORKDIR /workspace/envhub/web
+
+COPY envhub/web/package.json envhub/web/bun.lock ./
+RUN bun install --frozen-lockfile
+
+COPY envhub/web ./
+RUN bun run build
+
 # Build stage
 FROM golang:1.21-alpine AS builder
 
@@ -34,6 +44,7 @@ WORKDIR /workspace
 COPY envhub ./envhub
 COPY controller ./controller
 COPY api-service ./api-service
+COPY --from=web-builder /workspace/envhub/web/dist ./envhub/web/dist
 
 # Build
 WORKDIR /workspace/envhub

@@ -124,6 +124,7 @@ func main() {
 		// Register routes
 		envController.RegisterEnvRoutes(r)
 		dataController.RegisterDataRoutes(r)
+		registerConsoleRoutes(r)
 		// TODO: Re-enable token routes when TokenStorage is migrated to Redis
 		// tokenController.RegisterTokenRoutes(r)
 

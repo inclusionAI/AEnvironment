@@ -19,6 +19,7 @@ package controller
 import (
 	"fmt"
 	"net/http"
+	"reflect"
 	"strings"
 	"time"
 
@@ -56,6 +57,7 @@ func (ctrl *EnvController) RegisterEnvRoutes(r *gin.Engine) {
 		envGroup.GET("/:name/:version/exists", ctrl.EnvExists)
 
 		// Create environment
+		envGroup.POST("", ctrl.CreateEnv)
 		envGroup.POST("/", ctrl.CreateEnv)
 
 		// Update environment
@@ -71,6 +73,7 @@ func (ctrl *EnvController) RegisterEnvRoutes(r *gin.Engine) {
 		envGroup.GET("/:name/:version", ctrl.GetEnvByVersion)
 
 		// Get environment list
+		envGroup.GET("", ctrl.ListEnvs)
 		envGroup.GET("/", ctrl.ListEnvs)
 
 		// Generate environment storage URL signature
@@ -112,6 +115,7 @@ func (ctrl *EnvController) EnvExists(c *gin.Context) {
 func (ctrl *EnvController) CreateEnv(c *gin.Context) {
 	var req struct {
 		Name         string                 `json:"name"`
+		Description  string                 `json:"description"`
 		Version      string                 `json:"version"`
 		Tags         []string               `json:"tags"`
 		BuildConfig  map[string]interface{} `json:"buildConfig"`
@@ -139,7 +143,7 @@ func (ctrl *EnvController) CreateEnv(c *gin.Context) {
 	status := models.EnvStatusByName(req.Status)
 
 	// Create environment object
-	env := models.NewEnv(key, req.Name, "", req.Version, req.CodeUrl)
+	env := models.NewEnv(key, req.Name, req.Description, req.Version, req.CodeUrl)
 	env.Tags = req.Tags
 	env.BuildConfig = req.BuildConfig
 	env.TestConfig = req.TestConfig
@@ -182,6 +186,8 @@ func (ctrl *EnvController) UpdateEnv(c *gin.Context) {
 		models.JSONErrorWithMessage(c, http.StatusNotFound, "Environment not found")
 		return
 	}
+	previousCodeURL := env.CodeURL
+	previousBuildConfig := env.BuildConfig
 
 	// Check environment status, if released then update is not allowed
 	if env.Status == models.EnvStatusReleased {
@@ -191,6 +197,7 @@ func (ctrl *EnvController) UpdateEnv(c *gin.Context) {
 
 	var req struct {
 		Name         string                 `json:"name"`
+		Description  *string                `json:"description"`
 		Version      string                 `json:"version"`
 		Tags         []string               `json:"tags"`
 		BuildConfig  map[string]interface{} `json:"buildConfig"`
@@ -212,6 +219,9 @@ func (ctrl *EnvController) UpdateEnv(c *gin.Context) {
 	if req.Artifacts != nil {
 		env.Artifacts = req.Artifacts
 	}
+	if req.Description != nil {
+		env.Description = *req.Description
+	}
 	if req.BuildConfig != nil {
 		env.BuildConfig = req.BuildConfig
 	}
@@ -231,8 +241,8 @@ func (ctrl *EnvController) UpdateEnv(c *gin.Context) {
 
 	// Update labels
 	labels := map[string]string{
-		"name":    req.Name,
-		"version": req.Version,
+		"name":    name,
+		"version": version,
 	}
 
 	// Update to database
@@ -241,8 +251,9 @@ func (ctrl *EnvController) UpdateEnv(c *gin.Context) {
 		return
 	}
 
-	// Code changes trigger image build
-	if ctrl.ciTrigger != nil {
+	codeChanged := req.CodeUrl != "" && req.CodeUrl != previousCodeURL
+	buildChanged := req.BuildConfig != nil && !reflect.DeepEqual(req.BuildConfig, previousBuildConfig)
+	if ctrl.ciTrigger != nil && (codeChanged || buildChanged) {
 		go ctrl.ciTrigger.Trigger(env)
 	}
 
@@ -323,120 +334,4 @@ func (ctrl *EnvController) GetEnvByVersion(c *gin.Context) {
 	}
 
 	models.JSONSuccess(c, env)
-}
-
-// ListEnvs gets environment list
-// GET /env/
-func (ctrl *EnvController) ListEnvs(c *gin.Context) {
-	// Get all environment keys
-	keys, err := ctrl.storage.List(c.Request.Context(), nil)
-	if err != nil {
-		models.JSONErrorWithMessage(c, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	var envs []interface{}
-	for _, key := range keys {
-		env, _, err := ctrl.storage.Get(c.Request.Context(), key)
-		if err != nil {
-			// Skip environments that failed to get
-			continue
-		}
-		envs = append(envs, env)
-	}
-
-	models.JSONSuccess(c, envs)
-}
-
-func (ctrl *EnvController) PresignEnv(c *gin.Context) {
-	if ctrl.ossStorage == nil {
-		models.JSONErrorWithMessage(c, http.StatusServiceUnavailable, "OSS storage is not configured")
-		return
-	}
-	name := c.Param("name")
-	version := c.Param("version")
-	style := c.Query("style")
-
-	key := fmt.Sprintf("%s-%s", name, version)
-	url, err := ctrl.ossStorage.PresignEnv(key, style)
-	if err != nil {
-		models.JSONErrorWithMessage(c, http.StatusInternalServerError, err.Error())
-		return
-	}
-	models.JSONSuccess(c, url)
-}
-
-func (ctrl *EnvController) AciCallback(c *gin.Context) {
-	name := c.Param("name")
-	version := c.Param("version")
-
-	type Call struct {
-		Image string `json:"image"`
-	}
-	var call Call
-	if err := c.ShouldBindJSON(&call); err != nil {
-		models.JSONErrorWithMessage(c, http.StatusBadRequest, "Invalid request format: "+err.Error())
-	}
-	imageUrl := call.Image
-	if len(call.Image) == 0 {
-		models.JSONErrorWithMessage(c, http.StatusBadRequest, "Missing environment image message")
-		return
-	}
-
-	key := fmt.Sprintf("%s-%s", name, version)
-	// Check if environment exists
-	env, resourceVersion, err := ctrl.storage.Get(c.Request.Context(), key)
-	if err != nil {
-		models.JSONErrorWithMessage(c, http.StatusNotFound, "Environment not found")
-		return
-	}
-	// Check environment status, if released then update is not allowed
-	if env.Status == models.EnvStatusReleased {
-		models.JSONErrorWithMessage(c, http.StatusForbidden, "Cannot update released environment")
-		return
-	}
-
-	// If this update includes image field, build is complete and start reporting image, otherwise trigger pipeline
-	haveChanged := false
-	artifacts := env.Artifacts
-	if artifacts == nil {
-		artifacts = make([]models.Artifact, 0)
-	}
-	exist := false
-	for idx := range artifacts {
-		if artifacts[idx].Type == "image" {
-			exist = true
-			if artifacts[idx].Content != imageUrl {
-				artifacts[idx].Content = imageUrl
-				haveChanged = true
-			}
-		}
-	}
-	if !exist {
-		artifacts = append(artifacts, models.Artifact{
-			Id:      "",
-			Type:    "image",
-			Content: imageUrl,
-		})
-		haveChanged = true
-	}
-
-	// After update, try to trigger build pipeline
-	if !haveChanged {
-		models.JSONSuccess(c, nil)
-		return
-	}
-	env.Artifacts = artifacts
-	env.UpdatedAt = time.Now()
-
-	// Update labels
-	labels := map[string]string{
-		"name":    name,
-		"version": version,
-	}
-	// Update to database
-	if err := ctrl.storage.Update(c.Request.Context(), key, env, resourceVersion, labels); err != nil {
-		models.JSONErrorWithMessage(c, http.StatusInternalServerError, err.Error())
-		return
-	}
 }
