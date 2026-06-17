@@ -1,0 +1,27 @@
+{
+  "name": "@aenv/envhub-console",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit && vite build",
+    "test": "bun test src",
+    "lint": "biome check .",
+    "dev": "vite --host 0.0.0.0"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^5.1.1",
+    "ky": "^1.14.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "vite": "^7.2.7",
+    "zod": "^4.2.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.3.8",
+    "@playwright/test": "^1.60.0",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "bun-types": "^1.3.5",
+    "typescript": "^5.9.3"
+  }
+}
