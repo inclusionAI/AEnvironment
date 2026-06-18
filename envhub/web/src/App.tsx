@@ -16,33 +16,30 @@ export function App() {
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
 
-  const refreshList = useCallback(
-    async (selectFirst: boolean) => {
-      setLoading(true)
-      setError("")
-      try {
-        const nextEnvs = await listEnvs()
-        setEnvs(nextEnvs)
-        if (selectFirst && selected === null && nextEnvs.length > 0) {
-          const firstEnv = nextEnvs[0]
-          if (firstEnv !== undefined) {
-            setSelected(firstEnv)
-            setDraft(draftFromEnv(firstEnv))
-            setMode("edit")
-          }
+  const refreshList = useCallback(async (selectFirst: boolean) => {
+    setLoading(true)
+    setError("")
+    try {
+      const nextEnvs = await listEnvs()
+      setEnvs(nextEnvs)
+      if (selectFirst && nextEnvs.length > 0) {
+        const firstEnv = nextEnvs[0]
+        if (firstEnv !== undefined) {
+          setSelected(firstEnv)
+          setDraft(draftFromEnv(firstEnv))
+          setMode("edit")
         }
-      } catch (caught) {
-        if (caught instanceof Error) {
-          setError(caught.message)
-        } else {
-          throw caught
-        }
-      } finally {
-        setLoading(false)
       }
-    },
-    [selected],
-  )
+    } catch (caught) {
+      if (caught instanceof Error) {
+        setError(caught.message)
+      } else {
+        throw caught
+      }
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
     void refreshList(true)

@@ -1,10 +1,34 @@
 import { expect, test } from "@playwright/test"
 
 test("manages EnvHub metadata through the hosted console", async ({ page }) => {
+  const seedName = `console-e2e-seed-${Date.now()}`
   const envName = `console-e2e-${Date.now()}`
+
+  const seedResponse = await page.request.post("http://localhost:18083/env", {
+    data: {
+      name: seedName,
+      description: "Existing metadata",
+      version: "0.0.1",
+      tags: ["seed"],
+      status: "Ready",
+      codeUrl: `oss://${seedName}`,
+      artifacts: [],
+      buildConfig: { dockerfile: "./Dockerfile" },
+      testConfig: { script: "" },
+      deployConfig: { cpu: "1", memory: "2Gi", os: "linux", ephemeralStorage: "5Gi" },
+    },
+  })
+  expect(seedResponse.ok()).toBe(true)
 
   await page.goto("http://localhost:18083/console")
   await expect(page.getByRole("heading", { name: "Metadata Console" })).toBeVisible()
+  await expect(page.getByRole("button", { name: new RegExp(seedName, "i") })).toBeVisible()
+
+  await page.getByRole("button", { name: "New" }).click()
+  await page.waitForTimeout(500)
+  await expect(page.getByText("Create Meta", { exact: true })).toBeVisible()
+  await expect(page.getByLabel("Name")).toBeEnabled()
+  await expect(page.getByLabel("Version")).toHaveValue("1.0.0")
 
   await page.getByLabel("Name").fill(envName)
   await page.getByLabel("Version").fill("1.0.0")
