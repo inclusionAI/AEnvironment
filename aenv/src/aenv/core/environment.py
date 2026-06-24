@@ -641,14 +641,23 @@ class Environment:
 
                 response.raise_for_status()
                 result = response.json()
+                if not isinstance(result, dict):
+                    raise EnvironmentError("Invalid function response")
 
-                if not result.get("success", False):
-                    raise EnvironmentError(result.get("error", "Unknown error"))
+                if "success" in result:
+                    if not result.get("success", False):
+                        raise EnvironmentError(
+                            result.get("error")
+                            or result.get("message")
+                            or "Unknown error"
+                        )
+
+                    return result.get("data", {})
 
                 logger.info(
                     f"{self._log_prefix()} Function '{function_url}' executed successfully with result={result}"
                 )
-                return result.get("data", {})
+                return result
 
         except httpx.HTTPStatusError as e:
             # Extract error details from response body
@@ -895,6 +904,12 @@ class Environment:
 
     async def _wait_for_healthy(self, timeout: float = 300.0) -> None:
         """Wait for environment instance to be healthy."""
+        if self._instance and self._instance.ip:
+            self.proxy_headers = {
+                "AEnvCore-MCPProxy-URL": make_mcp_url(self._instance.ip, 8081),
+                "AEnvCore-EnvInstance-ID": self._instance.id,
+            }
+
         if not self.enable_data_plane or self.skip_for_healthy:
             logger.info(
                 f"{self._log_prefix()} Skipping /health probe for environment "
@@ -908,11 +923,6 @@ class Environment:
             f"{self._log_prefix()} Waiting for environment {self.env_name} to be healthy..."
         )
         try:
-            self.proxy_headers = {
-                "AEnvCore-MCPProxy-URL": make_mcp_url(self._instance.ip, 8081),
-                "AEnvCore-EnvInstance-ID": self._instance.id,
-            }
-
             check_interval = 2.0
             start_time = asyncio.get_event_loop().time()
             times = 0

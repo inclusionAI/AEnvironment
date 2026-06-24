@@ -179,6 +179,67 @@ class TestEnvironment:
         assert environment.scheduler_url == "http://test.com"
 
 
+class TestHealthProxyCompatibility:
+    @pytest.mark.asyncio
+    async def test_call_function_accepts_raw_health_response(self):
+        response = MagicMock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {
+            "status": "success",
+            "details": {"tool_count": 2},
+        }
+
+        client = AsyncMock()
+        client.request.return_value = response
+
+        env = Environment("test-env")
+        with patch("aenv.core.environment.httpx.AsyncClient") as mock_client:
+            mock_client.return_value.__aenter__.return_value = client
+
+            result = await env._call_function(
+                "http://test.example/health",
+                ensure_initialized=False,
+                quiet=True,
+            )
+
+        assert result == {"status": "success", "details": {"tool_count": 2}}
+
+    @pytest.mark.asyncio
+    async def test_call_function_keeps_wrapped_data_shape(self):
+        response = MagicMock()
+        response.raise_for_status.return_value = None
+        response.json.return_value = {
+            "success": True,
+            "data": ["existing", "shape"],
+        }
+
+        client = AsyncMock()
+        client.request.return_value = response
+
+        env = Environment("test-env")
+        with patch("aenv.core.environment.httpx.AsyncClient") as mock_client:
+            mock_client.return_value.__aenter__.return_value = client
+
+            result = await env._call_function(
+                "http://test.example/functions/demo",
+                ensure_initialized=False,
+            )
+
+        assert result == ["existing", "shape"]
+
+    @pytest.mark.asyncio
+    async def test_skip_health_sets_proxy_headers(self):
+        env = Environment("test-env", skip_for_healthy=True)
+        env._instance = MagicMock(id="fake-id", ip="6.1.2.3")
+
+        await env._wait_for_healthy()
+
+        assert env.proxy_headers == {
+            "AEnvCore-MCPProxy-URL": "http://6.1.2.3:8081",
+            "AEnvCore-EnvInstance-ID": "fake-id",
+        }
+
+
 class TestMCPSessionReuse:
     """Tests for MCP session reuse behavior.
 
