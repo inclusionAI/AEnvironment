@@ -22,6 +22,7 @@ import click
 
 from cli.client.aenv_hub_client import AEnvHubClient, AEnvHubError, EnvStatus
 from cli.extends.storage.storage_manager import StorageContext, load_storage
+from cli.utils.parallel import parallel_execute
 
 
 @click.command()
@@ -59,16 +60,33 @@ def push(work_dir, dry_run, force, version):
         err=False,
     )
     hub_client = AEnvHubClient.load_client()
-    exist = hub_client.check_env(name=env_name, version=version)
+
+    # Execute check_env and state_environment in parallel
+    tasks = [
+        ("check_env", lambda: hub_client.check_env(name=env_name, version=version)),
+        ("state_env", lambda: hub_client.state_environment(env_name, version)),
+    ]
+    results = parallel_execute(tasks)
+
+    # Process results
+    check_result = results.get("check_env")
+    state_result = results.get("state_env")
+
+    if check_result and not check_result.success:
+        if check_result.error:
+            raise check_result.error
+
+    exist = check_result.result if check_result and check_result.success else False
+
     if exist:
         click.echo(
             f"aenv:{env_name}:{version} already exists in remote aenv_hub", err=False
         )
-        state = hub_client.state_environment(env_name, version)
-        env_state = EnvStatus.parse_state(state)
-        if env_state.running() and not force:
-            click.echo("❌ Environment is being prepared, use --force to overwrite")
-            raise click.Abort()
+        if state_result and state_result.success:
+            env_state = EnvStatus.parse_state(state_result.result)
+            if env_state.running() and not force:
+                click.echo("❌ Environment is being prepared, use --force to overwrite")
+                raise click.Abort()
 
     storage = load_storage()
     infos = {"name": env_name, "version": version}
