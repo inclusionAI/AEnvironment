@@ -94,15 +94,7 @@ func (ctrl *EnvInstanceController) CreateEnvInstance(c *gin.Context) {
 		backendEnv.DeployConfig = make(map[string]interface{})
 	}
 	if req.Datasource != "" {
-		// Prefer imagePrefix from DeployConfig, default to empty string
-		imagePrefix := "docker.io/library/aenv"
-		if value, ok := backendEnv.DeployConfig["imagePrefix"]; ok {
-			if str, ok2 := value.(string); ok2 {
-				imagePrefix = str
-			}
-		}
-		secondImageName := imagePrefix + ":" + req.Datasource
-		backendEnv.DeployConfig["secondImageName"] = secondImageName
+		backendEnv.DeployConfig["secondImageName"] = datasourceImageName(backendEnv.DeployConfig, req.Datasource)
 		backendEnv.DeployConfig["dataSource"] = req.Datasource
 	}
 	if req.EnvironmentVariables != nil {

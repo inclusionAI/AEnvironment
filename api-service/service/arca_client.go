@@ -36,8 +36,8 @@ import (
 // (`/arca/openapi/v1/sandbox/*`).
 //
 // Unlike ScheduleClient / EnvInstanceClient / FaaSClient, ArcaClient does not
-// assemble cpu/memory/disk/image — those are fully determined by the Arca
-// template identified by DeployConfig["arcaTemplateId"]. List is not
+// assemble cpu/memory/disk/image. It only forwards a datasource image that the
+// controller already assembled in DeployConfig["secondImageName"]. List is not
 // supported because Arca OpenAPI has no list endpoint in this iteration.
 //
 // Supported engines: arca.
@@ -66,6 +66,7 @@ const (
 	deployKeyMountPoints    = "mountPoints"
 	deployKeyEnvVars        = "environment_variables"
 	deployKeyOwner          = "owner"
+	deployKeySecondImage    = "secondImageName"
 )
 
 // Engine label key/value written onto returned EnvInstance.Labels.
@@ -92,11 +93,12 @@ func NewArcaClient(baseURL, apiKey string) *ArcaClient {
 // arcaCreateRequest is the outbound body for
 // POST /arca/openapi/v1/sandbox/instances.
 //
-// Supported engines: arca. Fields are chosen to match spec §3.2; notably
-// `resource` and `image` are intentionally omitted because the Arca template
-// fully determines them.
+// Supported engines: arca. Fields are chosen to match spec §3.2. `resource`
+// stays omitted because the Arca template determines it; `image` is optional
+// and only forwarded when datasource handling produced a second image.
 type arcaCreateRequest struct {
 	TemplateID   string            `json:"template_id"`
+	Image        string            `json:"image,omitempty"`
 	TTLInMinutes int               `json:"ttl_in_minutes,omitempty"`
 	MountPoints  []interface{}     `json:"mount_points,omitempty"`
 	Envs         map[string]string `json:"envs,omitempty"`
@@ -315,6 +317,9 @@ func (c *ArcaClient) CreateEnvInstance(req *backend.Env) (*models.EnvInstance, e
 		TTLInMinutes: ttlMin,
 		MountPoints:  coerceMountPoints(req.DeployConfig[deployKeyMountPoints]),
 		Envs:         coerceEnvs(req.DeployConfig[deployKeyEnvVars]),
+	}
+	if image, ok := req.DeployConfig[deployKeySecondImage].(string); ok && image != "" {
+		body.Image = image
 	}
 
 	owner, _ := req.DeployConfig[deployKeyOwner].(string)

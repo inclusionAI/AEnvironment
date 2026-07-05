@@ -212,6 +212,30 @@ func TestArcaCreate_HappyPath(t *testing.T) {
 	}
 }
 
+func TestArcaCreate_IncludesImageWhenDatasourceImageIsSet(t *testing.T) {
+	m := newArcaMock(t, func(r *http.Request) (int, string) {
+		return http.StatusOK, okResponse(`{"sandbox_id":"sb-image"}`)
+	})
+	c := m.client()
+
+	env := sampleEnv(map[string]interface{}{
+		"arcaTemplateId":  "tpl1",
+		"secondImageName": "registry.example.com/aenv:datasource-v1",
+	})
+
+	if _, err := c.CreateEnvInstance(env); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	body := decodeBody(t, m.lastRequest(t).Body)
+	if body["image"] != "registry.example.com/aenv:datasource-v1" {
+		t.Errorf("image = %v, want registry.example.com/aenv:datasource-v1", body["image"])
+	}
+	if _, ok := body["resource"]; ok {
+		t.Errorf("body unexpectedly contains resource: %v", body["resource"])
+	}
+}
+
 // ---------------------------------------------------------------------------
 // FC-API-02: missing arcaTemplateId
 // ---------------------------------------------------------------------------
@@ -364,10 +388,10 @@ func TestArcaCreate_MetadataInjected(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// FC-API-07/08: no resource, no image in body (spec forbids)
+// FC-API-07/08: no resource and no image without datasource image
 // ---------------------------------------------------------------------------
 
-func TestArcaCreate_NoResourceOrImageInBody(t *testing.T) {
+func TestArcaCreate_OmitsResourceAndImageWithoutDatasourceImage(t *testing.T) {
 	m := newArcaMock(t, func(r *http.Request) (int, string) {
 		return http.StatusOK, okResponse(`{"sandbox_id":"sb-nores"}`)
 	})
@@ -379,7 +403,7 @@ func TestArcaCreate_NoResourceOrImageInBody(t *testing.T) {
 		"memory":         "4",
 		"disk":           "25",
 	})
-	env.Artifacts = []backend.Artifact{{Type: "docker-image", Content: "irrelevant"}}
+	env.Artifacts = []backend.Artifact{{Type: "image", Content: "registry.example.com/base:latest"}}
 	if _, err := c.CreateEnvInstance(env); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
