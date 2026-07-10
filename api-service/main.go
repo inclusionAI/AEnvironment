@@ -50,13 +50,11 @@ var (
 	tokenCacheTTLMinutes int
 	cleanupInterval      string
 	// Supported engines: arca.
-	arcaBaseURL string
-	// Supported engines: arca.
 	arcaAPIKey string
 )
 
 func init() {
-	pflag.StringVar(&scheduleAddr, "schedule-addr", "", "Meta service address (host:port)")
+	pflag.StringVar(&scheduleAddr, "schedule-addr", "", "sandbox scheduler address; for arca, Arca OpenAPI base URL")
 	pflag.StringVar(&scheduleType, "schedule-type", "k8s", "sandbox service schedule type: 'k8s', 'standard', 'faas', or 'arca'")
 	pflag.StringVar(&backendAddr, "backend-addr", "", "backend service address (host:port)")
 
@@ -70,7 +68,6 @@ func init() {
 	pflag.StringVar(&cleanupInterval, "cleanup-interval", "5m", "Cleanup service interval (e.g., 5m, 1h)")
 
 	// Arca sandbox engine flags. Supported engines: arca.
-	pflag.StringVar(&arcaBaseURL, "arca-base-url", "", "Arca sandbox OpenAPI base URL. Supported engines: arca")
 	pflag.StringVar(&arcaAPIKey, "arca-api-key", "", "Arca sandbox OpenAPI key; falls back to ARCA_API_KEY env. Supported engines: arca")
 }
 
@@ -105,6 +102,7 @@ func main() {
 
 	var scheduleClient service.EnvInstanceService
 	var envServiceController *controller.EnvServiceController
+	resolvedArcaAPIKey := arcaAPIKey
 	switch scheduleType {
 	case "k8s":
 		scheduleClient = service.NewScheduleClient(scheduleAddr)
@@ -119,13 +117,14 @@ func main() {
 		if key == "" {
 			key = os.Getenv("ARCA_API_KEY")
 		}
-		if arcaBaseURL == "" {
-			log.Fatalf("--arca-base-url is required when --schedule-type=arca")
+		if scheduleAddr == "" {
+			log.Fatalf("--schedule-addr is required when --schedule-type=arca")
 		}
 		if key == "" {
 			log.Fatalf("arca API key missing: set --arca-api-key or ARCA_API_KEY")
 		}
-		scheduleClient = service.NewArcaClient(arcaBaseURL, key)
+		resolvedArcaAPIKey = key
+		scheduleClient = service.NewArcaClient(scheduleAddr, key)
 	default:
 		log.Fatalf("unsupported schedule type: %v", scheduleType)
 	}
@@ -169,8 +168,8 @@ func main() {
 	mcpGroup := mcpRouter.Group("/")
 	controller.NewMCPGateway(mcpGroup, controller.MCPGatewayConfig{
 		ScheduleType: scheduleType,
-		ArcaBaseURL:  arcaBaseURL,
-		ArcaAPIKey:   arcaAPIKey,
+		ScheduleAddr: scheduleAddr,
+		ArcaAPIKey:   resolvedArcaAPIKey,
 	})
 
 	// Start two services

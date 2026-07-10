@@ -60,6 +60,8 @@ type CreateEnvInstanceRequest struct {
 	// MountPoints forwards Arca-style mount entries to the backend.
 	// Supported engines: arca (ignored on k8s/standard/faas).
 	MountPoints []map[string]interface{} `json:"mount_points,omitempty"`
+	// Supported engines: arca (ignored on k8s/standard/faas).
+	InitCommand string `json:"init_command,omitempty"`
 }
 
 // CreateEnvInstance creates a new EnvInstance
@@ -118,6 +120,9 @@ func (ctrl *EnvInstanceController) CreateEnvInstance(c *gin.Context) {
 	// Arca-specific passthrough. Supported engines: arca.
 	if len(req.MountPoints) > 0 {
 		backendEnv.DeployConfig["mountPoints"] = req.MountPoints
+	}
+	if req.InitCommand != "" {
+		backendEnv.DeployConfig["initCommand"] = req.InitCommand
 	}
 	// Call ScheduleClient to create Pod
 	envInstance, err := ctrl.envInstanceService.CreateEnvInstance(backendEnv)

@@ -17,10 +17,7 @@ limitations under the License.
 package service
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"io"
 	"math"
 	"net/http"
 	"strings"
@@ -67,6 +64,7 @@ const (
 	deployKeyEnvVars        = "environment_variables"
 	deployKeyOwner          = "owner"
 	deployKeySecondImage    = "secondImageName"
+	deployKeyInitCommand    = "initCommand"
 )
 
 // Engine label key/value written onto returned EnvInstance.Labels.
@@ -99,21 +97,11 @@ func NewArcaClient(baseURL, apiKey string) *ArcaClient {
 type arcaCreateRequest struct {
 	TemplateID   string            `json:"template_id"`
 	Image        string            `json:"image,omitempty"`
+	Command      string            `json:"command,omitempty"`
 	TTLInMinutes int               `json:"ttl_in_minutes,omitempty"`
 	MountPoints  []interface{}     `json:"mount_points,omitempty"`
 	Envs         map[string]string `json:"envs,omitempty"`
 	Metadata     map[string]string `json:"metadata,omitempty"`
-}
-
-// arcaEnvelope matches Arca's uniform response wrapper. Note: presign
-// endpoint emits an empty *string* for code on success while OpenAPI emits
-// integers, so we keep code as a raw token and only stringify when surfacing
-// errors back to the caller.
-type arcaEnvelope struct {
-	Success bool            `json:"success"`
-	Code    json.RawMessage `json:"code"`
-	Message string          `json:"message"`
-	Data    json.RawMessage `json:"data"`
 }
 
 // arcaCreatedInstance is Arca's create response payload.
@@ -230,64 +218,6 @@ func coerceEnvs(raw interface{}) map[string]string {
 	}
 }
 
-// doJSON executes an HTTP request with the given method/path/body and decodes
-// the Arca envelope into out. Non-2xx responses return an error carrying
-// status code + body excerpt. Envelope-level `success=false` also errors.
-func (c *ArcaClient) doJSON(method, path string, body interface{}, extraHeaders map[string]string, out interface{}) error {
-	var reader io.Reader
-	if body != nil {
-		data, err := json.Marshal(body)
-		if err != nil {
-			return fmt.Errorf("arca: marshal request: %w", err)
-		}
-		reader = bytes.NewReader(data)
-	}
-
-	url := c.baseURL + path
-	req, err := http.NewRequest(method, url, reader)
-	if err != nil {
-		return fmt.Errorf("arca: build request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set(arcaAPIKeyHeader, c.apiKey)
-	for k, v := range extraHeaders {
-		req.Header.Set(k, v)
-	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("arca: %s %s: %w", method, path, err)
-	}
-	defer func() {
-		if cerr := resp.Body.Close(); cerr != nil {
-			log.Warnf("arca: close response body: %v", cerr)
-		}
-	}()
-
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("arca: read response: %w", err)
-	}
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("arca: %s %s returned %d: %s", method, path, resp.StatusCode, truncateBody(raw))
-	}
-
-	var envelope arcaEnvelope
-	if err := json.Unmarshal(raw, &envelope); err != nil {
-		return fmt.Errorf("arca: decode envelope: %w; body=%s", err, truncateBody(raw))
-	}
-	if !envelope.Success {
-		return fmt.Errorf("arca: %s %s failed (code %s): %s", method, path, strings.Trim(string(envelope.Code), `"`), envelope.Message)
-	}
-	if out != nil && len(envelope.Data) > 0 && !bytes.Equal(envelope.Data, []byte("null")) {
-		if err := json.Unmarshal(envelope.Data, out); err != nil {
-			return fmt.Errorf("arca: decode data: %w; body=%s", err, truncateBody(envelope.Data))
-		}
-	}
-	return nil
-}
-
 // CreateEnvInstance creates a new Arca sandbox from the envhub Env's
 // DeployConfig. Required key: `arcaTemplateId`. Returns an EnvInstance with
 // `Labels[engine]="arca"`. The initial status is usually Pending; callers
@@ -320,6 +250,9 @@ func (c *ArcaClient) CreateEnvInstance(req *backend.Env) (*models.EnvInstance, e
 	}
 	if image, ok := req.DeployConfig[deployKeySecondImage].(string); ok && image != "" {
 		body.Image = image
+	}
+	if command, ok := req.DeployConfig[deployKeyInitCommand].(string); ok && command != "" {
+		body.Command = command
 	}
 
 	owner, _ := req.DeployConfig[deployKeyOwner].(string)

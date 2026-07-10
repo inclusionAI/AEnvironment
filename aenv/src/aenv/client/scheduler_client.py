@@ -113,6 +113,7 @@ class AEnvSchedulerClient:
         owner: Optional[str] = None,
         labels: Optional[Dict[str, str]] = None,
         mount_points: Optional[List[Dict[str, Any]]] = None,
+        init_command: Optional[str] = None,
     ) -> EnvInstance:
         """
         Create a new environment instance.
@@ -127,6 +128,8 @@ class AEnvSchedulerClient:
             labels: Optional labels for the instance
             mount_points: Optional mount-point dicts forwarded to the sandbox
                 engine. Supported engines: arca (ignored on k8s/standard/faas).
+            init_command: Optional startup command forwarded to sandbox engines
+                that support command override. Supported engines: arca.
         Returns:
             Created EnvInstance
 
@@ -138,7 +141,7 @@ class AEnvSchedulerClient:
             raise NetworkError("Client not connected")
 
         logger.info(
-            f"Creating environment instance: {name}, datasource: {datasource}, ttl: {ttl}, environment_variables: {environment_variables}, arguments: {arguments}, owner: {owner}, labels: {labels}, mount_points: {mount_points}, url: {self.base_url}"
+            f"Creating environment instance: {name}, datasource: {datasource}, ttl: {ttl}, environment_variables: {environment_variables}, arguments: {arguments}, owner: {owner}, labels: {labels}, mount_points: {mount_points}, init_command: {init_command}, url: {self.base_url}"
         )
         request = EnvInstanceCreateRequest(
             envName=name,
@@ -149,6 +152,7 @@ class AEnvSchedulerClient:
             owner=owner,
             labels=labels,
             mount_points=mount_points,
+            init_command=init_command,
         )
 
         for attempt in range(self.max_retries + 1):

@@ -57,7 +57,7 @@ const (
 // has to query per-request engine metadata.
 type MCPGatewayConfig struct {
 	ScheduleType string // "k8s" | "standard" | "faas" | "arca"
-	ArcaBaseURL  string
+	ScheduleAddr string
 	ArcaAPIKey   string
 }
 
@@ -92,18 +92,7 @@ func (g *MCPGateway) setupRoutes() {
 func (g *MCPGateway) innerRouter(c *gin.Context) {
 	path := c.Param("path")
 	if g.config.ScheduleType == scheduleTypeArca {
-		// Arca sandboxes do not embed the aenv MCP server, so the data
-		// plane (MCP / /health / SSE) is not supported. The SDK is
-		// expected to opt out via Environment(enable_data_plane=False)
-		// and use presign_url() instead. We still respond explicitly so
-		// stray callers get a clear error rather than a hang.
-		c.JSON(http.StatusNotImplemented, gin.H{
-			"success": false,
-			"code":    http.StatusNotImplemented,
-			"message": "data plane (MCP / /health) is not supported on arca engine; " +
-				"use presign_url() to expose an in-sandbox port",
-			"data": nil,
-		})
+		g.handleArcaProxy(c)
 		return
 	}
 

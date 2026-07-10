@@ -139,7 +139,7 @@ func TestNewArcaClient_Defaults(t *testing.T) {
 }
 
 // TestNewArcaClient_TrimsTrailingSlash ensures we don't double-slash when
-// users supply a trailing slash in --arca-base-url.
+// users supply a trailing slash in --schedule-addr.
 //
 // Supported engines: arca.
 func TestNewArcaClient_TrimsTrailingSlash(t *testing.T) {

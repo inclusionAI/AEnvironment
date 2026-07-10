@@ -105,6 +105,13 @@ class EnvInstanceCreateRequest(BaseModel):
             "Supported engines: arca (ignored on k8s/standard/faas)."
         ),
     )
+    init_command: Optional[str] = Field(
+        None,
+        description=(
+            "Startup command forwarded to sandbox engines that support command "
+            "override. Supported engines: arca."
+        ),
+    )
 
 
 class EnvInstanceListResponse(BaseModel):

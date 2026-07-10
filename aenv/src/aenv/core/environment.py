@@ -125,6 +125,7 @@ class Environment:
         owner: Optional[str] = None,
         labels: Optional[Dict[str, str]] = None,
         mount_points: Optional[List[Dict[str, Any]]] = None,
+        init_command: Optional[str] = None,
     ):
         """
         Initialize environment.
@@ -156,6 +157,8 @@ class Environment:
                 backend sandbox engine. Each entry: ``{"id": "OSS_xxx",
                 "remote_dir": "/data", "local_dir": "/workspace"}``.
                 Supported engines: arca (ignored on k8s/standard/faas).
+            init_command: Optional startup command forwarded to sandbox engines
+                that support command override. Supported engines: arca.
         """
         self.env_name = env_name
         self.datasource = datasource
@@ -168,6 +171,7 @@ class Environment:
         self.labels = labels
         # Supported engines: arca (ignored on k8s/standard/faas).
         self.mount_points = mount_points
+        self.init_command = init_command
 
         if not aenv_url:
             aenv_url = self.dummy_instance_ip or os.getenv(
@@ -243,7 +247,7 @@ class Environment:
                 if attempt < max_attempts - 1:
                     logger.warning(
                         f"{self._log_prefix()} Initial session failed "
-                        f"({attempt+1}/{max_attempts}), retrying: {type(e).__name__}: {e}"
+                        f"({attempt + 1}/{max_attempts}), retrying: {type(e).__name__}: {e}"
                     )
                     await self._rebuild_mcp_client()
                     await asyncio.sleep(1.0)
@@ -813,7 +817,7 @@ class Environment:
 
                 if attempt < max_session_attempts - 1:
                     logger.warning(
-                        f"{self._log_prefix()} Session establish failed ({attempt+1}/{max_session_attempts}), "
+                        f"{self._log_prefix()} Session establish failed ({attempt + 1}/{max_session_attempts}), "
                         f"retrying: {type(e).__name__}: {e}"
                     )
                     await self._backoff(attempt, base=1.5)
@@ -1038,6 +1042,7 @@ class Environment:
                 owner=self.owner,
                 labels=self.labels,
                 mount_points=self.mount_points,
+                init_command=self.init_command,
             )
             logger.info(
                 f"{self._log_prefix()} Environment instance created with ID: {self._instance.id}"
@@ -1098,7 +1103,7 @@ class Environment:
 
         try:
             logger.info(
-                f"{self._log_prefix()} Creating MCP client with headers: {self.proxy_headers}, URL: { self.aenv_data_url}"
+                f"{self._log_prefix()} Creating MCP client with headers: {self.proxy_headers}, URL: {self.aenv_data_url}"
             )
 
             self._mcp_client = Client(
